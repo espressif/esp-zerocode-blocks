@@ -1,0 +1,51 @@
+description: >-
+  CST9220/CST9217 (Hynitron CST92xx) capacitive touch controller (I2C) for
+  the display framework — the ESP-Mosaico's onboard touch. Order it AFTER
+  the panel block in product.yml; it registers an LVGL input device against
+  `s_disp`.
+
+# Companion to drivers/display_co5300_qspi (the Mosaico pairs a CO5300 panel
+# with a CST9220 at I2C 0x5A). The registry driver is waveshare/
+# esp_lcd_touch_cst9217 — same CST92xx protocol family (9220 = the
+# multi-touch sibling); LVGL consumes a single point either way.
+# Same esp_lcd_touch pattern as display_touch_ft5x06: the driver owns its
+# I2C bus handle.
+#
+# ESP-Mosaico wiring: sda=0 scl=1 (the board's shared sensor bus) int=6,
+# no reset line exposed. NOT yet hardware-verified on a Mosaico.
+
+cmake_priv_requires:
+  app_display: [waveshare__esp_lcd_touch_cst9217, espressif__esp_lcd_touch, esp_driver_i2c, esp_lcd]
+
+# esp-board-manager mapping — the same shape as the CO5300 panel block's, and
+# for the same reason: a touch layer bonded to a panel is board hardware, not
+# something a user wires. On a board declaring an `lcd_touch` device this
+# block steps aside and the display framework registers the board's touch
+# handle with LVGL.
+#
+# The I2C bus is the sharper edge here. The board owns I2C0 (touch, codec,
+# IMU, fuel gauge all sit on it) and creates it with the new
+# driver/i2c_master.h API; this block's own init would call
+# i2c_new_master_bus() on the same port, which fails once the board already
+# made it, so on such a board the whole slot is replaced. OFF a board the block
+# now ADOPTS an existing bus on its port rather than creating a second one —
+# which is what lets it share a product with peripherals/i2c_bus
+# (mosaico-touch-hub) instead of the two double-configuring I2C0.
+bmgr:
+  init: board_manager
+  provided_by: lcd_touch
+  replaces_slots: [display_node_init, display_includes, config_defines]
+
+params:
+  i2c_port: { type: int, default: 0 }
+  sda_gpio: { type: int, required: true }
+  scl_gpio: { type: int, required: true }
+  int_gpio:
+    type: int
+    default: -1
+    description: Touch interrupt GPIO (-1 = polled)
+  rst_gpio:
+    type: int
+    default: -1
+  x_max: { type: int, default: 480, description: Must match the panel hres }
+  y_max: { type: int, default: 480, description: Must match the panel vres }

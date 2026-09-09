@@ -1,0 +1,80 @@
+id: webui-room-node
+name: Web UI Room Node
+description: >-
+  A room node that serves its OWN control page — no hub, no cloud, no app.
+  Power it up, join the "ZeroCode-XXXX" Wi-Fi it broadcasts, and open
+  http://192.168.4.1/ to toggle the light, drag the brightness slider, and
+  watch the room temperature live.
+keywords: [web ui, http, softap, standalone, light, temperature, no hub]
+
+# First frameworks: [webui] product. Standalone mode: no Wi-Fi transport is
+# co-selected, so app_webui brings up its own SoftAP (SSID ZeroCode-<mac>,
+# password "zerocode") and serves at 192.168.4.1 (+ mDNS zerocode-<mac>.local
+# for clients that keep their uplink). With matter/rainmaker/mqtt co-selected
+# it would instead serve on the transport's network and own nothing.
+frameworks: [webui]
+
+instances:
+  # ── The light ─────────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/dimmable_light
+    prefix: LAMP_EP
+    cfg:
+      label: Room Light
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── Temperature ───────────────────────────────────────────────────
+  - block: drivers/dht22
+    prefix: DHT
+    cfg:
+      gpio: 4
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOM_TEMP
+    cfg:
+      label: Room Temperature
+      value_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  # ── Status LED ────────────────────────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core

@@ -1,0 +1,2 @@
+dependencies:
+  espressif/button: "~4.2.0"

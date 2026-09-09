@@ -1,0 +1,66 @@
+description: "Color-temperature light — on/off + brightness + CCT (Matter: color_temperature_light; RainMaker: esp.device.lightbulb; Zigbee: Color Dimmable Light, CCT-only color cluster)"
+device_types:
+  matter: color_temperature_light
+  rainmaker: esp.device.lightbulb
+  zigbee: EZB_ZHA_COLOR_DIMMABLE_LIGHT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: CCT Light
+    description: "User-visible device name (RainMaker device name; must be unique per node)"
+  zb_endpoint:
+    type: int
+    default: 13
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 170
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_light:
+    type: string
+    default: "turn on the light"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the light"'
+  say_turn_off_the_light:
+    type: string
+    default: "turn off the light"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the light"'
+  say_make_it_brighter:
+    type: string
+    default: "make it brighter"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make it brighter"'
+  say_make_it_dimmer:
+    type: string
+    default: "make it dimmer"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make it dimmer"'
+  say_make_it_warmer:
+    type: string
+    default: "make it warmer"
+    description: 'Voice phrase (customizable) for command slot 4 — default: "make it warmer"'
+  say_make_it_cooler:
+    type: string
+    default: "make it cooler"
+    description: 'Voice phrase (customizable) for command slot 5 — default: "make it cooler"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID for OnOff (boolean)
+  brightness_param:
+    type: u8
+    default: APP_DRIVER_PARAM_BRIGHTNESS
+    description: Driver param ID for CurrentLevel (1–254; 0 and 255 are reserved)
+  color_temp_param:
+    type: u16
+    default: APP_DRIVER_PARAM_COLOR_TEMP
+    description: Driver param ID for ColorTemperatureMireds (uint16_t mireds)

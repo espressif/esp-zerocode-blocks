@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Commit messages carry no AI-assistant attribution: no "Claude" (or any
+# Co-Authored-By / session trailer naming an assistant). Installed by
+# `npm ci` (package.json prepare → core.hooksPath); CI runs the same check on
+# every commit in a PR, so the hook is the early warning, not the gate.
+#
+#   scripts/git-hooks/commit-msg <message-file>   (git calls it)
+#   scripts/git-hooks/commit-msg --check <rev-range>   (CI)
+set -eu
+pattern='claude|anthropic|co-authored-by:.*(assistant|bot)|claude-session'
+if [ "${1:-}" = "--check" ]; then
+  bad=$(git log --format='%h %s%n%b' "${2:?rev-range}" | grep -iE "$pattern" || true)
+  [ -z "$bad" ] || { printf 'commit message mentions an AI assistant — reword:\n%s\n' "$bad" >&2; exit 1; }
+  exit 0
+fi
+msg=$(grep -v '^#' "${1:?message file}")
+if printf '%s' "$msg" | grep -qiE "$pattern"; then
+  echo "commit-msg: the message mentions an AI assistant (matched /$pattern/) — reword without it." >&2
+  exit 1
+fi

@@ -1,0 +1,74 @@
+id: smart-plug-ha
+name: Smart Plug (Matter + Home Assistant)
+description: >-
+  A Matter smart plug that ALSO announces itself to Home Assistant over MQTT —
+  commission it with any Matter controller, and it appears in HA as an MQTT
+  outlet on the same Wi-Fi, no bridge required.
+keywords: [smart plug, matter, mqtt, home assistant, combo, outlet, relay]
+
+# COMBO: frameworks: [matter, mqtt] — the pair that needed the engine's
+# SHARED-NETWORK MODE. app_mqtt detects the co-selected transport at
+# generation time and does not own Wi-Fi: no esp_wifi init, no credentials,
+# no mqtt-wifi command. It waits for IP_EVENT_STA_GOT_IP from Matter's
+# network (plus an already-has-IP check for reboots) and only carries the
+# broker config (mqtt-broker <uri> on the console, persisted in NVS).
+#
+# The same smart_plug instance renders its Matter OnOff endpoint AND its HA
+# outlet entity; the param bus keeps controller writes and HA commands
+# coherent.
+frameworks: [matter, mqtt]
+
+instances:
+  - block: drivers/relay
+    prefix: PLUG
+    cfg:
+      gpio: 5
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: device_types/smart_plug
+    prefix: PLUG_EP
+    cfg:
+      label: Smart Plug
+      power_param: APP_DRIVER_PARAM_POWER
+
+  - include: baseline-connectivity
+
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Smart Plug HA

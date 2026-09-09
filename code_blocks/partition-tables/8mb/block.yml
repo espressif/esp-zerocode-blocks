@@ -1,0 +1,4 @@
+description: Large layout — 8 MB flash, two ~3 MB OTA slots. For full-featured products with rich firmware (Matter + many behaviors).
+
+# The partitions.csv next to this manifest is what the generator copies
+# into the product tree as partitions.csv (replacing the base file).

@@ -1,0 +1,23 @@
+description: ESP RainMaker protocol — cloud-connected node, phone-app provisioning (BLE/SoftAP)
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [rainmaker, ...] by loading it, copying its components/ subtree into the
+# output, and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks (device_types/*) populate the rainmaker_includes /
+# rainmaker_statics / rainmaker_device_create / rainmaker_*_cases slots that
+# get rendered into components/app_rainmaker/app_rainmaker.cpp (whose stub
+# source lives under frameworks/rainmaker/components/app_rainmaker/).
+#
+# NOTE: self-claiming (CONFIG_ESP_RMAKER_SELF_CLAIM) stores claim data in the
+# factory NVS partition ("fctry"). The 4mb and 8mb partition-table blocks
+# carry one; 2mb does not (no room, and no RainMaker-supported chip is
+# 2MB-only) — pick 4mb or 8mb for RainMaker products.

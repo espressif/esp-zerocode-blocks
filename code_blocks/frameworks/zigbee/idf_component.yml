@@ -1,0 +1,2 @@
+dependencies:
+  espressif/esp-zigbee-lib: "~2.0.0"

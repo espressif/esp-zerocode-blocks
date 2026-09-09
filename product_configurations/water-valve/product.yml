@@ -1,0 +1,52 @@
+id: water-valve
+name: Water Valve
+description: Matter water valve (ValveConfigurationAndControl) — relay-driven open/close with a local button.
+keywords: [valve, water, irrigation, shutoff]
+frameworks: [matter]
+
+instances:
+  - block: device_types/water_valve
+    prefix: VALVE
+    cfg: {}
+  - block: drivers/relay
+    prefix: VALVE_DRV
+    cfg: { gpio: 10, active_level: 1, param_id: APP_DRIVER_PARAM_VALVE_OPEN }
+  - block: drivers/button
+    prefix: VALVE_BTN
+    cfg: { gpio: 3, active_level: 0, target_param: APP_DRIVER_PARAM_VALVE_OPEN }
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 18
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 18
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core

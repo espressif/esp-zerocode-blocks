@@ -1,0 +1,83 @@
+id: curtain-motor
+name: Curtain / Blind Motor
+description: DC motor curtain controller with up/down GPIOs and limit switches
+keywords: [curtain, blind, shade, motor, window covering]
+frameworks: [matter]
+
+instances:
+  - block: drivers/curtain_motor
+    prefix: SHADE_MOTOR
+    cfg:
+      up_gpio: 4
+      down_gpio: 5
+      upper_limit_gpio: 6
+      lower_limit_gpio: 7
+      position_param: APP_DRIVER_PARAM_LIFT_POSITION
+
+  - block: device_types/window_covering
+    prefix: SHADE
+    cfg:
+      position_param: APP_DRIVER_PARAM_LIFT_POSITION
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_u16
+    prefix: PERSIST_LIFT
+    cfg:
+      target_param: APP_DRIVER_PARAM_LIFT_POSITION
+      nvs_namespace: app
+      nvs_key: lift
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LIFT
+    cfg:
+      command_name: lift
+      target_param: APP_DRIVER_PARAM_LIFT_POSITION
+      value_kind: u16
+  - block: behaviors/console_param_get
+    prefix: GET_LIFT
+    cfg:
+      command_name: get-lift
+      target_param: APP_DRIVER_PARAM_LIFT_POSITION
+      value_kind: u16
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Curtain Motor

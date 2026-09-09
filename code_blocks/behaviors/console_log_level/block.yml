@@ -1,0 +1,1 @@
+description: Console "log <tag> <NONE|ERROR|WARN|INFO|DEBUG|VERBOSE>" — adjust log level at runtime.

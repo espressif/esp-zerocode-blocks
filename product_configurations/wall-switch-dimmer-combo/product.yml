@@ -1,0 +1,145 @@
+id: wall-switch-dimmer-combo
+name: Wall Switch + Dimmer Combo (mixed gangs)
+description: 2-gang wall plate with one on/off relay channel and one dimmer channel
+keywords: [wall, switch, dimmer, combo, mixed]
+frameworks: [matter]
+
+instances:
+  # Gang 1: relay
+  - block: drivers/relay
+    prefix: SW
+    cfg: { gpio: 7, active_level: 1, param_id: APP_DRIVER_PARAM_SW_POWER }
+  - block: drivers/button
+    prefix: SW_BTN
+    cfg: { gpio: 4, active_level: 0, target_param: APP_DRIVER_PARAM_SW_POWER }
+  - block: device_types/wall_switch_module
+    prefix: SW_EP
+    cfg: { power_param: APP_DRIVER_PARAM_SW_POWER }
+
+  # Gang 2: dimmer
+  - block: drivers/pwm_led
+    prefix: DIM
+    cfg:
+      gpio: 8
+      ledc_channel: 0
+      ledc_timer: 0
+      freq_hz: 1000
+      power_param: APP_DRIVER_PARAM_DIM_POWER
+      brightness_param: APP_DRIVER_PARAM_DIM_BRIGHTNESS
+  - block: drivers/button
+    prefix: DIM_BTN
+    cfg: { gpio: 5, active_level: 0, target_param: APP_DRIVER_PARAM_DIM_POWER }
+  - block: device_types/wall_dimmer_module
+    prefix: DIM_EP
+    cfg:
+      power_param: APP_DRIVER_PARAM_DIM_POWER
+      brightness_param: APP_DRIVER_PARAM_DIM_BRIGHTNESS
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── Long-press factory reset (button hold 5 s) ─────────────────
+  - block: behaviors/factory_reset_long_press
+    prefix: FR
+    cfg:
+      gpio: 4
+      active_level: 0
+      hold_time_ms: 5000
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_SWPOWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_SW_POWER
+      nvs_namespace: app
+      nvs_key: swpower
+
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_DIMPOWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_DIM_POWER
+      nvs_namespace: app
+      nvs_key: dimpower
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_DIMBRI
+    cfg:
+      target_param: APP_DRIVER_PARAM_DIM_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: dimbri
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_SWPOWER
+    cfg:
+      command_name: swpower
+      target_param: APP_DRIVER_PARAM_SW_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_SWPOWER
+    cfg:
+      command_name: get-swpower
+      target_param: APP_DRIVER_PARAM_SW_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_DIMPOWER
+    cfg:
+      command_name: dimpower
+      target_param: APP_DRIVER_PARAM_DIM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_DIMPOWER
+    cfg:
+      command_name: get-dimpower
+      target_param: APP_DRIVER_PARAM_DIM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_DIMBRI
+    cfg:
+      command_name: dimbri
+      target_param: APP_DRIVER_PARAM_DIM_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_DIMBRI
+    cfg:
+      command_name: get-dimbri
+      target_param: APP_DRIVER_PARAM_DIM_BRIGHTNESS
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Switch+Dimmer Combo

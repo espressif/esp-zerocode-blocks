@@ -1,0 +1,28 @@
+id: webui-smart-plug
+name: Web UI Smart Plug
+description: >-
+  A plug that serves its own control page — join the Wi-Fi it broadcasts and
+  switch it from any phone browser. No app, no cloud, no hub.
+keywords: [web ui, http, softap, plug, outlet, standalone]
+
+# Second frameworks: [webui] product, and the one that covers the smart_plug
+# entity binding — the gap the first live webui run hit (s_entities[] rendered
+# empty, so code_writing hand-replaced the generated component).
+frameworks: [webui]
+
+instances:
+  - block: drivers/relay
+    prefix: PLUG
+    cfg:
+      gpio: 5
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: device_types/smart_plug
+    prefix: PLUG_EP
+    cfg:
+      label: Smart Plug
+      power_param: APP_DRIVER_PARAM_POWER
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core

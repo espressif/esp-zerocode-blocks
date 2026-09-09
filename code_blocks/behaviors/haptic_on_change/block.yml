@@ -1,0 +1,25 @@
+description: >-
+  Buzzes the haptic motor whenever a watched param changes — the physical
+  confirmation that a touch or a button press landed. Pairs with
+  drivers/haptic_motor.
+
+# SINGLE-OWNER CONTRACT, same as behaviors/blink_pattern and
+# behaviors/voice_feedback_led: this block never touches the motor pin. It only
+# writes the trigger param that drivers/haptic_motor owns, so there is exactly
+# one place that drives the GPIO and one place that schedules the pulse.
+#
+# It buzzes on LOCAL changes only. A haptic is feedback for the person standing
+# at the panel; buzzing when a Matter controller or an MQTT broker changes the
+# same param would make the device vibrate at random from across the house.
+# APP_DRIVER_SOURCE_LOCAL is exactly that distinction, and it is why the
+# callback takes `source` at all.
+
+driver_params:
+  watch_param:
+    type: bool
+    required: true
+    description: the param whose local changes deserve feedback
+  trigger_param:
+    type: u8
+    required: true
+    description: drivers/haptic_motor's trigger param

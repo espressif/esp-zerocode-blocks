@@ -1,0 +1,32 @@
+{
+  "name": "@esp-zerocode-ai/firmware-engine",
+  "version": "0.1.0",
+  "description": "Portable engine: blocks + base_firmware \u2192 validated, buildable ESP-IDF firmware tree.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/espressif/esp-zerocode-blocks.git"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./engine/dist/index.d.ts",
+      "default": "./engine/dist/index.js"
+    }
+  },
+  "files": [
+    "engine/dist"
+  ],
+  "scripts": {
+    "build": "tsc -p engine/tsconfig.json",
+    "test": "tsc -p engine/tsconfig.json && node --test engine/tests/",
+    "prepare": "tsc -p engine/tsconfig.json && (git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/git-hooks || true)"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.5.0"
+  }
+}

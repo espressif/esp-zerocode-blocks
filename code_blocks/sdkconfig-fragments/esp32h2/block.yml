@@ -1,0 +1,9 @@
+description: ESP32-H2 per-chip sdkconfig base — BLE + Thread/802.15.4 only, no Wi-Fi.
+
+# A chip block, not a product-selectable fragment: `target:` marks it, and the
+# generator merges it into sdkconfig.defaults for the SELECTED chip only.
+#
+# H2 has no Wi-Fi radio: Wi-Fi station/AP are turned off explicitly (Kconfig
+# defaults them to y), Thread is the primary transport, and lwIP is Thread-
+# shaped (IPv6-only) without needing the matter_thread fragment.
+target: esp32h2

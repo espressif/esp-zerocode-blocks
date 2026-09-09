@@ -1,0 +1,26 @@
+description: On Matter Identify command, switch a u8 pattern_param to identify_pattern; on stop, restore idle_pattern. Pair with drivers/status_led + behaviors/blink_pattern.
+
+# Wires the Matter Identify cluster (which the spec REQUIRES every endpoint respond to)
+# into the shared u8 LED_PATTERN param consumed by drivers/status_led. When the user
+# taps "identify" in their Matter controller app, the LED switches into a fast blink
+# for the duration of the identify command, then returns to the idle pattern.
+#
+# SINGLE-OWNER CONTRACT: the status LED is owned solely by drivers/status_led.
+# This block never touches the pin — it only pushes a u8 onto the shared
+# LED_PATTERN param. Never gpio_set_level() the LED pin from here.
+
+params:
+  identify_pattern:
+    type: int
+    default: 3
+    description: Pattern value during identify (3 = fast blink in default blink_pattern table)
+  idle_pattern:
+    type: int
+    default: 1
+    description: Pattern to restore when identify stops (1 = solid)
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 — the same param read by behaviors/blink_pattern (or another LED driver)

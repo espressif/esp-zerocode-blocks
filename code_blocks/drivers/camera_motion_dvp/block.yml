@@ -1,0 +1,56 @@
+description: >-
+  DVP camera motion detector (OV2640-class) for the vision framework —
+  frame-difference motion on grayscale QQVGA, reported as vision event 0.
+  Pin defaults match the AI-Thinker ESP32-CAM, the board everyone owns.
+
+# Detector block: owns esp_camera_init + its capture/diff task, reports via
+# zc_vision_emit(0, motion) on TRANSITIONS only (with a hold window so brief
+# stillness doesn't flap). The framework spine dispatches to device types.
+#
+# Frame difference, deliberately: no model files, no model partition, no
+# S3-only gating — runs on the classic esp32. Person/face detection (esp-who)
+# is a future sibling detector block with its own chip + partition story.
+#
+# GRAYSCALE QQVGA (160x120): the diff buffer is 19 KB in DRAM — no PSRAM
+# required, though AI-Thinker boards have it. pixel_threshold is per-pixel
+# luma delta; area_threshold_pct is how much of the frame must change.
+# Tune BOTH per install — a curtain in a breeze at 3% is motion.
+
+cmake_priv_requires:
+  app_vision: [espressif__esp32-camera, esp_timer, esp_driver_ledc]
+
+params:
+  # AI-Thinker ESP32-CAM pin map (the de-facto standard DVP wiring).
+  pin_pwdn:  { type: int, default: 32 }
+  pin_reset: { type: int, default: -1 }
+  pin_xclk:  { type: int, default: 0 }
+  pin_sda:   { type: int, default: 26, description: SCCB (camera I2C) data }
+  pin_scl:   { type: int, default: 27, description: SCCB (camera I2C) clock }
+  pin_d7:    { type: int, default: 35 }
+  pin_d6:    { type: int, default: 34 }
+  pin_d5:    { type: int, default: 39 }
+  pin_d4:    { type: int, default: 36 }
+  pin_d3:    { type: int, default: 21 }
+  pin_d2:    { type: int, default: 19 }
+  pin_d1:    { type: int, default: 18 }
+  pin_d0:    { type: int, default: 5 }
+  pin_vsync: { type: int, default: 25 }
+  pin_href:  { type: int, default: 23 }
+  pin_pclk:  { type: int, default: 22 }
+  xclk_freq_hz: { type: int, default: 20000000 }
+  pixel_threshold:
+    type: int
+    default: 25
+    description: Per-pixel luma delta (0-255) that counts as changed
+  area_threshold_pct:
+    type: int
+    default: 3
+    description: Percent of changed pixels that counts as motion (1-100)
+  hold_ms:
+    type: int
+    default: 10000
+    description: How long motion stays asserted after the last detection
+  poll_ms:
+    type: int
+    default: 200
+    description: Capture/compare interval

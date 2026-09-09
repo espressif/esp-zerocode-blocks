@@ -1,0 +1,32 @@
+description: "Agents framework — the device is a client of the ESP Private Agents platform (agents.espressif.com): a cloud AI agent converses with the user and invokes LOCAL TOOLS that run on this device. v1 is TEXT conversations over websocket; speech is a later deepening."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [agents] by copying components/ and rendering main_includes/main_init.
+#
+# THE BINDING (inverted, like audio's): a device type contributes agents_tools
+# rows — esp_agent_register_local_tool() calls plus the handler statics that
+# read/write the param bus. The cloud agent decides WHEN to call a tool; the
+# device only executes it. Tool names are prefix-scoped ({{prefix_lc}}_…) so
+# two instances never collide.
+#
+# NETWORK: standalone products own Wi-Fi via the console (agent-wifi), exactly
+# mqtt's pattern; with matter/rainmaker/mqtt co-selected app_agents owns
+# NOTHING and waits for the transport's IP (shared-net mode).
+#
+# ONBOARDING: agent-wifi <ssid> <pass>, agent-id <id>, agent-token <refresh
+# token> — all NVS-persisted. The refresh token comes from the Agents
+# platform UI; there is no phone-app provisioning (their `setup` component
+# does BLE provisioning but drags in esp_rainmaker, so we deliberately skip
+# it). agent-say <text> talks; replies print on the console.
+#
+# DEPENDENCY: the `agent` component is NOT on the component registry — it is
+# consumed as an idf_component.yml GIT dependency pinned to a commit (the repo
+# has no tags), carried by app_agents' own manifest sidecar.

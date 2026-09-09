@@ -1,0 +1,42 @@
+description: "In-wall relay switch module (Matter: mounted_on_off_control; RainMaker: esp.device.switch; Zigbee: On/Off Output)"
+device_types:
+  matter: mounted_on_off_control
+  rainmaker: esp.device.switch
+  zigbee: EZB_ZHA_ON_OFF_OUTPUT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Wall Switch
+    description: "User-visible device name (RainMaker device name; must be unique per node)"
+  zb_endpoint:
+    type: int
+    default: 17
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 130
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_switch:
+    type: string
+    default: "turn on the switch"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the switch"'
+  say_turn_off_the_switch:
+    type: string
+    default: "turn off the switch"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the switch"'
+
+driver_params:
+  power_param:
+    type: bool
+    required: true
+    description: Driver param ID this endpoint maps to (boolean)

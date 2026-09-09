@@ -1,0 +1,44 @@
+description: "Voice control framework — esp-sr wake word (WakeNet) plus on-device English speech commands (MultiNet). ESP32-S3 only."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32p4, esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [audio] by loading it, copying its components/ subtree into the output, and
+# rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks populate audio_includes / audio_statics /
+# audio_commands_register / audio_command_cases, which get rendered into
+# components/app_audio/app_audio.cpp (whose stub lives under
+# frameworks/audio/components/app_audio/).
+#
+# UNLIKE every other framework, this one is not a transport. The device-type
+# binding is inverted: instead of "how does this device appear on the network"
+# it is "what do you say to it". A device type contributes phrases via
+# audio_commands_register (esp_mn_commands_add) and maps a recognized phrase
+# id back to app_driver_set_param via audio_command_cases.
+#
+# CHIP SUPPORT IS S3-ONLY, and MultiNet is what constrains it — not the
+# component as a whole. esp-sr builds on esp32/c3/c5/c6/p4/s2/s3 and WakeNet
+# runs on all of them, but every English MultiNet model in esp-sr's
+# ENGLISH_SR_MN_MODEL_SEL choice is "depends on IDF_TARGET_ESP32S3" (mn7 also
+# allows P4). A voice framework with no command vocabulary is not this
+# framework, so the profile is esp32s3 alone.
+#
+# MODEL PARTITION REQUIRED. esp_srmodel_init() reads models from a `model`
+# partition — use the 8mb-voice partition table. Per the usual storage
+# pitfall a build with no model partition SUCCEEDS and the device fails at
+# runtime (no models found, AFE init aborts).
+#
+# AUDIO CAPTURE IS NOT IN THIS BLOCK. Framework blocks are loaded by name from
+# product.frameworks and carry no cfg, so they cannot take GPIO params. The
+# product must also instantiate drivers/voice_mic_i2s, which owns the I2S RX
+# channel and exposes zc_audio_mic_read() for the feed task. That block is
+# deliberately separate from drivers/mic_i2s: AFE needs the raw PCM stream at
+# its own chunk size, and the driver param bus carries scalars only, so a
+# loudness reading cannot be reused as an audio source.

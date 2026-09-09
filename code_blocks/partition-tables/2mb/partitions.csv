@@ -1,0 +1,9 @@
+# 2MB flash layout — minimal layout for esp32c2 / 2MB ESP-WROOM modules.
+# Single app partition (no OTA — there's no room for two copies of the binary).
+# Suitable only for the smallest products (basic on/off, sensor stubs).
+# No fctry partition (no room) — NOT suitable for RainMaker self-claiming.
+#
+# Name,          Type, SubType,  Offset,    Size,     Flags
+nvs,             data, nvs,      0x9000,    0x6000,
+phy_init,        data, phy,      0xf000,    0x1000,
+factory,         app,  factory,  0x10000,   0x1F0000,

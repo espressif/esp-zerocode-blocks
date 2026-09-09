@@ -1,0 +1,45 @@
+description: "MQTT framework — connects to any MQTT broker over Wi-Fi and announces every device via Home Assistant discovery. Works with Home Assistant, Mosquitto, or any MQTT 3.1.1 broker; no hub protocol, no cloud."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [mqtt] by loading it, copying its components/ subtree into the output, and
+# rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks populate mqtt_includes / mqtt_statics /
+# mqtt_device_create / mqtt_command_cases / mqtt_driver_cb_cases, rendered
+# into components/app_mqtt/app_mqtt.cpp (stub under
+# frameworks/mqtt/components/app_mqtt/).
+#
+# The binding is Home Assistant MQTT discovery: each device-type instance
+# publishes a retained discovery config (homeassistant/<component>/…/config),
+# subscribes its command topic, publishes its state topic. Availability rides
+# a Last-Will topic, so HA shows the device offline the moment it drops.
+#
+# ONBOARDING IS THE CONSOLE, deliberately. Unlike RainMaker (phone app) or
+# Matter (QR commissioning), a bare MQTT node has no companion app, so v1
+# configures over the serial console and persists to NVS:
+#     mqtt-wifi <ssid> <password>
+#     mqtt-broker <uri> [username] [password]     e.g. mqtt://192.168.1.10
+# Boot without config MUST still reach "ZeroCode AI firmware started" (the
+# framework logs "not configured" and idles — never blocks app_main).
+#
+# TOPIC SHAPE (node id = station MAC, lowercase hex):
+#     zerocode/<node>/status              online/offline (retained + LWT)
+#     zerocode/<node>/<instance>/state    device state (retained)
+#     zerocode/<node>/<instance>/set      commands to the device
+#
+# NO {{ }} IN DISCOVERY PAYLOADS: Home Assistant value_template syntax is
+# jinja ({{ value }}), which collides with THIS template engine — a literal
+# {{ in a slot file throws at generation. Publish plain values instead;
+# HA parses bare numbers and ON/OFF without templates.
+#
+# esp-mqtt + esp_wifi ship with ESP-IDF — no managed components, no extra
+# sdkconfig, and it runs on every Wi-Fi chip. Also the first framework the
+# EMULATOR can verify end-to-end (esp-emu --net user reaches a real broker).

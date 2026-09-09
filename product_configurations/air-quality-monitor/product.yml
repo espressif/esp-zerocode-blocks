@@ -1,0 +1,66 @@
+id: air-quality-monitor
+name: Air Quality Monitor
+description: Indoor air quality monitor (Matter Air Quality Sensor). Driver currently a stub publishing a fixed AirQuality enum value.
+keywords: [air quality, AQI, CO2, TVOC, PM2.5, BME688, SCD4x]
+frameworks: [matter]
+
+instances:
+  - block: drivers/i2c_air_quality_stub
+    prefix: AQ
+    cfg:
+      i2c_port: 0
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+      poll_interval_ms: 30000
+      initial_quality: 1
+      initial_co2_ppm: 800
+      air_quality_param: APP_DRIVER_PARAM_AIR_QUALITY
+      co2_ppm_param: APP_DRIVER_PARAM_CO2_PPM
+
+  - block: device_types/air_quality_sensor
+    prefix: AQ_EP
+    cfg:
+      air_quality_param: APP_DRIVER_PARAM_AIR_QUALITY
+      co2_ppm_param: APP_DRIVER_PARAM_CO2_PPM
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Air Quality Monitor

@@ -1,0 +1,58 @@
+description: "Room Air Conditioner (Matter: room_air_conditioner — OnOff + Thermostat + FanControl; RainMaker: esp.device.air-conditioner)"
+device_types:
+  matter: room_air_conditioner
+  rainmaker: esp.device.air-conditioner
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Air Conditioner
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 43
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 270
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_air_conditioner:
+    type: string
+    default: "turn on the air conditioner"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the air conditioner"'
+  say_turn_off_the_air_conditioner:
+    type: string
+    default: "turn off the air conditioner"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the air conditioner"'
+  say_make_it_cooler:
+    type: string
+    default: "make it cooler"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make it cooler"'
+  say_make_it_warmer:
+    type: string
+    default: "make it warmer"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make it warmer"'
+
+driver_params:
+  power_param:
+    type: bool
+    required: true
+    description: Driver param ID for OnOff (boolean)
+  cool_setpoint_param:
+    type: i16
+    required: true
+    description: OccupiedCoolingSetpoint (int16, hundredths of °C)
+  fan_speed_param:
+    type: u8
+    required: true
+    description: Fan speed (uint8 0-100)

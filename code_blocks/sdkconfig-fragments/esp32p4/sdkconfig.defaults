@@ -1,0 +1,16 @@
+# The companion radio is a C6 (what the Function EV board carries). Picks the
+# slave's SOC capabilities for the generated esp_wifi_remote headers, so it must
+# match the chip actually on the board.
+CONFIG_SLAVE_IDF_TARGET_ESP32C6="y"
+
+# BLE transport shaping for P4: the NimBLE host runs here, the controller is the
+# companion's, HCI is multiplexed over the hosted bus (VHCI) with no local UART,
+# and ESP_HOSTED_ENABLE_BT_NIMBLE builds the glue implementing NimBLE's
+# ble_transport_* entry points. The framework that uses BLE (matter) enables it;
+# these keys only shape how it reaches the companion.
+CONFIG_BT_NIMBLE_TRANSPORT_UART="n"
+CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE="y"
+
+# Keep BLE up after commissioning: on a hosted setup the BLE link rides the same
+# companion as Wi-Fi, and tearing it down post-commissioning breaks re-pairing.
+CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING="n"

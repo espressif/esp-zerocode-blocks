@@ -1,0 +1,43 @@
+description: Matter over Thread (802.15.4) instead of Wi-Fi — for esp32c5 / esp32c6 / esp32h2
+
+# Chips with an 802.15.4 radio only: esp32c5, esp32c6, esp32h2. Products using
+# this fragment should pin `ci_chips:` to that set — the engine does not check
+# it, though hardware.ts already knows `chipCapabilities(chip).thread`.
+#
+# CONFIG_ENABLE_MATTER_OVER_THREAD is deliberately absent: esp_matter defaults
+# it to y and makes it `depends on OPENTHREAD_ENABLED`, so enabling OpenThread
+# selects it. Listing it would only add a key that can fall out of step.
+#
+# The matching init (set_openthread_platform_config) is emitted into
+# app_matter.cpp under `#if CONFIG_ENABLE_MATTER_OVER_THREAD`, so this fragment
+# cannot enable a transport whose setup is missing.
+#
+# ENABLE_WIFI_STATION, not ESP_WIFI_ENABLED: Matter commissions over BLE and
+# then runs on Thread, so it should not also bring up a Wi-Fi station.
+# CONFIG_ESP_WIFI_ENABLED is declared `bool` with NO prompt in IDF 6.x
+# (`default y if SOC_WIFI_SUPPORTED`), and a promptless symbol cannot be set
+# from sdkconfig — writing it is silently ignored (which is why the older
+# `c6_thread_only` fragment never switched a C6 off Wi-Fi). Whether esp_wifi
+# links in is decided by component dependencies, not by a key here.
+#
+# MBEDTLS_CMAC_C is required by Thread's MAC security (AES-CCM*) and is off in
+# the mbedTLS trim the matter block applies.
+#
+# Everything here is a DEFAULT, not a restriction. Two override paths:
+#
+#   * Kconfig knobs — a product's extra_sdkconfig outranks a fragment, so a
+#     sleepy/battery device selects MTD without needing its own fragment:
+#         extra_sdkconfig:
+#           CONFIG_OPENTHREAD_FTD: 'n'
+#           CONFIG_OPENTHREAD_MTD: 'y'
+#     OPENTHREAD_FTD is the default because a mains-powered device that routes
+#     for its neighbours is the common case here.
+#
+#   * The platform struct — app_matter.cpp emits
+#     zc_openthread_platform_config() as a weak function returning the native
+#     15.4 radio with no host connection. A product that drives an external
+#     radio co-processor (UART/SPI RCP), or wants a different storage
+#     partition or queue depths, defines a strong
+#     zc_openthread_platform_config() in one of its components and that wins
+#     at link time. The RCP transports need port/baud/pin values only the
+#     board knows, so they are not guessed from Kconfig.

@@ -1,0 +1,96 @@
+id: touch-room-panel
+name: Touch Room Panel
+description: >-
+  Wall-panel room controller with a 2.8" ILI9341 touchscreen — a light card
+  you toggle by touch and a live room-temperature reading. Fully local: no
+  network stack at all.
+keywords: [display, touchscreen, lvgl, panel, light, temperature, ili9341, touch]
+
+# First frameworks: [display] product. The panel + touch controller are
+# instance blocks (pins live in cfg, not in the framework); the framework
+# renders one card per bound device type and centralizes the LVGL lock.
+#
+# Pin note: an SPI panel + I2C touch + LED + DHT22 + status LED is 11 GPIOs —
+# more than the c3-class chips can give cleanly (touch lands on the c3's
+# USB-JTAG pins 18/19, which kills the devkit's USB console). These defaults
+# target esp32s3-class boards; the c3/c6 matrix builds compile but reassign
+# pins per board before flashing.
+frameworks: [display]
+
+instances:
+  # ── Panel first, touch second — touch registers against the panel's
+  #     display, so product.yml order matters ────────────────────────
+  - block: drivers/display_ili9341_spi
+    prefix: PANEL
+    cfg:
+      spi_host: 1
+      sclk_gpio: 12
+      mosi_gpio: 11
+      dc_gpio: 13
+      cs_gpio: 14
+      rst_gpio: 21
+      backlight_gpio: 47
+      hres: 240
+      vres: 320
+
+  - block: drivers/display_touch_ft5x06
+    prefix: TOUCH
+    cfg:
+      i2c_port: 0
+      sda_gpio: 8
+      scl_gpio: 9
+      x_max: 240
+      y_max: 320
+
+  # ── The light card ────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/light
+    prefix: LAMP_CARD
+    cfg:
+      label: Room Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── The temperature card ──────────────────────────────────────────
+  - block: drivers/dht22
+    prefix: DHT
+    cfg:
+      gpio: 4
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOM_TEMP
+    cfg:
+      label: Temperature
+      value_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Touch Room Panel

@@ -1,0 +1,17 @@
+description: GPIO push-button (single click → toggle a boolean driver param)
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO pin connected to the button
+  active_level:
+    type: int
+    default: 0
+    description: 0 = active-low (pull-up), 1 = active-high
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Driver param ID this button toggles (must be boolean)

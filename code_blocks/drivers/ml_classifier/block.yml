@@ -1,0 +1,52 @@
+description: "Periodic on-device ML classifier — runs a model every interval_ms and publishes the winning class to the param bus. Needs frameworks: [ml]. Feed it real data by overriding the weak <prefix_lc>_fill_input() hook; left alone it runs the framework's reference model on zeroed input, which is a working smoke test and nothing more."
+
+# WHY A DRIVER AND NOT PART OF THE FRAMEWORK: framework blocks carry no cfg,
+# and everything interesting here is configurable — arena size, cadence, the
+# operator set, which param the verdict lands on. Same split frameworks/vision
+# uses for its camera detectors.
+#
+# STATE, NOT EVENTS: a classifier reports a condition that persists ("someone
+# is here"), so both params are written with app_driver_set_param and are
+# change-detected. A detector whose every firing must count — a doorbell, a
+# gunshot classifier — wants app_driver_fire_event instead, and that is a
+# different block, not a cfg flag on this one.
+
+params:
+  interval_ms:
+    type: int
+    default: 1000
+    description: Milliseconds between inferences. Keep it well above the model's invoke() time — 426 ms for a person-detection CNN on esp32c3, 54 ms on esp32s3.
+  arena_base_kb:
+    type: int
+    default: 4
+    description: Tensor arena on the generic-C kernel path (esp32, esp32c3, esp32c6). The reference model needs 2 KB. Too small fails AllocateTensors at init; the framework then logs the size the model actually wanted.
+  arena_scratch_kb:
+    type: int
+    default: 0
+    description: EXTRA arena on chips compiling esp-nn's optimized kernels (CONFIG_NN_OPTIMIZED — esp32s3, esp32p4). Zero suits the default FullyConnected reference model. A convolutional model needs scratch here — upstream's person-detection graph declares 60 KB — and getting it wrong is a build that passes on one chip and fails on another.
+  arena_in_psram:
+    type: int
+    default: 0
+    description: 1 = prefer PSRAM for the arena, falling back to internal RAM if absent. Internal is faster; PSRAM is the only option once the arena passes ~100 KB.
+  ops_profile:
+    type: string
+    default: minimal
+    enum: [minimal, dnn, cnn]
+    description: Which operators the interpreter registers. minimal = FullyConnected (the reference model); dnn = dense classifier; cnn = quantized convnet, covering all seven kernels esp-nn accelerates. A model using an operator outside the set fails at init.
+  model_symbol:
+    type: string
+    default: zc_tflite_reference_model
+    description: "C symbol holding the .tflite flatbuffer. Defaults to the framework's 2.5 KB reference model — a smoke test whose output means nothing. Point it at a real model's symbol instead: this block's slot already emits the extern declaration, and the definition comes from whatever compiles the array — usually a component pulled by the component manager, the way frameworks/ml compiles esp-tflite-micro's person-detect model. See its block.yml."
+  threshold_pct:
+    type: int
+    default: 50
+    description: Dequantized top-class score, in percent, at or above which detect_param goes true.
+
+driver_params:
+  detect_param:
+    type: bool
+    required: true
+    description: Driver param ID set true while the winning class scores at or above threshold_pct.
+  score_param:
+    type: u8
+    description: Optional driver param ID carrying the winning class score, 0-100. Omit to skip publishing it.

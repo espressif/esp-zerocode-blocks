@@ -1,0 +1,42 @@
+description: "Display framework — an on-device touchscreen UI via LVGL. Every device type renders itself as a card (state + controls) on the panel; touch drives the param bus. No network required."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32p4, esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [display] by loading it, copying its components/ subtree into the output,
+# and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks populate display_includes / display_statics /
+# display_widget_create / display_driver_cb_cases, rendered into
+# components/app_display/app_display.cpp (stub under
+# frameworks/display/components/app_display/).
+#
+# The binding is INVERTED like audio's: not "how does this device appear on a
+# network" but "how does this device SHOW itself". display_widget_create
+# builds the instance's card (an lv_obj_t *parent is in scope) and wires
+# widget events → app_driver_set_param; display_driver_cb_cases maps param
+# changes → widget updates.
+#
+# LOCK DISCIPLINE (the stack-lock pitfall, LVGL edition): every LVGL call off
+# the LVGL task MUST hold lvgl_port_lock. The generated driver_cb wraps ALL
+# display_driver_cb_cases in lvgl_port_lock(0)/unlock centrally — slot code
+# must NOT lock again (recursive would deadlock). Widget event callbacks run
+# ON the LVGL task and need no lock.
+#
+# PANEL HARDWARE IS NOT IN THIS BLOCK: framework blocks are loaded by name
+# and carry no cfg, so pins live in instance blocks. A display product MUST
+# also instantiate a panel driver (drivers/display_ili9341_spi) — its
+# display_node_init slot creates the LVGL display and assigns the shared
+# `s_disp`; app_display_init fails loudly if no panel block did. Touch is a
+# second, optional driver (drivers/display_touch_ft5x06), ordered after the
+# panel in product.yml.
+#
+# Versions pinned to the locally verified set: lvgl 9.4 + esp_lvgl_port 2.7
+# (the port's cfg structs are LVGL-9-conditional; a major bump of either is
+# an API review, not a routine bump).

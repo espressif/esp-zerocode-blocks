@@ -1,0 +1,61 @@
+description: GPIO-driven relay (active-high or active-low)
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO pin connected to the relay control input
+  active_level:
+    type: int
+    default: 1
+    description: 1 = active-high, 0 = active-low
+
+driver_params:
+  param_id:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID this relay reacts to (boolean)
+
+# esp-board-manager mapping — used ONLY by a product that names a `board:`.
+# Without one, nothing below is read and this block behaves exactly as it did.
+#
+# The relay control line is external wiring, so on a board product it belongs
+# in the generated amend: that is what puts it in front of bmgr's IO-conflict
+# check and into gen_board_metadata.yaml's occupied-IO list, instead of being
+# a GPIO number only this block knows about.
+bmgr:
+  init: board_manager
+  # bmgr's periph_gpio now owns the line, so the block's own init must not also
+  # configure it. driver_apply_cases stays: gpio_set_level() works fine on a
+  # pin the board manager configured as an output.
+  replaces_slots: [driver_init]
+
+  # ACTIVE-HIGH ONLY, and this is a safety gate, not a preference.
+  requires:
+    - cfg: active_level
+      equals: 1
+      reason: >-
+        periph_gpio calls gpio_config() BEFORE it writes default_level, and the
+        GPIO output register's reset value is 0. An active-LOW relay is
+        therefore ENERGIZED for the microseconds between those two calls — on a
+        garage door that is a pulse to the opener on every boot. This block's
+        own driver_init exists in the shape it does precisely to avoid that
+        (it writes the idle level before switching the pin to output), so an
+        active-low relay must keep it and cannot be handed to the board
+        manager until bmgr can set a level before driving.
+
+  peripherals:
+    - name: gpio_{{prefix_lc}}_relay
+      type: gpio
+      role: io
+      version: default
+      config:
+        pin: '{{cfg.gpio}}'
+        mode: GPIO_MODE_OUTPUT
+        pull_up: false
+        pull_down: false
+        intr_type: GPIO_INTR_DISABLE
+        # De-energized at boot. Constant 0, not !active_level: the guard above
+        # means active_level is 1 here, and a computed value would quietly
+        # become wrong the day the guard is relaxed.
+        default_level: 0

@@ -1,0 +1,82 @@
+description: "BLE Mesh — Generic OnOff/Level node over Bluetooth LE Mesh, provisionable from any mesh app; a kit member can also act as the network's provisioner"
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32s3]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [ble_mesh, ...] by loading it, copying its components/ subtree into the
+# output, and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks (device_types/*) populate the ble_mesh_includes /
+# ble_mesh_statics / ble_mesh_driver_cb_cases / ble_mesh_onoff_set_cases /
+# ble_mesh_level_set_cases slots, and behavior blocks the ble_mesh_node_init /
+# ble_mesh_prov_cases ones. All of them render into
+# components/app_ble_mesh/app_ble_mesh.cpp (whose stub source lives here).
+#
+# WHAT THE GENERATED NODE ALWAYS CARRIES, so no product has to build it:
+#   - the BLE host brought up and synchronised BEFORE the mesh stack;
+#   - a Config Server, a Config Client, Generic OnOff/Level SERVERS (what a
+#     controller writes) and Generic OnOff/Level CLIENTS (what this node
+#     publishes with) — every one of them with a real publication context,
+#     so a publish can never run on a NULL pub;
+#   - PB-ADV + PB-GATT provisioning with a device UUID whose first two bytes
+#     are a fixed marker, which is what a provisioner matches on;
+#   - CONFIG_BLE_MESH_SETTINGS, so keys, bindings, subscriptions and the
+#     publication survive a reboot, and `zc_ble_mesh_provisioned()` reads the
+#     STACK's own answer rather than a flag some callback happened to set;
+#   - Set Unacknowledged messages sent through the client model with a proper
+#     message context (address, app key index, TTL) and an incrementing TID —
+#     a repeated command without a fresh TID is discarded as a retransmission;
+#   - a `mesh` console command (status | join | reset | on | off).
+#
+# NOTE (platform registry): the ZeroCode AI repo carries the matching framework
+# profile — chip support and incompatibilities must say the same thing as the
+# `chips:` list above.
+#
+# NOTE (address): 0xC000 (ZC_MESH_GROUP_ADDR) is the default group every
+# server subscribes to and every client publishes to, so a light and a remote
+# provisioned into the same network work together with no per-product address
+# bookkeeping.
+
+# ── The ble_mesh_* slot family ────────────────────────────────────────
+# All of these render into components/app_ble_mesh/app_ble_mesh.cpp.
+#
+#   ble_mesh_includes        extra headers, at the top of the file.
+#   ble_mesh_statics         file-scope state and helpers, after the models
+#                            and before everything that uses them.
+#   ble_mesh_driver_cb_cases HARDWARE/BUS → MESH. Statements inside the driver
+#                            notification callback, with `param_id`, `val`,
+#                            `source` and the framework's `s_handle` in scope.
+#                            An actuator calls zc_ble_mesh_set_onoff_state /
+#                            zc_ble_mesh_set_level_state (its own state); a
+#                            controller calls zc_ble_mesh_publish_onoff /
+#                            zc_ble_mesh_publish_level (a command to others).
+#                            Runs OFF the mesh task, which is why it goes
+#                            through those helpers rather than the stack.
+#   ble_mesh_onoff_set_cases MESH → HARDWARE. Statements run when a controller
+#                            writes this node's Generic OnOff state, with
+#                            `onoff` (uint8_t) in scope.
+#   ble_mesh_level_set_cases The same for Generic Level, with `level`
+#                            (int16_t) in scope. Delta and Move messages
+#                            arrive here too, already resolved to a level.
+#   ble_mesh_node_init       Statements run once, after the mesh stack is
+#                            initialised and before it starts advertising:
+#                            a device type seeds its state, a behavior takes
+#                            on a role.
+#   ble_mesh_prov_cases      Provisioning lifecycle. IF-STATEMENTS on `event`
+#                            (not switch cases — several blocks may want the
+#                            same event), with `param` in scope.
+#
+# WRAP a slot's body in braces when it declares anything: several instances of
+# the same slot are rendered into one function, one after another.
+#
+# ONE ELEMENT, one Generic OnOff/Level server pair. Two actuator device types
+# in one product therefore share that pair — fine for a light that is also
+# something else, wrong for two independently controllable outputs. Multiple
+# elements is the extension when a product needs it, and it belongs in the
+# framework rather than in a device type.

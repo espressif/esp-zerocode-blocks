@@ -1,0 +1,45 @@
+# Upstream TensorFlow person-detection CNN, compiled out of esp-tflite-micro's
+# examples/ rather than vendored — the .cc is 1.85 MB of hex, seven times this
+# whole catalogue, and the licence belongs with the component that ships it.
+description: Person present or absent in a 96x96 grayscale frame. Small and noisy; good enough for presence, not for counting or identity.
+
+source:
+  kind: component            # component | vendored | user   (user = BYOM, later)
+  component: espressif/esp-tflite-micro
+  path: examples/person_detection/main/person_detect_model_data.cc
+  kconfig: ZC_ML_MODEL_PERSON_DETECT
+symbol: g_person_detect_model_data
+size_bytes: 300568
+license: Apache-2.0
+license_holder: The TensorFlow Authors
+
+input:
+  width: 96
+  height: 96
+  channels: 1
+  dtype: int8
+  # The sensor gives unsigned bytes; the graph wants signed. Subtract 128.
+  signed_offset: -128
+output:
+  count: 2
+  labels: [not_person, person]
+  # Which index a consumer should read rather than argmax — presence is a
+  # question about ONE class, not about which class won.
+  index_of_interest: 1
+
+ops_profile: cnn
+
+# MEASURED, not guessed — scripts/bench-arena.sh writes this section. Until a
+# bench run replaces them these are upstream's own declared figures, which is
+# what our defaults track.
+arena:
+  base_bytes: 102400        # kTensorArenaSize = 100 * 1024
+  scratch_bytes: 61440      # + scratchBufSize when CONFIG_NN_OPTIMIZED
+  source: upstream-declared # upstream-declared | measured
+  measured_on: []           # [{chip, configured, used, date}]
+
+# The interpreter recurses through the graph on the calling task's stack.
+task_stack_bytes: 6144
+
+chips: [esp32, esp32c3, esp32c6, esp32s3, esp32p4, esp32s31]
+consumed_by: [drivers/ml_person_detect]

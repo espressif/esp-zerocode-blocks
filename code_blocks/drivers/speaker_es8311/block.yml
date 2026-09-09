@@ -1,0 +1,105 @@
+description: >-
+  ES8311 codec speaker output (the ESP-Mosaico's onboard audio: ES8311 codec +
+  NS4150B class-D amp). Same tone/volume/mute param contract as
+  drivers/speaker_i2s — it is the same square-wave generator — but the codec is
+  configured over I2C and the amplifier is gated by a GPIO.
+
+# WHY NOT drivers/speaker_i2s: that block targets a codec-LESS amplifier
+# (MAX98357A, PCM5102), which needs nothing but BCLK/WS/DOUT — you feed it I2S
+# and sound comes out. An ES8311 is a real codec: it is deaf until its registers
+# are written over I2C, it needs a continuous MCLK, and on this board the
+# NS4150B amp stays muted until PA_CTRL is driven. Point speaker_i2s at these
+# pins and you get a silent board and no error, which is the worst outcome.
+#
+# THE AMPLIFIER IS ENABLED LAST, AFTER the codec is configured and the I2S
+# channel is running. Enabling a class-D amp while its input is undefined is
+# how a board greets its owner with a bang; the pop-on-power-up is not
+# cosmetic on a speaker this small.
+#
+# Volume is applied in the DIGITAL generator (the shared amplitude maths),
+# not via the codec's own volume register, so tone/volume/mute behave
+# identically whichever speaker block a product picks. The codec is left at a
+# fixed output level.
+#
+# ESP-Mosaico wiring (esp-dev-kits user guide "MCU and Pin Assignment"):
+#   I2S_MCLK 54 · I2S_BCK 37 · I2S_WS 49 · I2S_DOUT 40 · I2S_DIN 52
+#   PA_CTRL 45 (amp enable) · CODEC_PW 56 (codec 3V3 power)
+#   ES8311 sits at 0x19 on the shared I2C0 bus (SDA 0 / SCL 1) alongside the
+#   touch controller, BMI270, BMM150 and the fuel gauge.
+# NOT yet hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_i2s, esp_driver_gpio, espressif__esp_codec_dev]
+
+# This block TALKS on an I2C bus it does not configure: `audio_codec_new_i2c_ctrl`
+# attaches the codec to whatever bus already exists on `i2c_port`, and this block
+# must never install or tear that bus down. Declared so the validator can check
+# the assumption — undeclared, an ES8311 instance sitting ABOVE its bus provider
+# generates, compiles, links and boots, and the board is simply silent with
+# nothing in any report saying why. That is precisely the failure shape
+# `requires_bus` exists to catch. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See CLAUDE.md → Shared buses.
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  port:
+    type: int
+    default: 0
+    description: I2S peripheral number. Must differ from any other I2S block on the same product.
+  mclk_gpio:
+    type: int
+    required: true
+    description: Master clock to the codec — an ES8311 will not run without it
+  bclk_gpio:
+    type: int
+    required: true
+    description: Bit clock (BCLK / SCK)
+  ws_gpio:
+    type: int
+    required: true
+    description: Word select / left-right clock (LRC / WS)
+  dout_gpio:
+    type: int
+    required: true
+    description: Serial data out to the codec DAC
+  pa_ctrl_gpio:
+    type: int
+    required: true
+    description: Amplifier enable (NS4150B); driven active only once audio is flowing
+  pa_active_level:
+    type: int
+    default: 1
+  codec_pw_gpio:
+    type: int
+    default: -1
+    description: Codec power-rail control, -1 if the codec is always powered
+  i2c_port:
+    type: int
+    default: 0
+    description: I2C port the codec shares with the board's other sensors
+  i2c_addr:
+    type: int
+    default: 24
+    description: ES8311 7-bit address (0x19 = 24 on the Mosaico)
+  sample_rate:
+    type: int
+    default: 16000
+
+driver_params:
+  tone_param:
+    type: u32
+    required: true
+    description: Tone frequency in Hz (uint32, 0 = silent)
+  volume_param:
+    type: u8
+    required: false
+    default: ""
+    description: (Optional) playback volume 0-100. Empty disables — level stays at 50%.
+  mute_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) mute flag.

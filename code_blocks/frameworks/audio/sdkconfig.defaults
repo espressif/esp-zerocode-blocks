@@ -1,0 +1,11 @@
+# Flash size is NOT set here: the partition-table block owns it (8mb-voice
+# carries FLASHSIZE_8MB, 16mb-voice carries FLASHSIZE_16MB) so the table and
+# the flash size can never drift apart. The engine gates audio products onto
+# a voice table, so the key always arrives.
+CONFIG_SR_MN_EN_MULTINET7_QUANT="y"
+CONFIG_SR_WN_WN9_HIESP="y"
+CONFIG_MODEL_IN_FLASH="y"
+CONFIG_SPIRAM="y"
+CONFIG_SPIRAM_MODE_OCT="y"
+CONFIG_SPIRAM_SPEED_80M="y"
+CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240="y"

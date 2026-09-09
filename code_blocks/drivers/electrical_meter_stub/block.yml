@@ -1,0 +1,19 @@
+description: Periodic stub publisher for active power (mW). Compiling stub — for real metering use drivers/hlw8012 or drivers/ina219, do not hand-write ADC.
+
+# This stub publishes a simulated active-power reading and compiles as-is —
+# correct for dev firmware. Do NOT hand-write adc_oneshot / adc_cali current
+# sensing on top of it (the adc_oneshot_chan_cfg field order + the calibration
+# scheme API are -Werror traps). For real measurement, swap this block for a
+# real meter block: drivers/hlw8012 (pulse energy meter) or drivers/ina219
+# (I2C voltage+current).
+
+params:
+  poll_interval_ms: { type: int, default: 5000 }
+  initial_power_mw: { type: int, default: 0 }
+
+driver_params:
+  power_param:
+    type: u32
+    required: true
+    description: Driver param ID for active power (uint32, mW)
+maturity: stub

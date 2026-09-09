@@ -1,0 +1,50 @@
+description: "Smart plug / outlet / switched receptacle (Matter: on_off_plug_in_unit; RainMaker: esp.device.plug; Zigbee: Mains Power Outlet)"
+device_types:
+  matter: on_off_plug_in_unit
+  rainmaker: esp.device.plug
+  zigbee: EZB_ZHA_MAINS_POWER_OUTLET_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Smart Plug
+    description: "User-visible device name (RainMaker device name; must be unique per node)"
+  zb_endpoint:
+    type: int
+    default: 16
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 120
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_plug:
+    type: string
+    default: "turn on the plug"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the plug"'
+  say_turn_off_the_plug:
+    type: string
+    default: "turn off the plug"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the plug"'
+  say_turn_on_the_socket:
+    type: string
+    default: "turn on the socket"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "turn on the socket"'
+  say_turn_off_the_socket:
+    type: string
+    default: "turn off the socket"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "turn off the socket"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID this endpoint maps to (boolean)

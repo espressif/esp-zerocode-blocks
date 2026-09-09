@@ -1,0 +1,32 @@
+description: Reverse-polarity DC lock motor + position sense (lock/unlock via H-bridge or 2-relay setup)
+
+# Drives a motorized deadbolt:
+#  - lock_gpio HIGH (+ unlock_gpio LOW) → motor turns toward LOCK position
+#  - unlock_gpio HIGH (+ lock_gpio LOW) → motor turns toward UNLOCK position
+#  - both LOW → motor idle
+# Position sense is a single GPIO that reads HIGH when locked.
+# A pulse_ms timer holds the motor on then releases. Adjust per-product.
+
+params:
+  lock_gpio:
+    type: int
+    required: true
+    description: GPIO that drives the H-bridge toward the LOCK position
+  unlock_gpio:
+    type: int
+    required: true
+    description: GPIO that drives the H-bridge toward the UNLOCK position
+  position_gpio:
+    type: int
+    required: true
+    description: GPIO input that reads HIGH when the bolt is in the LOCKED position
+  pulse_ms:
+    type: int
+    default: 800
+    description: How long to drive the motor (ms)
+
+driver_params:
+  locked_param:
+    type: bool
+    required: true
+    description: Driver param ID (boolean — true = locked)

@@ -1,0 +1,12 @@
+schema: zc-board/1
+
+# THE HARDWARE, NOT THE PRODUCT — see the note in
+# product_configurations/c6-devkit-board-relay/board.yaml. This is one of the
+# two sample board files in the catalog; every other product is board-free.
+
+selected: esp-mosaico
+chip: esp32s31
+
+bmgr:
+  board: esp_mosaico
+  resolved_from: exact

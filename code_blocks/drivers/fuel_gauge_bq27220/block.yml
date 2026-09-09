@@ -1,0 +1,72 @@
+description: >-
+  BQ27220 battery fuel gauge over I2C — state of charge, voltage and a
+  low-battery flag. The ESP-Mosaico's onboard gauge; depends on
+  peripherals/i2c_bus.
+
+# A fuel gauge is NOT a voltage divider. Li-ion voltage is nearly flat across
+# the middle of its discharge curve, so a percentage derived from volts is
+# wrong exactly where the user is looking at it. The BQ27220 integrates current
+# over time (coulomb counting) and reports a real state of charge; this block
+# reads that number rather than recomputing anything from voltage.
+#
+# READ-ONLY on purpose. The BQ27220 has a configuration memory (chemistry
+# profile, design capacity) written through an unlock sequence, and a bad write
+# there is persistent and hard to undo on a soldered-down part. The gauge ships
+# configured for the cell the board carries; this block reports, it does not
+# reconfigure.
+#
+# ESP-Mosaico: 0x55 on the shared I2C0 bus, with a 3.7 V / 65 mAh cell.
+# NOT yet hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c, esp_timer]
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x55 }
+  poll_interval_ms:
+    type: int
+    default: 30000
+    description: >-
+      Battery percentage moves slowly; polling faster wakes the bus and the CPU
+      for nothing. 30 s is already generous for a 65 mAh cell.
+  low_battery_pct:
+    type: int
+    default: 20
+    description: at or below this state of charge, the low-battery flag asserts
+
+driver_params:
+  soc_param:
+    type: u8
+    required: true
+    description: state of charge, 0-100 percent
+  voltage_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) battery voltage in millivolts
+  low_battery_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) true at or below low_battery_pct

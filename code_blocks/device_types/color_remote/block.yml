@@ -1,0 +1,51 @@
+description: "Color dimmer remote (controller — sends on/off + level + color commands; Matter: color_dimmer_switch; Zigbee: Color Dimmer Switch client)"
+# RainMaker: no equivalent (models state-holders only).
+# Zigbee: CONTROLLER binding — On/Off + Level + Color Control client
+# clusters; power/level/hue/saturation param changes send commands to
+# Finding & Binding targets (`zb-bind`).
+device_types:
+  matter: color_dimmer_switch
+  zigbee: EZB_ZHA_COLOR_DIMMER_SWITCH_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client device — needs bindings to On/Off, Level Control, Color Control, not a delegate"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+# Controller endpoints don't expose state — they emit commands to bound targets.
+# Matter: wire your input device to issue OnOff/LevelControl/ColorControl
+# commands via esp_matter helpers. Zigbee: the params below are consumed —
+# an encoder/button/knob driver publishes them and this block translates
+# changes into ZCL commands.
+params:
+  zb_endpoint:
+    type: int
+    default: 72
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param the remote's on/off input publishes (bool, consumed)
+  level_param:
+    type: u8
+    default: APP_DRIVER_PARAM_BRIGHTNESS
+    description: Driver param the remote's level input publishes (u8 0-254, consumed)
+  hue_param:
+    type: u8
+    default: APP_DRIVER_PARAM_HUE
+    description: Driver param the remote's hue input publishes (u8 0-254, consumed)
+  saturation_param:
+    type: u8
+    default: APP_DRIVER_PARAM_SATURATION
+    description: Driver param the remote's saturation input publishes (u8 0-254, consumed)
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT-absent: controllers are inputs — over MQTT they would be button/event emitters, which HA models as device_triggers (a later, different binding).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.

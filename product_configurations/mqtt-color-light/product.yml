@@ -1,0 +1,50 @@
+id: mqtt-color-light
+name: MQTT Color Light
+description: >-
+  A full-color Wi-Fi lamp for Home Assistant — on/off, brightness and colour
+  from the HA colour wheel, discovered automatically over MQTT. No hub, no
+  cloud account: configure Wi-Fi and the broker over the serial console.
+keywords: [mqtt, home assistant, color, rgb, light, lamp, discovery]
+
+# The catalog's first HA JSON-SCHEMA light. Plain-topic lights carry state
+# and brightness on separate topics, which cannot express colour; the JSON
+# schema carries state + brightness + hs colour in ONE retained payload and
+# needs no value_template (jinja braces would collide with the slot engine).
+# Driver hue/sat are Matter units (0-254) — the binding converts to HA's
+# h 0-360 / s 0-100 on the way out and back on the way in.
+frameworks: [mqtt]
+
+instances:
+  # WS2812 addressable strip — RESTORED: emu v0.39.0 fixed the rmt_tx_mark_eof
+  # crash (verified against the exact binary that died on the old emulator),
+  # so the RMT path is emulator-verifiable again. The pwm_rgb swap was only
+  # ever an emulator workaround, not a product decision.
+  - block: drivers/ws2812_strip
+    prefix: LAMP
+    cfg:
+      gpio: 8
+      num_leds: 1
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      hue_param: APP_DRIVER_PARAM_HUE
+      saturation_param: APP_DRIVER_PARAM_SATURATION
+
+  - block: device_types/color_light
+    prefix: LAMP_EP
+    cfg:
+      label: Colour Lamp
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      hue_param: APP_DRIVER_PARAM_HUE
+      saturation_param: APP_DRIVER_PARAM_SATURATION
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core

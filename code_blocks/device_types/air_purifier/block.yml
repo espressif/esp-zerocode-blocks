@@ -1,0 +1,50 @@
+description: "Air Purifier with 0-100 percent fan speed (Matter: air_purifier — Fan + HEPA filter monitoring; RainMaker: esp.device.fan — no standard air-purifier type in this SDK)"
+device_types:
+  matter: air_purifier
+  rainmaker: esp.device.fan
+  zigbee: EZB_ZHA_HEATING_COOLING_UNIT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Air Purifier
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 47
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 190
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_purifier:
+    type: string
+    default: "turn on the purifier"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the purifier"'
+  say_turn_off_the_purifier:
+    type: string
+    default: "turn off the purifier"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the purifier"'
+  say_purifier_faster:
+    type: string
+    default: "purifier faster"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "purifier faster"'
+  say_purifier_slower:
+    type: string
+    default: "purifier slower"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "purifier slower"'
+
+driver_params:
+  speed_param:
+    type: u8
+    default: APP_DRIVER_PARAM_FAN_SPEED
+    description: Driver param ID for fan speed (uint8_t, 0-100)

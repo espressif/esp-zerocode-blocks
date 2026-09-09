@@ -1,0 +1,19 @@
+description: "Closure device type (motorized closure — garage door, gate, shutter; Matter ClosureControl with the Positioning feature). MoveTo/Stop commands drive a motor speed param via a delegate."
+# Matter-only today. RainMaker: no equivalent (models state-holders only).
+# Zigbee-absent: no HA closure device id maps to ClosureControl semantics.
+device_types:
+  matter: closure
+
+# Commands (MoveTo/Stop) are handled by a ClosureControlClusterDelegate that
+# writes motor_param; matter_driver_cb_cases reflects motor activity back to
+# the ClosureControl MainState attribute (Moving/Stopped). OverallCurrentState
+# (exact position) is a struct attribute and remains a follow-up.
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+driver_params:
+  motor_param:
+    type: i16
+    required: true
+    description: Driver param ID the delegate writes on MoveTo/Stop (i16 motor speed — +open, -close, 0 stop; pair with drivers/dc_motor_h_bridge)

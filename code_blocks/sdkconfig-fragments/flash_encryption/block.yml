@@ -1,0 +1,11 @@
+description: Enables Flash Encryption (release mode). Bootloader and app are
+
+# Original notes from the .defaults file:
+#   Enables Flash Encryption (release mode). Bootloader and app are
+#   encrypted on flash with a per-device key burned into eFuse. Reads
+#   from flash by external means (e.g. another device, debugger) yield
+#   ciphertext. ONE-WAY: enabling release mode cannot be undone.
+#   Combine with secure_boot for full chain-of-trust hardening.
+#   sdkconfig_fragments: [secure_boot, flash_encryption]
+#   First-boot flow burns the key automatically (development mode is
+#   explicitly disabled here — production-only).

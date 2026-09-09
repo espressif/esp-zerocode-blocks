@@ -1,0 +1,43 @@
+description: "Dimmer remote (controller — sends on/off + level commands via bindings; Matter: dimmer_switch; Zigbee: Dimmer Switch client)"
+# RainMaker: no equivalent (models state-holders only).
+# Zigbee: CONTROLLER binding — On/Off + Level client clusters; power/level
+# param changes send commands to Finding & Binding targets (`zb-bind`).
+device_types:
+  matter: dimmer_switch
+  zigbee: EZB_ZHA_DIMMER_SWITCH_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client device — needs bindings to On/Off, Level Control, not a delegate"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+# Controller endpoints don't expose state — they emit commands to bound targets.
+# Matter: wire your input device to issue OnOff/LevelControl commands via
+# esp_matter helpers (see comment in the matter slots). Zigbee: the params
+# below are consumed — an encoder/button driver publishes them and this block
+# translates changes into ZCL commands.
+params:
+  zb_endpoint:
+    type: int
+    default: 71
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param the remote's on/off input publishes (bool, consumed)
+  level_param:
+    type: u8
+    default: APP_DRIVER_PARAM_BRIGHTNESS
+    description: Driver param the remote's level input publishes (u8 0-254, consumed)
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT binding: an HA device_trigger (controllers are inputs — they emit
+# events for automations, not stateful entities).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.

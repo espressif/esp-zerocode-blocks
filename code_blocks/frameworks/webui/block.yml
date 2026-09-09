@@ -1,0 +1,29 @@
+description: "Web UI framework — the device serves its own control page: connect to its Wi-Fi (or find it on yours) and control everything from any phone browser. No app, no cloud, no hub."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [webui] by loading it, copying its components/ subtree into the output,
+# and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# THE BINDING: device types contribute webui_entities rows — a static
+# manifest entry per control ({label, kind, param, min, max, scale}).
+# ONE embedded page (~3 KB, no external assets) renders the manifest:
+# toggle / slider / value / binary, polling GET /api/state and posting
+# /api/set. Params travel BY NAME in the API, mapped to enums by a
+# generated table.
+#
+# NETWORK: standalone products bring up a SoftAP — "ZeroCode-<id>",
+# password "zerocode" — and serve at http://192.168.4.1. When a Wi-Fi
+# transport (matter/rainmaker/mqtt) is co-selected, webui owns NOTHING:
+# it serves on the transport's network instead and announces
+# zerocode-<id>.local over mDNS (shared-network mode, same pattern as
+# mqtt's).
+#
+# esp_http_server ships with IDF; espressif/mdns is the one managed dep.

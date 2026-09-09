@@ -1,0 +1,24 @@
+#define {{prefix}}_CAM_PWDN   {{cfg.pin_pwdn}}
+#define {{prefix}}_CAM_RESET  {{cfg.pin_reset}}
+#define {{prefix}}_CAM_XCLK   {{cfg.pin_xclk}}
+#define {{prefix}}_CAM_SDA    {{cfg.pin_sda}}
+#define {{prefix}}_CAM_SCL    {{cfg.pin_scl}}
+#define {{prefix}}_CAM_D7     {{cfg.pin_d7}}
+#define {{prefix}}_CAM_D6     {{cfg.pin_d6}}
+#define {{prefix}}_CAM_D5     {{cfg.pin_d5}}
+#define {{prefix}}_CAM_D4     {{cfg.pin_d4}}
+#define {{prefix}}_CAM_D3     {{cfg.pin_d3}}
+#define {{prefix}}_CAM_D2     {{cfg.pin_d2}}
+#define {{prefix}}_CAM_D1     {{cfg.pin_d1}}
+#define {{prefix}}_CAM_D0     {{cfg.pin_d0}}
+#define {{prefix}}_CAM_VSYNC  {{cfg.pin_vsync}}
+#define {{prefix}}_CAM_HREF   {{cfg.pin_href}}
+#define {{prefix}}_CAM_PCLK   {{cfg.pin_pclk}}
+#define {{prefix}}_CAM_XCLK_HZ {{cfg.xclk_freq_hz}}
+#define {{prefix}}_CAM_PX_THRESH {{cfg.pixel_threshold}}
+#define {{prefix}}_CAM_AREA_PCT  {{cfg.area_threshold_pct}}
+#define {{prefix}}_CAM_HOLD_MS   {{cfg.hold_ms}}
+#define {{prefix}}_CAM_POLL_MS   {{cfg.poll_ms}}
+/* Grayscale QQVGA: 160 x 120 */
+#define {{prefix}}_CAM_W 160
+#define {{prefix}}_CAM_H 120

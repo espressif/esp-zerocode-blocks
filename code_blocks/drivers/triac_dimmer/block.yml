@@ -1,0 +1,29 @@
+description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC dimming for incandescent / dimmable LED loads.
+
+# Hardware: zero-cross-detect (ZCD) opto pulses on every AC half-cycle (every 10 ms
+# at 50 Hz, 8.33 ms at 60 Hz). Triac gate fires after a delay measured from the
+# zero-cross — longer delay = lower brightness.
+#
+# This driver:
+#  - Hooks a GPIO ISR on the ZCD edge
+#  - Schedules a one-shot timer to fire the gate after delay_us
+#  - delay_us = (half_cycle_us * (255 - brightness)) / 255
+# Depends on peripherals/gpio_isr_service.
+
+params:
+  zcd_gpio:
+    type: int
+    required: true
+    description: GPIO connected to the zero-cross detect output (one pulse per half-cycle)
+  gate_gpio:
+    type: int
+    required: true
+    description: GPIO connected to the triac gate driver
+  ac_frequency_hz:
+    type: int
+    default: 50
+    description: 50 Hz or 60 Hz mains
+
+driver_params:
+  power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
+  brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }

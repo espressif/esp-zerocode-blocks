@@ -1,0 +1,97 @@
+id: rainmaker-color-bulb
+name: RainMaker Color Bulb
+description: Cloud-connected RGB bulb with power/brightness/hue/saturation in the ESP RainMaker app (PWM RGB; multi-param actuator reference for the rainmaker binding)
+keywords: [rainmaker, cloud, bulb, rgb, color, light]
+frameworks: [rainmaker]
+
+instances:
+  # ── Hardware ────────────────────────────────────────────────
+  - block: drivers/pwm_rgb
+    prefix: BULB
+    cfg:
+      red_gpio: 4
+      green_gpio: 5
+      blue_gpio: 6
+      red_channel: 0
+      green_channel: 1
+      blue_channel: 2
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      hue_param: APP_DRIVER_PARAM_HUE
+      saturation_param: APP_DRIVER_PARAM_SATURATION
+
+  # ── Device type (RainMaker binding) ─────────────────────────
+  - block: device_types/color_light
+    prefix: BULB
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      hue_param: APP_DRIVER_PARAM_HUE
+      saturation_param: APP_DRIVER_PARAM_SATURATION
+      label: Color Bulb
+
+  - include: baseline-connectivity
+
+  # ── Status LED (GPIO 10 — safe on all supported chips) ──────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Persistence ─────────────────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_BRI
+    cfg:
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: bri
+
+  # ── Console + diagnostics ───────────────────────────────────
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_version
+    prefix: CON_VER
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_BRI
+    cfg:
+      command_name: brightness
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+  - include: diagnostics-core
+
+partition_table: 4mb
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode RainMaker Color Bulb

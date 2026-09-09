@@ -1,0 +1,70 @@
+id: lm-voice-control-demo
+name: Offline Language Control Demo
+description: Plain-language control of a light and a fan, parsed entirely on-device — "turn on the kitchen light" with no network, no cloud, no round trip
+keywords: [lm, llm, language, offline, nlu, tool-calling, voice]
+frameworks: [lm]
+
+# First `frameworks: [lm]` product. Says the thing worth proving: a
+# microcontroller can understand a sentence and act on it with nothing else in
+# the loop.
+#
+# NO CONNECTIVITY FRAMEWORK, deliberately — the whole claim is that this needs
+# no network. Adding Matter would prove the opposite of the point, and would
+# put esp_matter next to a 264 KB model in the same OTA slot.
+#
+# Type `lm turn on the kitchen light` on the console and the relay closes.
+#
+# ci_chips: the runtime's vector kernels and PSRAM requirement. S31 is the
+# hardware-validated one; s3 uses the Espressif SIMD path. esp32p4 is left out
+# until its PIE path has a hardware run — it is build-verified only.
+ci_chips: [esp32s31, esp32s3]
+
+instances:
+  # ── what the model can act on ────────────────────────────────────────
+  # One instance per device+location. The model emits {device, location,
+  # action}; each instance owns one pair and publishes what it hears.
+  - block: drivers/lm_tool_calling
+    prefix: KITCHEN_LIGHT
+    cfg:
+      device: light
+      location: kitchen
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # A dimmable light shows the `set` action too: "set the bedroom light to 40"
+  # carries a value the switch-only instance above has no use for.
+  - block: drivers/lm_tool_calling
+    prefix: BEDROOM_LIGHT
+    cfg:
+      device: light
+      location: bedroom
+      power_param: APP_DRIVER_PARAM_LAMP_POWER
+      value_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── the hardware those actions drive ─────────────────────────────────
+  - block: drivers/relay
+    prefix: LIGHT
+    cfg:
+      gpio: 7
+      active_level: 1
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 6
+      power_param: APP_DRIVER_PARAM_LAMP_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── how commands get in ──────────────────────────────────────────────
+  # Console for now; a microphone block would feed the same app_lm_submit()
+  # without either of the blocks above changing.
+  - block: behaviors/lm_console_cmd
+    prefix: LMCMD
+    cfg:
+      command_name: lm
+
+  - include: console-diagnostics
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Offline Language Control

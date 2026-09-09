@@ -1,0 +1,58 @@
+description: "Cook surface (Matter: cook_surface — TemperatureControl with TemperatureNumber; RainMaker: esp.device.other — Temperature setpoint)"
+device_types:
+  matter: cook_surface
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "Temperature Control is attribute-wired, its delegate optional (only for the TemperatureLevel feature)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). TemperatureControl handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+
+params:
+  label:
+    type: string
+    default: Cook Surface
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 52
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 300
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_off_the_burner:
+    type: string
+    default: "turn off the burner"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn off the burner"'
+  say_make_the_burner_hotter:
+    type: string
+    default: "make the burner hotter"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "make the burner hotter"'
+  say_make_the_burner_cooler:
+    type: string
+    default: "make the burner cooler"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make the burner cooler"'
+
+driver_params:
+  setpoint_param:
+    type: i16
+    default: APP_DRIVER_PARAM_COOK_SURFACE_SETPOINT
+    description: Driver param ID for target temperature (int16_t, centi-degrees Celsius)
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

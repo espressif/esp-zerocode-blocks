@@ -1,0 +1,123 @@
+id: smart-plug
+name: Smart Plug
+description: Matter smart plug — relay with button, status LED, identify, NVS persistence, factory reset, OTA, console, network recovery, uptime log
+keywords: [plug, socket, outlet]
+frameworks: [matter]
+
+# Default 4 MB partition table (firmware/base_firmware/partitions.csv — 1.875 MB per OTA slot).
+# Measure binary against that ceiling; if it overflows we trim or apply
+# non-eFuse size optimizations rather than bumping flash size.
+
+# Note: production hardening (secure_boot, flash_encryption, nvs_encryption,
+# anti-rollback) is not applied here. Those touch eFuses and are irreversible,
+# so they belong to a separate Production Considerations phase applied later
+# by a dedicated agent. The fragments live in templates/sdkconfig-fragments/
+# as reference for that agent to discover.
+
+instances:
+  # Hardware
+  - block: drivers/relay_with_button
+    prefix: APP
+    cfg:
+      relay_gpio: 7
+      relay_active_level: 1
+      button_gpio: 9
+      button_active_level: 0
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: drivers/status_led
+    prefix: APP_LED
+    cfg:
+      gpio: 8
+      active_level: 1
+
+  # Matter endpoint
+  - block: device_types/smart_plug
+    prefix: APP
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # User-visible status: blink pattern reflects commissioning + connection state
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 8
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # Matter Identify command → fast blink while identifying
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # Power state survives reboots
+  - block: behaviors/nvs_persist_bool
+    prefix: APP_PERSIST
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  # Hold the button 5 s → factory reset
+  - block: behaviors/factory_reset_long_press
+    prefix: FR
+    cfg:
+      gpio: 9
+      active_level: 0
+      hold_time_ms: 5000
+
+  # Backstop: 5 rapid power cycles → factory reset (for users who can't reach the button)
+  - block: behaviors/factory_reset_power_cycle
+    prefix: FRPC
+    cfg:
+      count_threshold: 5
+      stable_window_ms: 5000
+
+  # OTA + diagnostics
+  - block: behaviors/ota_basic
+    prefix: OTA
+    cfg: {}
+
+  - block: behaviors/uptime_log
+    prefix: UP
+    cfg:
+      interval_seconds: 300
+
+  - block: behaviors/network_status_log
+    prefix: NETLOG
+    cfg: {}
+
+  - block: behaviors/wifi_disconnect_recovery
+    prefix: NETRECOV
+    cfg:
+      reboot_after_seconds: 600
+
+  # Diagnostics: console commands
+  - block: behaviors/console_param_cmd
+    prefix: PWRCMD
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+
+  - block: behaviors/console_param_get
+    prefix: PWRGET
+    cfg:
+      command_name: get-power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Smart Plug (Production)

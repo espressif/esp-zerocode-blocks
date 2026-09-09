@@ -1,0 +1,11 @@
+## The esp_agent client is not on the component registry — git-pinned.
+## The repo has NO TAGS (main only), so pin the commit, not the branch.
+dependencies:
+  agent:
+    git: https://github.com/espressif/esp-agents-firmware.git
+    path: components/agent
+    version: c5d6798244daee76a36e2cb3003a4b2f1190435c
+  # Consumed through the `json` shim beside this component — the upstream agent
+  # SDK asks for IDF 6's removed built-in `json`, so cJSON has to be present
+  # under that name.
+  espressif/cjson: "~1.7.19"

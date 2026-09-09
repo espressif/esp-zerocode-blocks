@@ -1,0 +1,91 @@
+id: mqtt-room-node
+name: MQTT Room Node
+description: >-
+  Wi-Fi room node for Home Assistant over plain MQTT — a dimmable light and a
+  temperature/humidity sensor, discovered automatically by HA the moment the
+  node connects. No hub protocol, no cloud account; configure Wi-Fi + broker
+  over the serial console and it appears in Home Assistant.
+keywords: [mqtt, home assistant, wifi, light, temperature, sensor, discovery]
+
+# First frameworks: [mqtt] product. Onboarding is the serial console
+# (mqtt-wifi <ssid> <pass>, then mqtt-broker <uri> [user] [pass]) persisted in
+# NVS — a bare MQTT node has no phone-app provisioning by design. Unconfigured
+# boot idles and logs; it never blocks app_main.
+#
+# Also the first framework product the EMULATOR can verify end-to-end:
+# esp-emu --net user reaches a real broker, so functional_testing can watch
+# "MQTT connected" + the discovery publishes on a virtual esp32c3.
+frameworks: [mqtt]
+
+instances:
+  # ── The light ─────────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/light
+    prefix: LAMP_EP
+    cfg:
+      label: Room Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── Temperature (DHT22 publishes temp + humidity on the bus) ──────
+  - block: drivers/dht22
+    prefix: DHT
+    cfg:
+      gpio: 4
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOM_TEMP
+    cfg:
+      label: Room Temperature
+      value_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  # ── Status LED: solid = broker connected, breathe = lost ──────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode MQTT Room Node

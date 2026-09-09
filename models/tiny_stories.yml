@@ -1,0 +1,48 @@
+# Second `kind: lm` manifest, and the one that shows the framework is not a
+# one-model toy: 2 MB of weights sampling freely, still at interactive speed.
+kind: lm
+description: "TinyStories generation. Free-running prose from an opening line — characters, plot, a moral. A demo of capability, not a control path: output is unconstrained, so nothing should be wired from it to hardware."
+
+source:
+  kind: vendored
+  path: code_blocks/frameworks/lm/components/app_lm/story.bin
+  kconfig: ZC_LM_MODEL_STORY        # default n — 2 MB is not every product's to carry
+symbol: _binary_story_bin_start
+size_bytes: 2094512
+license: Apache-2.0
+license_holder: Espressif Systems (esp-tinylm, llama2-s31)
+
+architecture:
+  family: llama2
+  variant: PLE
+  quantization: int4 weights, int8 activations
+
+tokenizer:
+  kind: bpe                          # a real subword vocab, unlike the NLU model's bytes
+  vocab_path: code_blocks/frameworks/lm/components/app_lm/bpe_vocab.h
+  eos_token: BPE_EOS
+
+decoding:
+  constrained: false
+  sampling: temperature
+  default_temperature: 0.8
+  # UNCONSTRAINED, and that is the difference from nlu_tool_calling. There is no
+  # schema bounding the output, so it can say anything — fine for prose, wrong
+  # for anything that moves a relay.
+
+measured:
+  tokens_per_second: { esp32s31: 26.7, esp32s3: 17.6 }
+  measured_on: [{chip: esp32s31, source: upstream-reported}]
+
+requires_psram: true
+task_stack_bytes: 6144
+links_into_app_image: true
+# THE PARTITION IS PART OF THE MODEL'S COST. 2,094,512 B of weights plus
+# ~254,992 B of app is 2,349,504 B; the default 4mb table's OTA slot is
+# 1,966,080 B — 20% short. The engine errors rather than letting an image build
+# and then overflow at flash time.
+requires_partition_table: [8mb, 8mb-voice, 16mb-voice]
+ota_slot_fill_pct: { 8mb: 75, 8mb-voice: 100, 16mb-voice: 50 }
+
+chips: [esp32s31, esp32s3, esp32p4]
+consumed_by: [behaviors/lm_storyteller]

@@ -1,0 +1,60 @@
+description: "Heating thermostat (Matter: thermostat — LocalTemperature + Setpoint + SystemMode; RainMaker: esp.device.thermostat)"
+device_types:
+  matter: thermostat
+  rainmaker: esp.device.thermostat
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Models a heating-only thermostat with setpoint + local temperature.
+# Cooling/dual-setpoint variants can be added later as separate blocks.
+params:
+  label:
+    type: string
+    default: Thermostat
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 41
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 260
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_make_it_warmer:
+    type: string
+    default: "make it warmer"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "make it warmer"'
+  say_make_it_cooler:
+    type: string
+    default: "make it cooler"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "make it cooler"'
+  say_turn_on_the_heating:
+    type: string
+    default: "turn on the heating"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "turn on the heating"'
+  say_turn_off_the_heating:
+    type: string
+    default: "turn off the heating"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "turn off the heating"'
+
+driver_params:
+  local_temp_param:
+    type: i16
+    required: true
+    description: Driver param ID for measured local temperature (int16, hundredths of °C)
+  heat_setpoint_param:
+    type: i16
+    required: true
+    description: Driver param ID for OccupiedHeatingSetpoint (int16, hundredths of °C)
+  system_mode_param:
+    type: u8
+    required: true
+    description: Driver param ID for SystemMode (uint8 — 0=Off, 4=Heat, 3=Cool)

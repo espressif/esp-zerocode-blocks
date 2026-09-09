@@ -1,0 +1,21 @@
+description: DC motor for curtains/blinds (up/down GPIOs + 2 limit switches)
+
+# Drives a curtain/blind motor:
+#  - up_gpio HIGH (+ down_gpio LOW) → opens (lift up)
+#  - down_gpio HIGH (+ up_gpio LOW) → closes
+# Limit switches stop motion at endpoints. Position is reported as a percent
+# (0 = fully closed, 10000 = fully open in 0.01% units, matching Matter).
+# This is a simple bang-bang controller — for smooth motion + position estimation,
+# add an encoder or extend post-generation.
+
+params:
+  up_gpio:    { type: int, required: true }
+  down_gpio:  { type: int, required: true }
+  upper_limit_gpio: { type: int, required: true, description: GPIO HIGH when fully open }
+  lower_limit_gpio: { type: int, required: true, description: GPIO HIGH when fully closed }
+
+driver_params:
+  position_param:
+    type: u16
+    required: true
+    description: Driver param ID for current/target lift position (uint16, 0-10000)

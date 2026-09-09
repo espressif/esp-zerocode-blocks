@@ -1,0 +1,73 @@
+description: >-
+  I2S digital microphone (INMP441, ICS-43434, SPH0645 and similar) sampled for
+  loudness. Owns its own I2S RX channel — I2S is point-to-point, so unlike I2C
+  there is no shared bus block. A sampling task computes RMS over each window
+  and publishes it via app_driver_set_param, so behaviors and device types can
+  bind it the way they bind any other sensor. Framework-independent.
+
+# Why loudness and not audio: the driver param bus carries scalars only
+# (bool/u8/i16/u16/u32), so a PCM stream has nowhere to go. RMS loudness is the
+# part of a microphone signal that fits the bus, and it covers the real
+# use cases at this layer — noise-triggered lighting, clap/knock detection,
+# "is the room loud" reporting. Wake-word and speech recognition need the audio
+# framework (esp-sr), not this block.
+#
+# 32-bit slots on purpose: INMP441 / ICS-43434 / SPH0645 are 24-bit parts that
+# left-justify into a 32-bit slot. Reading them with 16-bit slots yields noise
+# that looks like a working signal, so this block always reads 32-bit and
+# right-shifts to int16 itself.
+#
+# The L/R pin on the breakout picks which slot the mic drives; slot_right must
+# match how that pin is strapped or every sample reads zero.
+#
+# Sampling runs in its own task, not an esp_timer callback: i2s_channel_read
+# blocks for a full window (64 ms at the defaults) and must never occupy the
+# timer task.
+
+# Required, not optional: app_logic's base PRIV_REQUIRES has no `driver`
+# umbrella (gpio only resolves there transitively via espressif__button), so
+# without this the I2S include does not compile.
+cmake_priv_requires:
+  app_logic: [esp_driver_i2s]
+
+params:
+  port:
+    type: int
+    default: 1
+    description: I2S peripheral number. Must differ from any other I2S block on the same product (speaker_i2s defaults to 0).
+  bclk_gpio:
+    type: int
+    required: true
+    description: Bit clock (BCLK / SCK)
+  ws_gpio:
+    type: int
+    required: true
+    description: Word select / left-right clock (LRC / WS)
+  din_gpio:
+    type: int
+    required: true
+    description: Serial data in from the microphone (SD / DOUT on the breakout)
+  sample_rate:
+    type: int
+    default: 16000
+    description: I2S sample rate in Hz
+  window_samples:
+    type: int
+    default: 1024
+    description: Samples per RMS window. 1024 @16 kHz = 64 ms per reading.
+  slot_right:
+    type: int
+    default: 0
+    description: >-
+      0 = read the LEFT slot (breakout L/R pin tied to GND — the usual wiring),
+      1 = read the RIGHT slot (L/R tied to VCC). Must match the hardware or
+      every sample reads zero.
+
+driver_params:
+  level_param:
+    type: u16
+    required: true
+    description: >-
+      Driver param ID for loudness. RMS amplitude scaled to 0-65535 full scale
+      of the int16 sample range (silence ~0; normal speech at ~30 cm reads in
+      the low thousands). Read-only — published by this block, never written to it.

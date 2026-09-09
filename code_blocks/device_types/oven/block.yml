@@ -1,0 +1,64 @@
+description: "Oven (Matter: oven — composed device, cabinets carry TemperatureControl; RainMaker: esp.device.other — Temperature setpoint)"
+device_types:
+  matter: oven
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "composite — no cluster of its own; composes temperature_controlled_cabinet (their delegates live on those endpoints)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). OvenMode / OperationalState handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+# Note: setpoint_param has no cluster on the oven endpoint itself —
+# TemperatureControl lives on the temperature_controlled_cabinet endpoints.
+
+params:
+  label:
+    type: string
+    default: Oven
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 51
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 290
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_preheat_the_oven:
+    type: string
+    default: "preheat the oven"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "preheat the oven"'
+  say_turn_off_the_oven:
+    type: string
+    default: "turn off the oven"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the oven"'
+  say_make_the_oven_hotter:
+    type: string
+    default: "make the oven hotter"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make the oven hotter"'
+  say_make_the_oven_cooler:
+    type: string
+    default: "make the oven cooler"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make the oven cooler"'
+
+driver_params:
+  setpoint_param:
+    type: i16
+    default: APP_DRIVER_PARAM_OVEN_SETPOINT
+    description: Driver param ID for target temperature (int16_t, centi-degrees Celsius)
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

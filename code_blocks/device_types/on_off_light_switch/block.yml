@@ -1,0 +1,17 @@
+description: On/Off Light Switch device type stub (a light switch that controls On/Off Lights via bindings — emits commands, holds no state)
+# Matter-only today. RainMaker: no equivalent (models state-holders only).
+# Zigbee-absent: controller semantics need dynamic endpoints, no block-level equivalent.
+device_types:
+  matter: on_off_light_switch
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client-side device type by design — switch role, sends On/Off commands"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+params: {}
+param_refs: {}
+maturity: stub

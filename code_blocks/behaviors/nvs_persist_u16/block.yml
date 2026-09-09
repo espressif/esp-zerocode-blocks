@@ -1,0 +1,8 @@
+description: Save/restore a uint16_t driver param across reboots via NVS (color temp, position, etc.)
+
+params:
+  nvs_namespace: { type: string, default: app }
+  nvs_key: { type: string, required: true }
+
+driver_params:
+  target_param: { type: u16, required: true }

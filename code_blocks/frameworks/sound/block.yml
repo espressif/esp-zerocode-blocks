@@ -1,0 +1,25 @@
+description: "Audio framework (id: sound) — the device PLAYS sound: chimes, alerts, confirmation beeps. The output half of the Voice/Audio split (Voice = mic + speech, id `audio`; this = speaker, id `sound` — the id mismatch is historical: Voice claimed `audio` first, and renaming it is a breaking catalog migration)."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32p4, esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# THE BINDING ("what does this device sound like"): device types contribute
+# sound_event_cases — param-bus changes mapped to tone PATTERNS (doorbell
+# press → two-tone chime, light toggle → click).
+#
+# app_sound is a PATTERN SEQUENCER over the param bus, not a hardware owner:
+# it steps a pattern's notes into the product's speaker instance via its
+# tone param (drivers/speaker_i2s — the existing framework-independent tone
+# driver). The generator bakes the speaker instance's cfg.tone_param id into
+# the sequencer; with no speaker instance the framework logs once and stays
+# silent. Reuse over new contracts: no second I2S owner, and volume/mute keep
+# working through the driver's own params.
+#
+# Phase 2 (same framework): file/music playback (esp_audio_simple_player +
+# sdcard driver + media_player device type). Mic capture is NOT here — that
+# is Voice's side of the split.

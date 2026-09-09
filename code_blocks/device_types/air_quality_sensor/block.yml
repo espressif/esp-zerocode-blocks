@@ -1,0 +1,59 @@
+description: "Air Quality Sensor device type (AirQuality enum + optional concentration measurements) (Matter: air_quality_sensor; RainMaker: esp.device.other)"
+device_types:
+  matter: air_quality_sensor
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_SIMPLE_SENSOR_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# AirQuality enum: 0=Unknown, 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=VeryPoor, 6=ExtremelyPoor
+#
+# Concentration clusters live ON this single air_quality_sensor endpoint (device
+# type 0x002C) — one block, one endpoint, multiple clusters (same idiom as
+# device_types/electrical_sensor). Each gas is gated by an OPTIONAL param that
+# defaults to "" (disabled). Set it to a driver param ID to add that cluster.
+#
+# IMPORTANT: every concentration cluster carries a mandatory feature
+# conformance "at least one of (NumericMeasurement, LevelIndication)". We always
+# enable NumericMeasurement before create() — a cluster created with
+# feature_flags=0 ABORTS at boot. The MeasuredValue attribute is a FLOAT, so the
+# u16 driver param (ppm / µg·m⁻³) is converted to float on update. param_refs
+# only supports bool/u8/i16/u16/u32 (not float), hence the u16-carry/convert.
+params:
+  label:
+    type: string
+    default: Air Quality Sensor
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+# Optional concentration params are listed here too: when set they establish
+# this endpoint as the param's consumer (for validation) and its u16 type. When
+# left empty (default ""), the generator + validator skip them — an optional,
+# unresolved param_ref is treated as "feature disabled", not an error.
+  zb_endpoint:
+    type: int
+    default: 20
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  air_quality_param:
+    type: u8
+    required: true
+    description: Driver param ID for AirQuality enum (uint8 — see encoding above)
+  co2_ppm_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) param ID for CO2 concentration in ppm (uint16). Empty disables the cluster.
+  pm25_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) param ID for PM2.5 concentration in µg/m³ (uint16). Empty disables the cluster.
+  tvoc_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) param ID for TVOC concentration in ppb/µg·m⁻³ (uint16). Empty disables the cluster.
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

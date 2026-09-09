@@ -1,0 +1,105 @@
+id: voice-matter-lamp
+name: Voice Matter Lamp
+description: >-
+  A Matter smart lamp you can ALSO just talk to — say "Hi ESP, turn on the
+  light" with no hub round-trip, while Apple Home / Google Home / Alexa
+  control the same lamp over Matter. Requires a 16MB ESP32-S3 board.
+keywords: [voice, matter, speech, wake word, light, lamp, combo, 16mb]
+
+# COMBO: frameworks: [audio, matter] — the first voice+transport product.
+# The engine enforces the flash budget: this pair REQUIRES the 16mb-voice
+# partition table (audio+matter measured at 98% of 8mb-voice's 2.25MB OTA
+# slot; 16mb-voice's 3.5MB slots leave 37% headroom, measured on this
+# product). The table block carries CONFIG_ESPTOOLPY_FLASHSIZE_16MB so the
+# layout and flash size never drift apart. 16MB S3 module only (e.g.
+# ESP32-S3-WROOM-1-N16R8) — flashing an 8MB board will fail at image write.
+frameworks: [audio, matter]
+partition_table: 16mb-voice
+
+instances:
+  # ── Voice capture: raw PCM source for the AFE feed task ────────────
+  # Separate from drivers/mic_i2s — that block reduces the stream to a
+  # loudness scalar, and the param bus cannot carry audio.
+  - block: drivers/voice_mic_i2s
+    prefix: VMIC
+    cfg:
+      port: 0
+      bclk_gpio: 4
+      ws_gpio: 5
+      din_gpio: 6
+      slot_right: 0
+
+  # ── The lamp itself ───────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/dimmable_light
+    prefix: LAMP_EP
+    cfg:
+      label: Voice Lamp
+      audio_cmd_base: 110
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── Status LED: the only feedback channel until a speaker is added ──
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── "The device heard you": fast blink while listening after the wake
+  #     word, solid when idle ─────────────────────────────────────────
+  - block: behaviors/voice_feedback_led
+    prefix: VOICE_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Lamp state survives reboot ────────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_BRIGHT
+    cfg:
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: bright
+
+  - include: console-diagnostics
+
+  # ── Console mirrors of the voice commands, for bring-up without a mic ──
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_BRIGHT
+    cfg:
+      command_name: bright
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Voice Lamp

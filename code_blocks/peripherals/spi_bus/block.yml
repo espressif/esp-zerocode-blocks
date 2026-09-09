@@ -1,0 +1,11 @@
+description: Shared SPI bus init for products with multiple SPI devices on the same lines.
+
+params:
+  host:
+    type: int
+    default: 1
+    description: SPI host (1 = SPI2, 2 = SPI3 on most chips)
+  mosi_gpio: { type: int, required: true }
+  miso_gpio: { type: int, required: true }
+  sclk_gpio: { type: int, required: true }
+  max_transfer_size: { type: int, default: 4096 }

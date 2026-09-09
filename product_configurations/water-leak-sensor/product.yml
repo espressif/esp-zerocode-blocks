@@ -1,0 +1,61 @@
+id: water-leak-sensor
+name: Water Leak Detector
+description: Water leak detector using a probe pair (resistance drops when wet → GPIO low)
+keywords: [water, leak, flood, moisture, sensor]
+frameworks: [matter]
+
+instances:
+  - block: drivers/gpio_input_sensor
+    prefix: PROBE
+    cfg:
+      gpio: 4
+      pull: pullup
+      active_level: 0   # probe shorted to GND when water bridges contacts
+      poll_interval_ms: 1000
+      target_param: APP_DRIVER_PARAM_LEAK
+
+  - block: device_types/water_leak_detector
+    prefix: LEAK
+    cfg:
+      leak_param: APP_DRIVER_PARAM_LEAK
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Water Leak Detector

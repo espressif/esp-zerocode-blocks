@@ -1,0 +1,42 @@
+description: "Water Valve (Matter: water_valve — ValveConfigurationAndControl Open/Close wired to the driver param via delegate; RainMaker: esp.device.other with open/close power toggle)"
+device_types:
+  matter: water_valve
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_MAINS_POWER_OUTLET_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Water Valve
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 45
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 210
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_open_the_valve:
+    type: string
+    default: "open the valve"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "open the valve"'
+  say_close_the_valve:
+    type: string
+    default: "close the valve"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "close the valve"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_VALVE_OPEN
+    description: Driver param ID for valve open/close (boolean; drives the relay and both the Matter and RainMaker bindings)

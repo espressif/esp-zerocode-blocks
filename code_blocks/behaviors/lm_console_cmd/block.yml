@@ -1,0 +1,12 @@
+description: "Console command that sends a line of natural language to the on-device model — `lm turn on the kitchen light`. Needs frameworks: [lm]. The way to exercise language commands without a microphone, and the way to see what the model actually understood."
+
+# Kept separate from drivers/lm_tool_calling on purpose: that block ACTS on a
+# parsed command, this one FEEDS commands in. A microphone block would be a
+# third, feeding the same app_lm_submit() without either of the others
+# changing.
+
+params:
+  command_name:
+    type: string
+    default: lm
+    description: Console command name. `lm <words...>` joins its arguments into one command string.

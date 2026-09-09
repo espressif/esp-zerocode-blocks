@@ -1,0 +1,47 @@
+description: Adds a bench console command (e.g. "power on", "brightness 128") that writes a driver param — a test override that lands on the bus like any other source, for actuator/setpoint params (sensor params get re-asserted by their driver). Supports bool / u8 / u16 / i16 / u32.
+
+# Companion to console_param_get (which reads). One instance per param you
+# want to set from the shell. value_kind cfg picks the argument parser and
+# which union member to publish.
+#
+# A BENCH OVERRIDE, not a control path. The write lands on the param bus with
+# source LOCAL like any other; nothing here bypasses the producer. Two
+# consequences for the code that composes it: a SENSOR param (published by an
+# input driver) is re-asserted by that driver on its next poll, so overriding
+# one only lasts until the hardware disagrees; and any logic that drives an
+# ACTUATOR must read that actuator's state from the bus (app_driver_get_param
+# or the change notify), not from a private shadow variable — a console
+# write the shadow never sees is how a controller ends up believing the
+# relay is on when it is off. Target actuator/setpoint params; leave sensor
+# params to their drivers.
+
+params:
+  command_name:
+    type: string
+    required: true
+    description: Console command identifier (e.g. "power", "brightness", "fan", "setpoint")
+  target_param:
+    type: string
+    required: true
+    description: Driver param to write
+  value_kind:
+    type: string
+    default: bool
+    enum: [bool, u8, u16, i16, u32]
+    description: How to parse the argument and which union member to set
+  mode:
+    type: string
+    default: state
+    enum: [state, event]
+    description: >-
+      state (default) writes through app_driver_set_param — change-detected, so
+      repeating the current value is a no-op, right for "on"/"50 %"/"locked".
+      event writes through app_driver_fire_event — always delivered, right for a
+      param whose repetition is the point (a ring, a press, a dispense, a
+      re-trigger): with state, the second identical command disappears.
+
+# mode must match the PRODUCER's call: a param the product fires as an event
+# (see CLAUDE.md → State vs events) is bench-driven as an event too.
+#
+# No param_refs — type is established by the producer block; this block is
+# type-agnostic at the YAML layer (value_kind drives codegen at the union site).

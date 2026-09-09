@@ -1,0 +1,14 @@
+# The chips a product BUILDS for — one per line. Read by scripts/check.py (a
+# block's `target:` must name one), scripts/build-product.sh, the CI matrix and
+# Dockerfile.ci. Every chip here has been proven by a real ESP-IDF build of a
+# product; add one only after such a build. engine/src/hardware.ts describes
+# more chips than this (what the platform can TALK about), and that is a
+# different set on purpose.
+esp32
+esp32c3
+esp32c5
+esp32c6
+esp32h2
+esp32p4
+esp32s3
+esp32s31

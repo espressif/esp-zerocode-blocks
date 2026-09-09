@@ -1,0 +1,7 @@
+description: Shared ADC oneshot unit. Drivers that read ADC channels register their channels against this unit instead of creating their own.
+
+params:
+  unit:
+    type: int
+    default: 0
+    description: ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2)

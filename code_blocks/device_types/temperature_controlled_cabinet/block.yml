@@ -1,0 +1,54 @@
+description: "Temperature-controlled cabinet (Matter: temperature_controlled_cabinet — TemperatureControl with TemperatureNumber; RainMaker: esp.device.other — Temperature setpoint)"
+device_types:
+  matter: temperature_controlled_cabinet
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "optional delegate(s): Oven Cavity Operational State, Oven Mode, Refrigerator And Temperature Controlled Cabinet Mode; Temperature Control is attribute-wired, its delegate optional (only for the TemperatureLevel feature)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). TemperatureControl handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+
+params:
+  label:
+    type: string
+    default: Cabinet
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 53
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 310
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_make_the_cabinet_colder:
+    type: string
+    default: "make the cabinet colder"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "make the cabinet colder"'
+  say_make_the_cabinet_warmer:
+    type: string
+    default: "make the cabinet warmer"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "make the cabinet warmer"'
+
+driver_params:
+  setpoint_param:
+    type: i16
+    default: APP_DRIVER_PARAM_CABINET_SETPOINT
+    description: "Driver param ID for target temperature (int16_t, centi-degrees Celsius; cabinet may be a fridge/freezer or oven compartment, so RainMaker bounds span -40 to 300 C)"
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

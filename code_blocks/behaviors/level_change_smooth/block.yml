@@ -1,0 +1,22 @@
+description: Smoothly transitions a u8 brightness/level param toward a target instead of jumping. Removes harshness from manual setpoint changes.
+
+# Intercepts changes to target_param. Instead of letting the new value reach the
+# driver immediately, a small task ramps the actual value at `step_per_tick`
+# units per `tick_ms` until it reaches the target. The driver only sees the
+# intermediate values, which keeps brightness changes visually pleasant.
+
+params:
+  tick_ms:
+    type: int
+    default: 20
+    description: Ramp tick period (ms)
+  step_per_tick:
+    type: int
+    default: 4
+    description: Units to step toward target per tick (1-254)
+
+driver_params:
+  target_param:
+    type: u8
+    required: true
+    description: u8 param to smooth (typically APP_DRIVER_PARAM_BRIGHTNESS)

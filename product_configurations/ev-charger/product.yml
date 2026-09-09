@@ -1,0 +1,83 @@
+id: ev-charger
+name: EV Charging Station
+description: Electric Vehicle Supply Equipment with relay-controlled contactor (Matter EnergyEvse endpoint).
+keywords: [ev, electric vehicle, charging, EVSE, charger]
+frameworks: [matter]
+
+# Production EVSEs need PWM control pilot signaling, ground monitoring, etc.
+# This manifest provides the Matter endpoint and a relay/contactor driver only.
+instances:
+  - block: drivers/relay
+    prefix: CONTACTOR
+    cfg:
+      gpio: 7
+      active_level: 1
+      param_id: APP_DRIVER_PARAM_CHARGING_ENABLED
+
+  - block: device_types/energy_evse
+    prefix: EVSE
+    cfg:
+      enabled_param: APP_DRIVER_PARAM_CHARGING_ENABLED
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_CHARGEN
+    cfg:
+      target_param: APP_DRIVER_PARAM_CHARGING_ENABLED
+      nvs_namespace: app
+      nvs_key: chargen
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_CHARGEN
+    cfg:
+      command_name: chargen
+      target_param: APP_DRIVER_PARAM_CHARGING_ENABLED
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_CHARGEN
+    cfg:
+      command_name: get-chargen
+      target_param: APP_DRIVER_PARAM_CHARGING_ENABLED
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode EV Charger

@@ -1,0 +1,81 @@
+id: smoke-co-alarm
+name: Smoke + CO Alarm
+description: Combination smoke and carbon monoxide alarm. Driver currently a stub — wire to your detection hardware.
+keywords: [smoke, co, alarm, detector, carbon monoxide, fire]
+frameworks: [matter]
+
+# Smoke + CO detection hardware is product-specific (typically dedicated MCUs like MQ-2 / MICS-5524).
+# Author a drivers/<sensor>_detector block, or set state params from your existing detection logic.
+instances:
+  - block: device_types/smoke_co_alarm
+    prefix: ALARM
+    cfg:
+      smoke_state_param: APP_DRIVER_PARAM_SMOKE_STATE
+      co_state_param: APP_DRIVER_PARAM_CO_STATE
+
+  # ── Detection inputs (digital smoke + CO detector lines) ───────
+  # Publish the enum8 alarm state the endpoint consumes, so the model does
+  # not hand-write the GPIO poll + int->uint8_t cast (a -Werror=narrowing
+  # trap). Swap for an ADC/I2C sensor block when using a graded detector.
+  - block: drivers/gpio_alarm_input
+    prefix: SMOKE
+    cfg:
+      gpio: 6
+      target_param: APP_DRIVER_PARAM_SMOKE_STATE
+  - block: drivers/gpio_alarm_input
+    prefix: CO
+    cfg:
+      gpio: 7
+      target_param: APP_DRIVER_PARAM_CO_STATE
+
+  # ── Audible alarm (piezo buzzer via LEDC) ──────────────────────
+  # Every smoke/CO alarm needs a sounder. Use the buzzer driver block
+  # (correct LEDC timer/channel init for -Werror builds) rather than
+  # hand-writing ledc_timer_config — set APP_DRIVER_PARAM_BUZZER_FREQ
+  # (Hz, 0 = silent) from your detection logic when state goes Critical.
+  - block: drivers/buzzer
+    prefix: SOUNDER
+    cfg:
+      gpio: 4
+      frequency_param: APP_DRIVER_PARAM_BUZZER_FREQ
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Smoke+CO Alarm

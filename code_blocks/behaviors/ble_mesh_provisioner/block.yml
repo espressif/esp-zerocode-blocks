@@ -1,0 +1,42 @@
+description: "BLE Mesh provisioner — this device forms the mesh network: it provisions every ZeroCode mesh node it hears, gives each one the network's application key, binds that key to the node's OnOff/Level servers AND clients, subscribes its servers to the shared group and points its clients at it"
+
+# Only meaningful in a product whose frameworks include ble_mesh: it
+# contributes ble_mesh_* slots and nothing else, so selecting it elsewhere
+# generates no code at all.
+#
+# ONE per network. A second provisioner would hand out a second, unrelated
+# network key and split the kit in half.
+#
+# WHY THE BINDING LIST IS THE WHOLE POINT. A node that has been provisioned is
+# addressable but still deaf and mute until an application key is bound to its
+# models. Binding only the SERVERS is the common half-measure: the lights then
+# work and the remotes are silent, and nothing in the logs of either device
+# says why. This block binds both, subscribes both servers to the group and
+# sets both clients' publication to it, in one fixed order, and moves on to the
+# next step even when a node refuses one — a node that does not carry the Level
+# models must still get its OnOff ones configured.
+
+params:
+  group_addr:
+    type: int
+    default: 49152
+    description: >-
+      Group address every node's Generic servers are subscribed to and every
+      node's Generic clients publish to. 49152 is 0xC000, the first group
+      address and the framework's ZC_MESH_GROUP_ADDR; a mesh group address is
+      any value from 0xC000 to 0xFEFF.
+  app_key:
+    type: string
+    default: "3a5f21c7d84e0b96f2071cd53e4a8b60"
+    description: >-
+      The network's 128-bit application key, 32 hexadecimal characters. The
+      default is a DEVELOPMENT key — it is published with this block, so change
+      it for anything that leaves a bench. Anything that is not 32 hex
+      characters falls back to a built-in key and says so in the log.
+  max_nodes:
+    type: int
+    default: 8
+    description: >-
+      How many provisioned nodes this device tracks while configuring them.
+      Must not exceed the stack's own ceiling (CONFIG_BLE_MESH_MAX_PROV_NODES,
+      set to 20 by this block's sdkconfig.defaults).

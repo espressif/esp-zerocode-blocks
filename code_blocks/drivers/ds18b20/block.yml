@@ -1,0 +1,23 @@
+description: Maxim DS18B20 1-Wire temperature probe. Real protocol via espressif/ds18b20. Depends on peripherals/onewire_bus.
+
+# This block's slots are logic_*, so they land in app_logic/<concern>.cpp —
+# app_LOGIC is the component that has to require the two components, not
+# app_driver (which is where peripherals/onewire_bus's own slots land). Both
+# headers are needed here: ds18b20.h for the probe, onewire_bus.h for the
+# handle type and the device iterator. Authoring pitfall #2; unnoticed because
+# no catalog product instantiated the block, so nothing ever compiled it.
+cmake_priv_requires:
+  app_logic: [espressif__ds18b20, espressif__onewire_bus]
+
+params:
+  poll_interval_ms: { type: int, default: 5000 }
+  bus_handle_fn:
+    type: string
+    required: true
+    description: "Name of the function that returns the onewire_bus_handle_t (e.g. ow_onewire_handle from peripherals/onewire_bus prefix=OW)"
+
+driver_params:
+  temp_param:
+    type: i16
+    required: true
+    description: i16, hundredths of °C

@@ -1,0 +1,83 @@
+id: smart-door-lock
+name: Smart Door Lock
+description: Motorized deadbolt with reverse-polarity drive + position sense
+keywords: [door, lock, deadbolt, latch, smart lock]
+frameworks: [matter]
+
+instances:
+  - block: drivers/lock_motor
+    prefix: BOLT
+    cfg:
+      lock_gpio: 4
+      unlock_gpio: 5
+      position_gpio: 6
+      pulse_ms: 800
+      locked_param: APP_DRIVER_PARAM_LOCKED
+
+  - block: device_types/door_lock
+    prefix: LOCK
+    cfg:
+      locked_param: APP_DRIVER_PARAM_LOCKED
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_LOCKED
+    cfg:
+      target_param: APP_DRIVER_PARAM_LOCKED
+      nvs_namespace: app
+      nvs_key: locked
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LOCKED
+    cfg:
+      command_name: locked
+      target_param: APP_DRIVER_PARAM_LOCKED
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LOCKED
+    cfg:
+      command_name: get-locked
+      target_param: APP_DRIVER_PARAM_LOCKED
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Door Lock

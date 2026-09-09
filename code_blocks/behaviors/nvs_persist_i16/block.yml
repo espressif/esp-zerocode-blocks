@@ -1,0 +1,8 @@
+description: Save/restore an int16_t driver param across reboots via NVS (thermostat setpoints, etc.)
+
+params:
+  nvs_namespace: { type: string, default: app }
+  nvs_key: { type: string, required: true }
+
+driver_params:
+  target_param: { type: i16, required: true }

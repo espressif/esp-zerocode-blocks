@@ -1,0 +1,30 @@
+description: HLW8012 / BL0937 single-phase energy meter. Counts pulses on CF (active power) and CF1 (current/voltage) GPIOs. Depends on peripherals/pcnt_unit (one each).
+
+# HLW8012 outputs two pulse trains:
+#   - CF  : pulse rate ∝ active power (W)
+#   - CF1 : pulse rate ∝ either voltage or current, switched by SEL pin (HIGH=I, LOW=V)
+# This block measures CF only (active power); for voltage / current add a second
+# instance pointing at CF1 and toggle SEL via GPIO.
+#
+# Power calibration: power_ref / freq_ref where freq_ref is the pulse rate at the
+# reference power. Datasheet defaults are around: power = 1206000 / period_us (mW).
+
+params:
+  cf_gpio:
+    type: int
+    required: true
+    description: GPIO connected to CF (active power) pulse output
+  pulse_window_ms:
+    type: int
+    default: 2000
+    description: Counting window. Longer = smoother, slower update.
+  power_scale_milliw_per_hz:
+    type: int
+    default: 1206000
+    description: Power in mW per Hz of CF pulses (depends on hardware design — calibrate)
+
+driver_params:
+  power_param:
+    type: u32
+    required: true
+    description: u32 active power (mW)

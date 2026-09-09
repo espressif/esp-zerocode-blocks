@@ -1,0 +1,55 @@
+id: matter-chime
+name: Matter Chime
+description: Matter chime device — a controller command plays a tone on the on-board speaker
+keywords: [chime, doorbell, sound, speaker, matter, alert]
+frameworks: [matter]
+
+instances:
+  - block: drivers/speaker_i2s
+    prefix: CHIME_SPK
+    cfg:
+      port: 0
+      bclk_gpio: 1
+      ws_gpio: 7
+      dout_gpio: 8
+      sample_rate: 16000
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+
+  - block: device_types/chime
+    prefix: CHIME
+    cfg:
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+
+  - include: baseline-connectivity
+
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Matter Chime

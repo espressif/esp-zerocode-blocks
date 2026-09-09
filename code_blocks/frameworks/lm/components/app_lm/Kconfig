@@ -1,0 +1,32 @@
+menu "ZeroCode language model"
+
+# One switch per model. Both blobs ship in the catalogue, but only a selected
+# one is EMBEDded, so an NLU-only product does not carry 2 MB of story weights.
+# A consuming block turns its model on from its own sdkconfig.defaults.
+
+config ZC_LM_MODEL_NLU
+    bool "Smart-home command parser (264 KB)"
+    default n
+    help
+        Natural language to a schema-valid tool-call, byte tokenizer with
+        constrained decoding. Used by drivers/lm_tool_calling. Fits the default
+        4mb partition table comfortably.
+
+config ZC_LM_MODEL_STORY
+    bool "Story generation (2.0 MB)"
+    default n
+    help
+        Free-running TinyStories generation with a BPE tokenizer and temperature
+        sampling. Used by behaviors/lm_storyteller. NEEDS partition_table: 8mb —
+        2.0 MB of weights plus the app overflows the default 4mb table's
+        1.875 MB OTA slot by 20%.
+
+config APP_LM_MAX_LISTENERS
+    int "Maximum device+location listeners"
+    default 8
+    range 1 64
+    help
+        One per drivers/lm_tool_calling instance. Registering past this logs an
+        error and the extra instance never fires.
+
+endmenu

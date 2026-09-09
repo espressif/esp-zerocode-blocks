@@ -1,0 +1,8 @@
+description: Encrypt the NVS partition. NVS keys live in a separate `nvs_keys`
+
+# Original notes from the .defaults file:
+#   Encrypt the NVS partition. NVS keys live in a separate `nvs_keys`
+#   partition (already present in our default partition tables). Combine
+#   with flash_encryption for full at-rest protection of stored Wi-Fi
+#   credentials, fabric keys, and product params persisted via NVS.
+#   sdkconfig_fragments: [flash_encryption, nvs_encryption]

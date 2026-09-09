@@ -1,0 +1,50 @@
+# Not consumed by any block yet — catalogued so the AI knows it exists and what
+# it would cost. A consuming block needs the audio front-end too (see below),
+# which is why this is not simply a model_symbol swap on ml_classifier.
+description: Keyword spotter over a 49x40 int8 feature slab. Four classes only — silence, unknown, "yes", "no". Not general speech recognition; for wake words and a fixed small vocabulary use frameworks/audio (esp-sr) instead.
+
+source:
+  kind: component
+  component: espressif/esp-tflite-micro
+  path: examples/micro_speech/main/model.cc
+  kconfig: ZC_ML_MODEL_MICRO_SPEECH
+symbol: g_model
+size_bytes: 18800
+license: Apache-2.0
+license_holder: The TensorFlow Authors
+
+input:
+  # 49 time steps x 40 mel-ish features, produced by a SECOND model.
+  width: 40
+  height: 49
+  channels: 1
+  dtype: int8
+output:
+  count: 4
+  labels: [silence, unknown, yes, no]
+
+ops_profile: cnn          # DepthwiseConv2D + FullyConnected + Softmax + Reshape
+
+arena:
+  base_bytes: 30720       # kTensorArenaSize = 30 * 1024
+  scratch_bytes: 0        # upstream declares none for this graph
+  source: upstream-declared
+  measured_on: []
+
+task_stack_bytes: 4096
+
+# A CONSUMER MUST ALSO CARRY THE FRONT-END. The features are produced by a
+# separate 8772-byte audio-preprocessor model with its own 16 KB arena and a
+# different op set (Window, FftAutoScale, StridedSlice, Concatenation, …) that
+# ops_profile: cnn does NOT cover. Budget ~47 KB of arena across both, plus a
+# microphone driver. That is why no block consumes this yet.
+requires:
+  companion_model:
+    path: examples/micro_speech/main/audio_preprocessor_int8_model_data.h
+    symbol: g_audio_preprocessor_int8_tflite
+    size_bytes: 8772
+    arena_bytes: 16384
+    note: needs signal ops outside every current ops_profile
+
+chips: [esp32, esp32c3, esp32c6, esp32s3, esp32p4, esp32s31]
+consumed_by: []

@@ -1,0 +1,18 @@
+description: "8 MB layout with an esp-sr `model` partition. Required by any product using the audio framework — the voice models do not fit anywhere in the plain 8mb table."
+
+# NOT a drop-in overlay of the 8mb table: fctry is dropped (RainMaker
+# self-claiming — the audio framework is incompatible) and the OTA slots shrink to 2.25 MB, all to make a
+# 3.375 MB `model` slot that ends exactly at the 8 MB boundary.
+#
+# esp_srmodel_init("model") reads this partition; the label and the spiffs
+# subtype are what esp-sr's own examples use, and the build-time model packer
+# writes here. A product with frameworks: [audio] and the plain 8mb table
+# BUILDS and then fails at boot with "no models found" — the usual storage
+# pitfall, which is why this table exists as its own block rather than a note.
+#
+# 3.375 MB is sized from a MEASURED srmodels.bin: wn9 "hi esp" + mn7_en quant
+# is 3.05 MB. Nothing at build time checks srmodels.bin against the partition
+# (a voice build with a 1.87 MB slot passed and would have failed on the wire
+# at flash time — the merged image ran past 8 MB), so verify with
+# idf.py merge-bin when the model set changes. A second language or extra
+# wake words need 16 MB flash.

@@ -1,0 +1,34 @@
+description: "Extractor Hood (Matter: extractor_hood stub — cluster mappings to be wired by user code; RainMaker: esp.device.other — no controllable params in this block yet)"
+device_types:
+  matter: extractor_hood
+  rainmaker: esp.device.other
+  # Zigbee-absent: no bindable params (label only) — no Zigbee endpoint
+  # contributed; bind once this block gains controllable/reportable params
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "optional delegate(s): HEPA Filter Monitoring, Activated Carbon Filter Monitoring; Fan Control is attribute-wired, its delegate optional (only for the Step command)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Extractor Hood
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+param_refs: {}
+
+# slot notes (applies to the files in slots/):
+# ── RainMaker binding (rendered only when frameworks includes rainmaker) ──
+
+# Voice-absent: the block exposes no driver_params, so there is nothing to drive.
+
+# MQTT-absent: no driver_params — nothing to mirror.
+
+# Display-absent: no driver_params — nothing to render.
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

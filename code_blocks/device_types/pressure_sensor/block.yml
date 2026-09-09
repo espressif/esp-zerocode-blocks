@@ -1,0 +1,26 @@
+description: "Pressure Sensor device type (PressureMeasurement, MeasuredValue in 10ths of kPa) (Matter: pressure_sensor; RainMaker: esp.device.other)"
+device_types:
+  matter: pressure_sensor
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_SIMPLE_SENSOR_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Pressure Sensor
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 25
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  value_param:
+    type: i16
+    required: true
+    description: Driver param ID for measured pressure (int16, MeasuredValue spec encoding)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

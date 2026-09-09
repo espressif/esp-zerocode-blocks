@@ -1,0 +1,22 @@
+description: Buzzer that plays preset melodies / alert patterns. Builds on the same LEDC tone generator as drivers/buzzer.
+
+# Listens for changes to pattern_param and starts playing the corresponding pattern
+# on the buzzer. Patterns are short fixed sequences (frequency_hz, duration_ms) chosen
+# by the u8 value:
+#   0 = silent
+#   1 = single chirp
+#   2 = three short chirps
+#   3 = continuous alarm (repeats until pattern_param != 3)
+#   4 = ascending chime (good for "device ready")
+#   5 = descending chime (good for "factory reset")
+
+params:
+  gpio: { type: int, required: true }
+  ledc_channel: { type: int, default: 6 }
+  ledc_timer:   { type: int, default: 2 }
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 — selects the pattern to play (see block description)

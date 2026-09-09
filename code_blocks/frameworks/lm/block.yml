@@ -1,0 +1,67 @@
+description: "On-device language model — turns a spoken or typed command into a structured action, offline, with no cloud round trip. Runs a Per-Layer-Embeddings llama2 model through esp_tinylm with hand-written vector assembly. Ships a smart-home command parser: 'turn on the kitchen light' becomes {device, location, action}, always in-schema. Pick this when the device must understand language without a network; pick frameworks/agents when it has connectivity and needs a frontier model."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# SELF-CONTAINED framework block: the generator copies components/ verbatim and
+# renders main_includes / main_init. No engine change.
+#
+# ARCHITECTURE — the same split as frameworks/ml and frameworks/vision. This
+# framework owns the MODEL and the decode; driver blocks own what an action
+# means and drive the param bus. A driver registers for one device+location
+# through app_lm_register() and receives ("on"|"off"|"set", value).
+#
+# WHY THE RUNTIME IS VENDORED. esp_tinylm is not on the component registry
+# (ComponentNotFoundError as of 2026-09) and its repo is internal, so a git
+# dependency would resolve for Espressif and break for everyone reading the
+# published catalogue. 881 lines and 56 KB is a cheap fork to carry until it is
+# published; swap components/esp_tinylm/ for a registry dependency then, and
+# nothing above it changes.
+#
+# WHY IT IS BOTH FAST AND COHERENT — the thing that makes this possible at all.
+# A dense 15M model streams ~7.5 MB per token and is bandwidth-bound on an MCU.
+# Per-Layer Embeddings splits it: a dim-96 compute core of ~0.7 MB does the
+# work, and the model's knowledge sits in a big table read ~6 rows per token
+# straight from memory-mapped flash. Small to stream, still coherent. The
+# int4xint8 matmul is then hand-written vector assembly per target — PIE
+# (xespv) on S31/P4, Espressif SIMD on S3 — for 2.1x to ~3x over scalar.
+# Measured: 26.7 tok/s on S31, 17.6 on S3.
+#
+# CONSTRAINED DECODING is why there is no JSON parse that can fail. The decoder
+# keeps the set of schema entries still consistent with the bytes emitted so
+# far and lets the model choose only among bytes some candidate allows. The
+# output is therefore always one of the 540 valid tool-calls — the model cannot
+# invent a device this firmware does not know.
+#
+# THE SCHEMA AND THE MODEL ARE ONE UNIT. nlu_valid.h is generated from the same
+# training run as nlu.bin. Editing the schema without retraining gives a
+# decoder that constrains toward strings the model was never taught, and the
+# accuracy collapses quietly. Change both or neither.
+#
+# CORE 1, NOT ANY CORE. esp_tinylm enables the PIE vector unit PER CORE, and on
+# ESP32-S31 only core 1 has it. The framework therefore owns the inference task
+# and pins it, rather than leaving each driver to remember: called on the wrong
+# core nothing fails, it just silently runs the scalar path several times
+# slower — the worst kind of bug to chase.
+#
+# CHIPS: esp32s31, esp32s3, esp32p4 only, and PSRAM is required (scratch and
+# the KV cache live there; without it esp_tinylm_load returns ESP_ERR_NO_MEM
+# and the framework degrades to no language commands rather than aborting).
+# The S31 kernel is hardware-validated; the P4 PIE path is build-verified and
+# awaits a hardware run.
+#
+# FLASH: the 264 KB model is EMBEDded in the app image, not flashed to a
+# partition — esp_tinylm binds it in place so the per-layer table can be read
+# from memory-mapped flash. So it competes with the OTA slot, like every model
+# in this catalogue. It fits the default 4mb table with room to spare; the
+# 2 MB story-generation model from the same project does not, and is why
+# models/ records an OTA-slot constraint.
+#
+# CREDIT: esp_tinylm is by Vikram Dattu (Espressif). It builds on Karpathy's
+# llama2.c for the runtime shape and Google's Gemma 3n for the PLE idea,
+# re-implemented clean-room. Apache-2.0.

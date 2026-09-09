@@ -1,0 +1,25 @@
+description: Adds a "get-<param>" console command that prints the current driver-side value of a param.
+
+# Companion to console_param_cmd (which sets). Useful for inspecting what the
+# driver thinks the current state is from the shell. The value is printed by
+# union member based on declared param type; tweak the printf for u16/i16/u32
+# variants if needed.
+
+params:
+  command_name:
+    type: string
+    required: true
+    description: Console command identifier (e.g. "get-power", "get-brightness")
+  target_param:
+    type: string
+    required: true
+    description: Driver param ID to read
+  value_kind:
+    type: string
+    default: bool
+    enum: [bool, u8, u16, i16, u32]
+    description: How to interpret the union when printing
+
+# No param_refs: this block only READS a param, doesn't claim its type.
+# The producer block (e.g. drivers/relay → bool) establishes the type;
+# value_kind cfg here is just for printf formatting at the union site.

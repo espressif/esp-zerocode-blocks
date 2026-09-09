@@ -1,0 +1,81 @@
+id: c6-devkit-plug
+name: ESP32-C6 DevKit Plug
+description: >-
+  The smart-plug composition on an ESP32-C6-DevKitC-1, driving the DEVKIT'S
+  OWN hardware through board-device adapters: the BOOT button toggles the
+  relay (drivers/board_button), the on-board WS2812 shows the power state
+  (drivers/board_led_strip), and the relay itself is the one externally wired
+  part (GPIO 10, via the amend). No product pin lands on hardware the board
+  already owns.
+keywords: [esp32c6, devkit, board-manager, bmgr, adapter, plug, relay, boot-button, ws2812]
+
+# THE INTENT SAMPLE for board-device adapters. smart-plug wires its OWN button
+# on GPIO 9 and its OWN LED on GPIO 8 — on a bare module that is the product;
+# on this devkit those pins ARE the board's BOOT button and WS2812, so the
+# validator refuses the composition (correctly: one pin, one owner) and names
+# the two blocks below as the fix. This product IS that fix: the way to use
+# the board's button and LED is to ask the board manager for their handles,
+# stating no pin at all.
+#
+# THE BOARD IS NOT NAMED HERE. A product.yml never names a board — the
+# board.yaml beside this file says what hardware this sample runs on. This is
+# one of the catalog's SAMPLE board files (see CLAUDE.md → Boards); general
+# products never grow one.
+
+# Framework-less on purpose, like the other board samples: a transport would
+# drag esp_matter into the picture and a failure could then be about either
+# one. This product must fail for board/adapter reasons only.
+frameworks: []
+
+# ci_chips is CI's chip list, not a claim about hardware. Pinned because the
+# board.yaml beside this file is a C6 devkit; a build on any other chip would
+# prove nothing about the board it names.
+ci_chips: [esp32c6]
+
+instances:
+  # THE EXTERNAL PART — same as c6-devkit-board-relay: the relay is not on
+  # the board, so its pin goes into the amend and the board manager owns the
+  # line. active_level MUST be 1 (the mapping's guard refuses active-low).
+  - block: drivers/relay
+    prefix: APP
+    cfg:
+      gpio: 10
+      active_level: 1
+      param_id: APP_DRIVER_PARAM_POWER
+
+  # THE BOARD'S OWN BUTTON. The devkit's BOOT button is a `button` device
+  # ('boot_button') in the board definition; this adapter registers an
+  # iot_button callback on the handle esp_board_manager already made. It
+  # states no pin — GPIO 9 belongs to the board.
+  - block: drivers/board_button
+    prefix: BTN
+    cfg:
+      device: boot_button
+      target_param: APP_DRIVER_PARAM_POWER
+
+  # THE BOARD'S OWN LED. The devkit's WS2812 is a `led_strip` device
+  # ('led_strip') in the board definition; this adapter fetches its handle
+  # and shows the power state. It states no pin — GPIO 8 belongs to the board.
+  - block: drivers/board_led_strip
+    prefix: LED
+    cfg:
+      device: led_strip
+      param_id: APP_DRIVER_PARAM_POWER
+
+  # Console fallback, so the product is testable on a bench without pressing
+  # the button.
+  - block: behaviors/console_param_cmd
+    prefix: PWRCMD
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode C6 DevKit Plug
+# Bench fixture, not a product: proves a build path.
+internal: true

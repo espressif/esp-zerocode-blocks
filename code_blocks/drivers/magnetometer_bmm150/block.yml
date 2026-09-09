@@ -1,0 +1,68 @@
+description: >-
+  BMM150 3-axis magnetometer over I2C — reports field strength and a
+  magnet-present flag. The ESP-Mosaico carries TWO (0x11 and 0x12) for its
+  magnetic module detection; instantiate the block once per sensor. Depends on
+  peripherals/i2c_bus.
+
+# WHAT IT IS FOR HERE. On the Mosaico these are not a compass — the board is a
+# "magnetic expansion" kit, and two magnetometers a known distance apart detect
+# WHICH accessory has been attached and on which side. So the useful output is
+# field magnitude and a threshold flag, not heading. A heading would also need
+# hard/soft-iron calibration the board cannot do unattended.
+#
+# INSTANTIATE IT TWICE, once per address, with different prefixes and different
+# params. That is why nothing here is a singleton and why the address is a
+# plain parameter.
+#
+# The BMM150 powers up in SUSPEND and ignores every other register until it is
+# taken out — reading data first returns zeroes forever, which reads like a
+# dead sensor. Hence the two-step power-up in driver_init.
+# NOT yet hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c, esp_timer]
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address:
+    type: int
+    default: 0x11
+    description: 0x11 and 0x12 on the ESP-Mosaico (two sensors on one bus)
+  poll_interval_ms: { type: int, default: 200 }
+  present_threshold_ut:
+    type: int
+    default: 300
+    description: >-
+      Field magnitude, in microtesla, above which a magnet counts as present.
+      Earth's field is ~50 uT, so this is well clear of ambient.
+
+driver_params:
+  field_param:
+    type: u16
+    required: true
+    description: field magnitude in microtesla
+  magnet_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) true while the field exceeds present_threshold_ut

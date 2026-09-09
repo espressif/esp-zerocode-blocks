@@ -1,0 +1,70 @@
+id: c6-devkit-board-relay
+name: ESP32-C6 DevKit Board Relay
+description: >-
+  The smallest product that proves the AMEND path: an ESP32-C6-DevKitC-1 with
+  ONE externally wired part — a relay on GPIO 10. The board definition supplies
+  the on-board WS2812 and BOOT button; the relay is not on the board, so the
+  generator turns it into a `board_amend/` overlay that `idf.py bmgr` applies
+  on top of the board. From bmgr's point of view the relay is then board
+  hardware: it appears in gen_bmgr_codes, it is initialized at board init, and
+  it is inside the same IO-conflict check as GPIO 8 and GPIO 9.
+keywords: [esp32c6, devkit, board-manager, bmgr, amend, relay, probe]
+
+# SPIKE PRODUCT — the plumbing test for the generated amend, not a shippable
+# device. Its sibling mosaico-bmgr-probe proves the board path with NO external
+# parts; this one proves the other half.
+#
+# THE BOARD IS NOT NAMED HERE. A product.yml never names a board — this file
+# says what the product does, and the `board.yaml` beside it says what hardware
+# this sample runs on (ESP32-C6-DevKitC-1 → the bmgr board
+# `esp32_c6_devkitc_1`).
+#
+# The demonstrable, negatively: move the relay onto GPIO 8 (the board's WS2812)
+# or GPIO 9 (its BOOT button) and this must FAIL — first in the engine's
+# validator, which reads the board's own YAML, and again in bmgr's IO-conflict
+# check, which reads the merged board+amend.
+
+# Framework-less on purpose, like the Mosaico probe: a transport would drag
+# esp_matter or a Wi-Fi stack into the picture and a failure could then be
+# about either one. This product must fail for board/amend reasons only.
+frameworks: []
+
+# ci_chips is CI's chip list, not a claim about hardware. It is pinned here
+# because the sample board.yaml beside this file is a C6 devkit and a build on
+# any other chip would prove nothing about the board it names.
+ci_chips: [esp32c6]
+
+# The board's sdkconfig.defaults.board asserts 8 MB of flash and the engine
+# drops any product-side flash-size key, so the default 4 MB table is left
+# alone rather than adding a second statement about the board's memory.
+
+instances:
+  # THE EXTERNAL PART. drivers/relay carries a `bmgr:` mapping, so on a board
+  # product its control line goes into the amend and the board manager
+  # configures it — the block's own driver_init is dropped (one pin, one
+  # owner). active_level MUST be 1: the mapping's guard refuses active-low,
+  # because periph_gpio drives the pin before writing default_level.
+  - block: drivers/relay
+    prefix: APP
+    cfg:
+      gpio: 10
+      active_level: 1
+      param_id: APP_DRIVER_PARAM_POWER
+
+  # Something to drive it with from the console, so the product is testable on
+  # a real board without a transport.
+  - block: behaviors/console_param_cmd
+    prefix: PWRCMD
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode C6 DevKit Board Relay
+# Bench fixture, not a product: proves a build path.
+internal: true

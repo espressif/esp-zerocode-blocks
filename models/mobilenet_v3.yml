@@ -1,0 +1,42 @@
+# CATALOGUED BUT NOT CURRENTLY BUILDABLE. Listed so the AI can see it exists
+# and, more importantly, why it cannot pick it — an unexplained absence invites
+# the same question every time.
+description: ImageNet classification over 1001 classes from a 224x224 RGB frame. The largest model upstream ships, and too large for any partition table in this catalogue.
+
+source:
+  kind: component
+  component: espressif/esp-tflite-micro
+  path: examples/mobilenet_v3/mobilenet_v3_small_quantized.tflite
+  kconfig: ZC_ML_MODEL_MOBILENET_V3
+symbol: g_mobilenet_v3_model_data
+size_bytes: 2879832
+license: Apache-2.0
+license_holder: The TensorFlow Authors
+
+input:  { width: 224, height: 224, channels: 3, dtype: int8 }
+output: { count: 1001, labels: [] }    # ImageNet-1k + background
+
+# NOT COVERED BY ANY ops_profile: needs HardSwish, Pad, Mean and Dequantize on
+# top of the cnn set. A consuming block must extend app_tflite.cpp first.
+ops_profile: null
+
+arena:
+  base_bytes: 1228800     # 1200 * 1024
+  scratch_bytes: 204800   # 200 * 1024 when CONFIG_NN_OPTIMIZED
+  source: upstream-declared
+  measured_on: []
+
+task_stack_bytes: 8192    # untested; deeper graph than person_detect's 6144
+
+requires_psram: true      # upstream allocates the arena MALLOC_CAP_SPIRAM outright
+
+# WHY IT CANNOT BE USED TODAY, in one place:
+#   - 2.8 MB model + 1.4 MB arena. The largest OTA slot in this catalogue is
+#     16mb-voice's 4.5 MB, and models link into the APP image, not a data
+#     partition — so the model alone eats most of a slot.
+#   - Needs a 16 MB board with PSRAM, and a partition table that does not exist.
+#   - Its op set is outside minimal/dnn/cnn.
+blocked_by: [oversized_for_ota, needs_new_partition_table, ops_outside_profiles]
+
+chips: [esp32s3, esp32p4, esp32s31]    # PSRAM parts only
+consumed_by: []

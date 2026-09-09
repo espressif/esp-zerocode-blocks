@@ -1,0 +1,19 @@
+# Thread (primary transport for H2 Matter devices; Kconfig default is off)
+CONFIG_OPENTHREAD_ENABLED="y"
+
+# Wi-Fi NOT available on H2 — must explicitly disable (Kconfig defaults to y)
+CONFIG_ENABLE_WIFI_STATION="n"
+CONFIG_ENABLE_WIFI_AP="n"
+
+# Required by OpenThread crypto on Thread-only builds (otPlatCryptoPbkdf2GenerateKey -> mbedtls_aes_cmac_prf_128)
+CONFIG_MBEDTLS_CMAC_C="y"
+
+# Thread-shaped lwIP: H2 is Thread-only, so a product gets these without the
+# matter_thread fragment.
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING="y"
+CONFIG_LWIP_IPV6_AUTOCONFIG="n"
+
+# H2 is Thread-only (IPv6-only) — off even without the matter_thread fragment.
+CONFIG_DISABLE_IPV4="y"
+CONFIG_LWIP_IPV4="n"

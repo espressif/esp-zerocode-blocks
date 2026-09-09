@@ -1,0 +1,7 @@
+description: Switch ESP32-C6 from default Wi-Fi to Thread (802.15.4). Disables Wi-Fi
+
+# Original notes from the .defaults file:
+#   Switch ESP32-C6 from default Wi-Fi to Thread (802.15.4). Disables Wi-Fi
+#   entirely — saves ~300-400 KB binary by dropping the Wi-Fi stack.
+#   Applied by adding to product.yml:
+#   sdkconfig_fragments: [c6_thread_only]

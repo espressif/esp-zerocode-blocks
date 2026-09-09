@@ -1,0 +1,232 @@
+id: mosaico-touch-hub
+name: ESP-Mosaico Touch Hub
+description: >-
+  The ESP-Mosaico as a full smart-home touch hub — its 480x480 square panel and
+  touch, the AI button, haptic feedback on every press, and the status LED as a
+  light you can drive from Matter, from Home Assistant over MQTT, or from the
+  page the device serves itself. Zero external wiring.
+keywords: [mosaico, esp32s31, display, touchscreen, matter, mqtt, webui, haptic, panel, hub]
+
+# Every pin here is the ESP-Mosaico's own, from the esp-dev-kits user guide's
+# "MCU and Pin Assignment" table — not inferred:
+#   I2C0 SDA/SCL 0/1 (shared bus: touch, ES8311, BMI270, BMM150, BQ27220)
+#   TOUCH_INT 6 · STATUS_LED 3 (active-low) · AI_BUTTON 7 (active-low)
+#   MOTOR 8 (active-high) · LCD D0/D1/D2/D3 36/51/35/9, SCL 44, CS 50, RST 42
+#
+# THREE frameworks on one board, which is the point: the S31 carries Wi-Fi 6 +
+# BLE + 802.15.4 on one die, so a panel does not have to choose between a
+# Matter controller, a local broker and its own web page. matter+mqtt+display
+# compose (no true conflict); webui rides the Wi-Fi that matter already brings
+# up rather than standing up its own SoftAP.
+#
+# 8mb table, not the default 4mb: Matter alone is 1.61 MB on the S31 (measured,
+# 14% free in a 1.875 MB slot), and this adds LVGL, a broker client and an HTTP
+# server. The Mosaico has 16 MB NOR, so the headroom is real hardware, not a
+# wish.
+#
+# NOT hardware-verified: builds are proven, but CO5300/CST9220 bring-up and the
+# haptic feel need a real Mosaico.
+frameworks: [matter, mqtt, display, webui, sound]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32s31]
+partition_table: 8mb
+
+instances:
+  # ── The shared I2C0 bus, FIRST. Six devices hang off it — the touch
+  #     controller, the ES8311 codec, the IMU, both magnetometers and the
+  #     fuel gauge — and instance order IS init order, so the bus has to be
+  #     up before the first block that only talks on it. (The codec is the
+  #     one that made this matter: it configures itself over I2C inside
+  #     driver_init, so a bus created after it is the same as no bus, and
+  #     the board would be silent with a clean build.) Blocks that create a
+  #     bus adopt an existing one rather than colliding, so being first is
+  #     free for the touch controller.
+  - block: peripherals/i2c_bus
+    prefix: SENSOR
+    cfg:
+      port: 0
+      sda_gpio: 0
+      scl_gpio: 1
+      freq_hz: 100000
+
+  # ── Panel first, touch second — touch registers against the panel ──
+  - block: drivers/display_co5300_qspi
+    prefix: PANEL
+    cfg:
+      spi_host: 1
+      sclk_gpio: 44
+      d0_gpio: 36
+      d1_gpio: 51
+      d2_gpio: 35
+      d3_gpio: 9
+      cs_gpio: 50
+      rst_gpio: 42
+      hres: 480
+      vres: 480
+
+  - block: drivers/display_touch_cst9220
+    prefix: TOUCH
+    cfg:
+      i2c_port: 0
+      sda_gpio: 0
+      scl_gpio: 1
+      int_gpio: 6
+      x_max: 480
+      y_max: 480
+
+  # ── The light card: the board's own orange status LED ─────────────
+  - block: drivers/relay
+    prefix: LAMP
+    cfg:
+      gpio: 3
+      active_level: 0
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: device_types/light
+    prefix: LAMP_CARD
+    cfg:
+      label: Panel Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── AI_BUTTON toggles the light locally, so the panel works with no
+  #     network at all ─────────────────────────────────────────────────
+  - block: drivers/button
+    prefix: AIBTN
+    cfg:
+      gpio: 7
+      active_level: 0
+      target_param: APP_DRIVER_PARAM_POWER
+
+  # ── Haptics: the board's vibration motor confirms every press ──────
+  - block: drivers/haptic_motor
+    prefix: BUZZ
+    cfg:
+      gpio: 8
+      active_level: 1
+      pulse_ms: 40
+      trigger_param: APP_DRIVER_PARAM_HAPTIC
+
+  # ── Onboard audio: ES8311 codec + NS4150B class-D amp. Not speaker_i2s —
+  #     that block drives a codec-LESS amplifier and would leave this board
+  #     silent with no error. Pins from the guide's audio group. ─────────
+  - block: drivers/speaker_es8311
+    prefix: CHIME
+    cfg:
+      port: 0
+      mclk_gpio: 54
+      bclk_gpio: 37
+      ws_gpio: 49
+      dout_gpio: 40
+      pa_ctrl_gpio: 45
+      pa_active_level: 1
+      codec_pw_gpio: 56
+      i2c_port: 0
+      i2c_addr: 25
+      sample_rate: 16000
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+
+  # ── Every LOCAL change buzzes the motor; remote ones do not, so the
+  #     panel never twitches on its own ────────────────────────────────
+  - block: behaviors/haptic_on_change
+    prefix: PRESS_FEEDBACK
+    cfg:
+      watch_param: APP_DRIVER_PARAM_POWER
+      trigger_param: APP_DRIVER_PARAM_HAPTIC
+
+  # ── BMI270 IMU at 0x69: is the panel being moved, and which way up ──
+  - block: drivers/imu_bmi270
+    prefix: IMU
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x69
+      motion_param: APP_DRIVER_PARAM_IMU_MOTION
+      orientation_param: APP_DRIVER_PARAM_ORIENTATION
+
+  # ── BQ27220 fuel gauge at 0x55: the 3.7 V / 65 mAh cell ────────────
+  - block: drivers/fuel_gauge_bq27220
+    prefix: BATT
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x55
+      soc_param: APP_DRIVER_PARAM_BATTERY_PCT
+      voltage_param: APP_DRIVER_PARAM_BATTERY_MV
+      low_battery_param: APP_DRIVER_PARAM_BATTERY_LOW
+
+  # ── Both BMM150 magnetometers. TWO instances of one block, which is
+  #     the whole reason the address is a parameter — the pair is how
+  #     the board tells which side an accessory was attached to. ──────
+  - block: drivers/magnetometer_bmm150
+    prefix: MAG_L
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x11
+      field_param: APP_DRIVER_PARAM_MAG_L_FIELD
+      magnet_param: APP_DRIVER_PARAM_MAG_L_NEAR
+
+  - block: drivers/magnetometer_bmm150
+    prefix: MAG_R
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x12
+      field_param: APP_DRIVER_PARAM_MAG_R_FIELD
+      magnet_param: APP_DRIVER_PARAM_MAG_R_NEAR
+
+  # ── Bind the sensors to device types, so they are visible to Matter
+  #     and Home Assistant rather than published into the void. The
+  #     mapping is the honest one in each case: an IMU that reports
+  #     "being moved" IS occupancy for a panel, and a magnetometer that
+  #     reports "magnet near" IS a contact sensor — that is literally how
+  #     a magnetic door contact works.
+  - block: device_types/occupancy_sensor
+    prefix: MOVED
+    cfg:
+      label: Panel Moved
+      occupied_param: APP_DRIVER_PARAM_IMU_MOTION
+
+  - block: device_types/contact_sensor
+    prefix: MAG_L_CONTACT
+    cfg:
+      label: Left Module
+      state_param: APP_DRIVER_PARAM_MAG_L_NEAR
+
+  - block: device_types/contact_sensor
+    prefix: MAG_R_CONTACT
+    cfg:
+      label: Right Module
+      state_param: APP_DRIVER_PARAM_MAG_R_NEAR
+
+  # ── Battery percentage over the console. There is no Matter power-source
+  #     device TYPE in the catalog (it is a cluster on an existing endpoint,
+  #     not an endpoint of its own), so it is reported rather than bound —
+  #     inventing an endpoint for it would misrepresent the data model.
+  - block: behaviors/console_param_get
+    prefix: GET_BATT
+    cfg:
+      command_name: battery
+      target_param: APP_DRIVER_PARAM_BATTERY_PCT
+      value_kind: u8
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Mosaico Touch Hub

@@ -1,0 +1,6 @@
+description: Periodically logs uptime, free heap, and minimum-ever heap. Useful for diagnosing memory leaks in production.
+
+params:
+  interval_seconds:
+    type: int
+    default: 60

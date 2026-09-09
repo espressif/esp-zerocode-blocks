@@ -1,0 +1,38 @@
+description: "ESP-NOW framework — devices talk DIRECTLY to each other: no router, no hub, no app. A ZeroCode remote drives a ZeroCode light out of the box; kits of separately-built products interoperate by shared param names."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [espnow] by loading it, copying its components/ subtree into the output,
+# and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# THE BINDING: "what does this device say to its peers." Controller device
+# types (dimmer_remote, scene_button, …) populate espnow_emit_cases — param
+# changes broadcast; actuator device types populate espnow_recv_cases —
+# matching broadcasts drive the local param bus.
+#
+# KIT CONTRACT — names are the vocabulary: the wire format carries an
+# FNV-1a hash of the param NAME string (APP_DRIVER_PARAM_POWER, …), not the
+# numeric enum (enums are per-product). Two products interoperate when both
+# sides cfg the SAME name — e.g. the remote's level_param and the light's
+# brightness_param both set to APP_DRIVER_PARAM_BRIGHTNESS.
+#
+# TRUST MODEL, stated plainly. A device with NO stored peers is the open kit:
+# broadcast frames, a one-byte group-id filter, NO encryption (ESP-NOW cannot
+# encrypt broadcast) — fit for trusted spaces (a room, a booth, a workshop).
+# PAIRING narrows it: open the window on both devices (zc_espnow_pair_start —
+# behaviors/espnow_pair_trigger binds it to a button param; `espnow-pair` on
+# the console), each stores the other in NVS, and from then on sends go
+# unicast to the stored peers and frames from any other radio are dropped.
+# Per-peer LMK encryption is the remaining step. All devices use Wi-Fi channel 1;
+# this is also why the matrix blocks combining with router-bound transports
+# (matter/rainmaker/mqtt): their AP dictates the channel and a kit's members
+# could land on different channels.
+#
+# esp_now ships with ESP-IDF: no managed components. Every Wi-Fi chip.

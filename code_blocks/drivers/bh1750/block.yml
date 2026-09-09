@@ -1,0 +1,44 @@
+description: Rohm BH1750 I2C ambient light sensor (real protocol). High-accuracy lux reading. Better than ADC photodiode for most products.
+
+# Real BH1750 protocol:
+#   - I2C addr 0x23 (default) or 0x5C (ADDR pin high)
+#   - Send single command 0x10 (continuous high-res mode, 1 lux resolution, 120 ms conversion)
+#   - Wait 180 ms
+#   - Read 2 bytes: msb, lsb
+#   - lux = (msb << 8 | lsb) / 1.2
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_logic: [esp_driver_i2c]
+
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x23 }
+  poll_interval_ms: { type: int, default: 1000 }
+
+driver_params:
+  value_param:
+    type: u16
+    required: true
+    description: u16 illuminance — Matter MeasuredValue uses log10(lux)*10000 encoding; this driver publishes a clamped lux value. Convert in app code if strict spec compliance required.

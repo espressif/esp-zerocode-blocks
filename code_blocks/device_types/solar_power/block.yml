@@ -1,0 +1,38 @@
+description: "Solar Power device type — PV inverter / solar generation reporting (Matter: solar_power; RainMaker: esp.device.other)"
+device_types:
+  matter: solar_power
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_METER_INTERFACE_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "composite — no cluster of its own; composes electrical_sensor (their delegates live on those endpoints)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# The Matter cluster mappings are still endpoint-only (measurement
+# delegates wired by user code); the RainMaker binding exposes read-only
+# power/energy telemetry fed from driver params.
+params:
+  label:
+    type: string
+    default: Solar
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 64
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  power_param:
+    type: u32
+    required: true
+    description: Driver param ID for instantaneous generated power (uint32, mW)
+  energy_param:
+    type: u32
+    required: true
+    description: Driver param ID for cumulative exported energy (uint32, Wh)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

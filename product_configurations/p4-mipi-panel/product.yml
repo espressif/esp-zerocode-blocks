@@ -1,0 +1,76 @@
+id: p4-mipi-panel
+name: P4 MIPI Wall Panel
+description: >-
+  Wall panel on the ESP32-P4's own MIPI-DSI display — a 7" 1024x600 screen
+  showing a light card you switch and a live room-temperature reading. Fully
+  local: the P4 has no radio of its own and this product asks for none.
+keywords: [display, mipi, dsi, esp32p4, panel, lvgl, light, temperature, ek79007]
+
+# The first product that uses the P4's native display path. Deliberately
+# esp32p4-shaped rather than a port of touch-room-panel:
+#
+#   - The panel is MIPI-DSI (drivers/display_ek79007_mipi), so it claims NO
+#     GPIOs — the D-PHY pads are dedicated. Every pin below is a real
+#     peripheral, and the P4's 31 usable GPIOs are otherwise untouched.
+#   - NO TOUCH. The Function EV Board's controller is a GT911 and no block
+#     drives it yet (display_touch_ft5x06 is a different part), so this is a
+#     read-and-switch panel driven by the light card's own control until that
+#     block exists. Stated here rather than implied by omission.
+#   - Pins are from the P4's usable set with the SDIO link to the companion
+#     radio (14-19), the microSD slot (39-44), USB (24-27) and the strapping /
+#     console bank (32-38) all avoided — that exclusion is the devkit map in
+#     the engine's hardware.ts, not a guess.
+frameworks: [display]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32p4]
+
+instances:
+  # ── The panel. No pins: MIPI-DSI runs on dedicated pads ───────────
+  - block: drivers/display_ek79007_mipi
+    prefix: PANEL
+    cfg:
+      hres: 1024
+      vres: 600
+      dpi_clock_mhz: 52
+      lane_bit_rate_mbps: 1000
+      buffer_lines: 100
+
+  # ── The light card ────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 20
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/light
+    prefix: LAMP_CARD
+    cfg:
+      label: Room Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── The temperature card ──────────────────────────────────────────
+  - block: drivers/dht22
+    prefix: DHT
+    cfg:
+      gpio: 21
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOM_TEMP
+    cfg:
+      label: Temperature
+      value_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power

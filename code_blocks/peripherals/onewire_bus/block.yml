@@ -1,0 +1,12 @@
+description: Shared 1-Wire bus init (for DS18B20 temp probes etc) via espressif/onewire_bus.
+
+# The component manager DOWNLOADS espressif/onewire_bus (idf_component.yml
+# beside this file), but downloading is not linking: app_driver has to REQUIRE
+# it or <onewire_bus.h> does not resolve. Authoring pitfall #2, and it went
+# unnoticed because no catalog product instantiated this block, so nothing ever
+# compiled it.
+cmake_priv_requires:
+  app_driver: [espressif__onewire_bus]
+
+params:
+  gpio: { type: int, required: true, description: 1-Wire data GPIO }

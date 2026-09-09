@@ -1,0 +1,67 @@
+id: power-strip-4
+name: 4-Outlet Power Strip
+description: Matter power strip — four independently-switched AC outlets, each its own On/Off endpoint + relay + button.
+keywords: [power strip, outlet, multi-plug, socket]
+frameworks: [matter]
+
+instances:
+  - block: drivers/relay_with_button
+    prefix: OUT1
+    cfg: { relay_gpio: 4, button_gpio: 0,  param_id: APP_DRIVER_PARAM_OUT1_POWER }
+  - block: drivers/relay_with_button
+    prefix: OUT2
+    cfg: { relay_gpio: 5, button_gpio: 1,  param_id: APP_DRIVER_PARAM_OUT2_POWER }
+  - block: drivers/relay_with_button
+    prefix: OUT3
+    cfg: { relay_gpio: 6, button_gpio: 3,  param_id: APP_DRIVER_PARAM_OUT3_POWER }
+  - block: drivers/relay_with_button
+    prefix: OUT4
+    cfg: { relay_gpio: 7, button_gpio: 10, param_id: APP_DRIVER_PARAM_OUT4_POWER }
+  - block: device_types/smart_plug
+    prefix: PLUG1
+    cfg: { power_param: APP_DRIVER_PARAM_OUT1_POWER }
+  - block: device_types/smart_plug
+    prefix: PLUG2
+    cfg: { power_param: APP_DRIVER_PARAM_OUT2_POWER }
+  - block: device_types/smart_plug
+    prefix: PLUG3
+    cfg: { power_param: APP_DRIVER_PARAM_OUT3_POWER }
+  - block: device_types/smart_plug
+    prefix: PLUG4
+    cfg: { power_param: APP_DRIVER_PARAM_OUT4_POWER }
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 18
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 18
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core

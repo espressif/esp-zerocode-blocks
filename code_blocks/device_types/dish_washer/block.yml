@@ -1,0 +1,53 @@
+description: "Dish washer (Matter: dish_washer — mandatory OperationalState via delegate; optional DishwasherMode added only when mode_param is set; RainMaker: esp.device.other)"
+device_types:
+  matter: dish_washer
+  rainmaker: esp.device.other
+  # Zigbee-absent: no ZCL appliance equivalent
+
+# Matter OperationCompletion event (cert-mandatory for this device type) is
+# NOT emitted — the param model can't distinguish a natural finish from a
+# Stop; wire it in the driver post-generation if cert is needed.
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Dish Washer
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 350
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_set_the_dishwasher_to_normal:
+    type: string
+    default: "set the dishwasher to normal"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "set the dishwasher to normal"'
+  say_set_the_dishwasher_to_heavy:
+    type: string
+    default: "set the dishwasher to heavy"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "set the dishwasher to heavy"'
+  say_set_the_dishwasher_to_light:
+    type: string
+    default: "set the dishwasher to light"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "set the dishwasher to light"'
+
+driver_params:
+  mode_param:
+    type: u8
+    default: ""
+    description: >-
+      Driver param ID for wash mode index (uint8_t, 0-3). OPTIONAL — leave
+      empty for a mandatory-only dishwasher (OperationalState alone). Set it to
+      add the optional DishwasherMode cluster, e.g. APP_DRIVER_PARAM_DISHWASHER_MODE.
+  state_param:
+    type: u8
+    default: APP_DRIVER_PARAM_DISHWASHER_STATE
+    description: "Driver param ID for operational state (uint8_t: 0 stopped, 1 running, 2 paused, 3 error; read-only from the cloud)"

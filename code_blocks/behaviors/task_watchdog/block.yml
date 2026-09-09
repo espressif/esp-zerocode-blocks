@@ -1,0 +1,6 @@
+description: Enable the IDF task watchdog with a 10 s timeout — panics + reboots if a task hogs the CPU. The reset reason logger picks up "task-watchdog" so the next boot reports why the device went down.
+
+# IDF's default task watchdog setup auto-subscribes the IDLE task on each core.
+# As long as code yields properly (which any well-behaved IDF code does), this
+# is invisible. The block contributes sdkconfig flags that turn it on; no
+# runtime code is needed.

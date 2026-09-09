@@ -1,0 +1,89 @@
+id: agent-room-companion
+name: Agent Room Companion
+description: >-
+  A room device you can TALK to through your organisation's own AI agent
+  (ESP Private Agents platform) — ask it to turn the lamp on or what the
+  room temperature is, and the agent runs those tools ON the device. Text
+  conversations in v1; no hub, no third-party cloud.
+keywords: [agents, ai, assistant, private agents, light, temperature]
+
+# First frameworks: [agents] product. TEXT mode: the esp_agent websocket
+# client + local tools; the audio/speech path is a later deepening (it pulls
+# esp-sr + the GMF stack and changes the flash budget class). Onboarding is
+# the serial console (agent-wifi / agent-id / agent-token), NVS-persisted —
+# their `setup` component does BLE provisioning but drags in esp_rainmaker,
+# so we deliberately do not use it.
+frameworks: [agents]
+
+instances:
+  # ── The light ─────────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/light
+    prefix: LAMP_EP
+    cfg:
+      label: Room Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── Temperature (DHT22 publishes temp + humidity on the bus) ──────
+  - block: drivers/dht22
+    prefix: DHT
+    cfg:
+      gpio: 4
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOM_TEMP
+    cfg:
+      label: Room Temperature
+      value_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  # ── Status LED: solid = broker connected, breathe = lost ──────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Agent Companion

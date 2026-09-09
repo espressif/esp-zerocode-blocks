@@ -1,0 +1,6 @@
+# The camera, declared HERE and not inherited: unlike drivers/camera_motion_dvp
+# this block does not require frameworks: [vision], so nothing else in a
+# person-detect product pulls esp32-camera in. Same pin — ~2.1.7 — as the
+# sibling camera block, so a product holding both resolves one version.
+dependencies:
+  espressif/esp32-camera: "~2.1.7"

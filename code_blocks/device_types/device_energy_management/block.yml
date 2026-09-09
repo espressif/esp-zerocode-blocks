@@ -1,0 +1,41 @@
+description: "Device Energy Management device type — Matter cluster mappings wired by user code (Matter: device_energy_management; RainMaker: esp.device.other)"
+device_types:
+  matter: device_energy_management
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_METER_INTERFACE_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the Device Energy Management delegate (mandatory); optional: Device Energy Management Mode"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# The Matter DeviceEnergyManagement cluster mappings are still a stub
+# (wired by user code); the RainMaker binding exposes read-only power
+# telemetry for the managed load, fed from a driver param.
+params:
+  label:
+    type: string
+    default: Energy Manager
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 65
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  power_param:
+    type: u32
+    required: true
+    description: Driver param ID for the managed load's instantaneous power (uint32, mW)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.
+
+# MQTT-absent: grid-side load control needs richer modeling than a bare power number.
+
+# Display-absent: grid-side load control needs richer modeling before a card makes sense.
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

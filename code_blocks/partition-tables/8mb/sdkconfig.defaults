@@ -1,0 +1,11 @@
+# The table and the flash size TRAVEL TOGETHER. A partition table describing
+# 8 MB of layout is meaningless if the build still thinks the part has 4 MB —
+# gen_esp32part.py refuses it outright ("Partitions tables occupies 6.2MB of
+# flash which does not fit in configured flash size 4MB").
+#
+# This file did not exist before 2026-08-24 and the CSV merely SAID to set the
+# key "in the product's sdkconfig.defaults.<chip>". Nothing did, and every
+# per-chip default sets 4 MB, so `partition_table: 8mb` could not build on any
+# chip. The voice tables (8mb-voice, 16mb-voice) always carried theirs, which is
+# why only they worked — this brings the plain 8 MB table in line with them.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB="y"

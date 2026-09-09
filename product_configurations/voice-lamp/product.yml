@@ -1,0 +1,110 @@
+id: voice-lamp
+name: Voice Lamp
+description: >-
+  Dimmable lamp controlled entirely by voice — on-device wake word plus English
+  speech commands, no cloud and no hub. Say the wake word, then "turn on the
+  light" or "make it brighter".
+keywords: [voice, speech, wake word, lamp, dimmable, esp-sr, offline]
+
+# ESP32-S3 ONLY. Not a preference — every English MultiNet model in esp-sr's
+# Kconfig is `depends on IDF_TARGET_ESP32S3` (mn7 also allows P4). WakeNet
+# alone would run on esp32/c3/c6, but a voice product with no command
+# vocabulary is not this product.
+#
+# frameworks: [audio] standalone — the minimal voice product. Audio also
+# combos: locals + mqtt fit 8mb-voice; matter/rainmaker need the 16mb-voice
+# table (engine-enforced flash budget, measured 98% OTA fill on 8MB).
+frameworks: [audio]
+# 8mb-voice fits every chip that claims audio: ~1.35 MB on the S3, P4 and S31
+# alike (measured 2026-09-09, esp-sr 2.4.7). The overflows once recorded for
+# the S31 and the P4 were esp-sr 2.5's esp-dl payload, not the chips.
+ci_chips: [esp32s3, esp32p4, esp32s31]
+partition_table: 8mb-voice
+
+instances:
+  # ── Voice capture: raw PCM source for the AFE feed task ────────────
+  # Separate from drivers/mic_i2s — that block reduces the stream to a
+  # loudness scalar, and the param bus cannot carry audio.
+  - block: drivers/voice_mic_i2s
+    prefix: VMIC
+    cfg:
+      port: 0
+      bclk_gpio: 4
+      ws_gpio: 5
+      din_gpio: 6
+      slot_right: 0
+
+  # ── The lamp itself ───────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: device_types/dimmable_light
+    prefix: LAMP_EP
+    cfg:
+      label: Voice Lamp
+      audio_cmd_base: 110
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── Status LED: the only feedback channel until a speaker is added ──
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── "The device heard you": fast blink while listening after the wake
+  #     word, solid when idle ─────────────────────────────────────────
+  - block: behaviors/voice_feedback_led
+    prefix: VOICE_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Lamp state survives reboot ────────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_BRIGHT
+    cfg:
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: bright
+
+  - include: console-diagnostics
+
+  # ── Console mirrors of the voice commands, for bring-up without a mic ──
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_BRIGHT
+    cfg:
+      command_name: bright
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Voice Lamp

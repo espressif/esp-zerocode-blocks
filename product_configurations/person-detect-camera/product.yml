@@ -1,0 +1,35 @@
+id: person-detect-camera
+name: Person Detect Camera
+description: A camera that says whether somebody is there — the upstream TensorFlow person-detection CNN running on-device, with nothing leaving the board
+keywords: [ml, person, presence, camera, occupancy, tflite]
+frameworks: [ml, matter]
+
+# The reference product for drivers/ml_person_detect, and the first product in
+# the catalog whose verdict comes from a REAL trained model rather than the
+# framework's zeroed-input smoke test.
+#
+# ci_chips: esp32 is the AI-Thinker ESP32-CAM, which is the board this block's
+# default pin map describes and the one people actually own. The DVP camera
+# interface only exists on esp32 and esp32s3, so those are the only two chips
+# this product can honestly claim (same constraint as camera-motion-sensor).
+ci_chips: [esp32, esp32s3]
+
+# Matter here, unlike ml-inference-demo: an occupancy sensor is only useful if
+# something can ask it, and occupancy_sensor is a device type Matter already
+# binds. The inference product that must stay cheap for CI is ml-inference-demo;
+# this one is meant to be a product someone would actually flash.
+
+instances:
+  - block: drivers/ml_person_detect
+    prefix: PRESENCE
+    cfg:
+      present_param: APP_DRIVER_PARAM_OCCUPANCY
+      score_param: APP_DRIVER_PARAM_CONFIDENCE
+      # Slower than the block default: this CNN takes ~400 ms on the esp32 and
+      # a person does not arrive twice a second.
+      interval_ms: 3000
+
+  - block: device_types/occupancy_sensor
+    prefix: OCC
+    cfg:
+      occupied_param: APP_DRIVER_PARAM_OCCUPANCY

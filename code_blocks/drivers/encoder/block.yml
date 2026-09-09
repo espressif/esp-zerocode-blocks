@@ -1,0 +1,23 @@
+description: Quadrature rotary encoder — PCNT where the chip has it, GPIO-ISR fallback elsewhere; emits delta on each detent
+
+# Reads a quadrature encoder. On chips with the PCNT peripheral the pulse
+# counter does the decoding; on chips without it (ESP32-C2/C3) a GPIO-ISR
+# decoder takes over (A-edge interrupt, direction from B, 1 ms bounce reject)
+# so the encoder WORKS ON EVERY CHIP — before 2026-09-01 the no-PCNT branch
+# compiled the feature out silently, and a bedside-lamp product shipped with a
+# dead knob that passed every gate. Every 50 ms accumulated detents are
+# reported. `pulses_per_detent` applies to the PCNT path only; the fallback
+# counts one A-edge per detent. Wire to a u8 param to track absolute position
+# (wrapping 0-254), or override the callback in app code to issue Matter binding
+# commands (LevelControl::Step) on each detent.
+
+params:
+  a_gpio: { type: int, required: true, description: A-channel GPIO }
+  b_gpio: { type: int, required: true, description: B-channel GPIO }
+  pulses_per_detent: { type: int, default: 4 }
+
+driver_params:
+  position_param:
+    type: u8
+    required: true
+    description: Driver param ID for accumulated position (uint8, wraps)

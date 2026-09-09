@@ -1,0 +1,8 @@
+description: Save/restore a uint32_t driver param across reboots via NVS
+
+params:
+  nvs_namespace: { type: string, default: app }
+  nvs_key: { type: string, required: true }
+
+driver_params:
+  target_param: { type: u32, required: true }

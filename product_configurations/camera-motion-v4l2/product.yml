@@ -1,0 +1,70 @@
+id: camera-motion-v4l2
+name: Camera Motion Sensor (modern camera stack)
+description: >-
+  A camera that acts as a motion/occupancy sensor — frame-difference detection
+  on the esp_video (V4L2) camera stack, with a status LED as the motion
+  indicator. Fully local; the image never leaves the device.
+keywords: [camera, motion, occupancy, vision, esp32-cam, presence, detector]
+
+# The camera-motion-sensor twin, on the camera stack the newer silicon uses.
+# espressif/esp32-camera gates every source on esp32/s2/s3 and links to nothing
+# elsewhere, so a chip like the ESP32-S31 — which HAS a DVP interface
+# (SOC_LCDCAM_CAM_SUPPORTED) — needs esp_video instead. Same detector, same
+# occupancy contract; only the capture path differs.
+#
+# Pins are generic DVP defaults, not a specific board's: unlike the ESP32-CAM
+# there is no de-facto standard wiring for these parts yet, so a real build sets
+# them from the board in hand.
+#
+# Privacy by construction: frames are diffed in DRAM and discarded — nothing
+# is stored, nothing is transmitted (no network stack in this product).
+frameworks: [vision]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32s31]
+
+instances:
+  - block: drivers/camera_motion_v4l2
+    prefix: CAM
+    cfg:
+      pixel_threshold: 25
+      area_threshold_pct: 3
+      hold_ms: 10000
+      poll_ms: 200
+
+  - block: device_types/occupancy_sensor
+    prefix: OCC
+    cfg:
+      label: Motion
+      occupied_param: APP_DRIVER_PARAM_OCCUPANCY
+
+  # ── Status LED mirrors the occupancy param. GPIO is a placeholder like the
+  #     camera pins are — no standard board to inherit from yet. ──────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 3
+      active_level: 0
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 3
+      active_level: 0
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_get
+    prefix: GET_OCC
+    cfg:
+      command_name: get-motion
+      target_param: APP_DRIVER_PARAM_OCCUPANCY
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Camera Motion Sensor

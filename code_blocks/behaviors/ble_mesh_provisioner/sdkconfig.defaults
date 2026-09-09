@@ -1,0 +1,5 @@
+# Ceiling on how many nodes the provisioner role can hold. The block's
+# max_nodes param sizes its own tracking table and must stay under this.
+CONFIG_BLE_MESH_MAX_PROV_NODES=20
+CONFIG_BLE_MESH_PROVISIONER_APP_KEY_COUNT=3
+CONFIG_BLE_MESH_PROVISIONER_SUBNET_COUNT=3

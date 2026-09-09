@@ -1,0 +1,49 @@
+id: espnow-remote
+name: ESP-NOW Remote
+description: >-
+  A battery-friendly wireless remote — a knob and a button that control
+  ZeroCode ESP-NOW lights DIRECTLY: no router, no hub, no app, no pairing.
+  Half of the espnow-remote + espnow-light kit.
+keywords: [espnow, remote, kit, knob, wireless, no-hub, controller]
+
+# THE KIT CONTRACT (with espnow-light): both sides bind the SAME param
+# names — the wire carries a hash of the NAME, so the remote's level maps
+# to APP_DRIVER_PARAM_BRIGHTNESS on purpose (that's what the light listens
+# for). v1 is open broadcast on channel 1, trusted spaces only.
+frameworks: [espnow]
+
+instances:
+  - block: drivers/encoder
+    prefix: KNOB
+    cfg:
+      a_gpio: 4
+      b_gpio: 5
+      position_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: drivers/button
+    prefix: BTN
+    cfg:
+      gpio: 3
+      active_level: 0
+      target_param: APP_DRIVER_PARAM_POWER
+
+  # Broadcasts POWER + BRIGHTNESS changes to the kit.
+  - block: device_types/dimmer_remote
+    prefix: REMOTE
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      level_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg: { gpio: 10, active_level: 1 }
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg: { gpio: 10, active_level: 1, pattern_param: APP_DRIVER_PARAM_LED_PATTERN }
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode ESP-NOW Remote

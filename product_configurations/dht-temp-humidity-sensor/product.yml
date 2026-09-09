@@ -1,0 +1,59 @@
+id: dht-temp-humidity-sensor
+name: DHT22 Temperature + Humidity Sensor
+description: Bit-banged DHT22/AM2301/DHT11 single-wire temperature and humidity sensor with two Matter endpoints
+keywords: [temperature, humidity, sensor, thermometer, dht22, dht11, am2301, dht21, single-wire, climate]
+frameworks: [matter]
+
+instances:
+  - block: drivers/dht22
+    prefix: SENSOR
+    cfg:
+      gpio: 4
+      sensor_variant: dht22
+      is_dht11: 0
+      poll_interval_ms: 2000
+      temp_param: APP_DRIVER_PARAM_TEMPERATURE
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: TEMP
+    cfg:
+      value_param: APP_DRIVER_PARAM_TEMPERATURE
+
+  - block: device_types/humidity_sensor
+    prefix: HUM
+    cfg:
+      value_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode DHT Temp+Humidity Sensor

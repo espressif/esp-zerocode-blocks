@@ -1,0 +1,2 @@
+dependencies:
+  espressif/led_indicator: "~2.1.2"

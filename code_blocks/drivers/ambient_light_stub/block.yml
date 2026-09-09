@@ -1,0 +1,12 @@
+description: Periodic stub publisher for an ambient-light reading (u16). Replace with real ADC/I2C sensor.
+
+params:
+  poll_interval_ms: { type: int, default: 5000 }
+  initial_value:    { type: int, default: 200 }
+
+driver_params:
+  value_param:
+    type: u16
+    required: true
+    description: Driver param ID (uint16, MeasuredValue spec encoding)
+maturity: stub

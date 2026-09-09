@@ -1,0 +1,59 @@
+description: Sensirion SCD4x (SCD40/SCD41) I2C CO2 sensor. Publishes CO2 ppm + AirQuality enum + temp + humidity. Depends on peripherals/i2c_bus.
+
+# Real SCD4x protocol:
+#   - I2C addr 0x62
+#   - 0x21B1: start_periodic_measurement (5s interval)
+#   - 0xEC05: read_measurement → 9 bytes (CO2_msb CO2_lsb CO2_crc T_msb T_lsb T_crc H_msb H_lsb H_crc)
+#     CO2 ppm = raw_co2
+#     T_C    = -45 + 175 * raw_t / 65535
+#     RH     = 100 * raw_h / 65535
+# Maps CO2 to Matter AirQuality enum: <600=Good, <1000=Fair, <1500=Moderate, <2500=Poor, else VeryPoor.
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_logic: [esp_driver_i2c]
+
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x62 }
+  poll_interval_ms: { type: int, default: 6000, description: "5 s recommended; allow some headroom" }
+  temp_param:
+    type: string
+    required: false
+    default: ""
+    description: i16 temp x 100 (optional — leave empty to skip)
+  humidity_param:
+    type: string
+    required: false
+    default: ""
+
+driver_params:
+  co2_param:
+    type: u16
+    required: true
+    description: u16 CO2 ppm (typical range 400-5000)
+  air_quality_param:
+    type: u8
+    required: true
+    description: u8 AirQuality enum (Matter encoding)

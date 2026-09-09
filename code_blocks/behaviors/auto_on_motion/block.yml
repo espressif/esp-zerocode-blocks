@@ -1,0 +1,16 @@
+description: When motion_param transitions from false→true, set light_param to true. Pair with auto_off_timer to make a motion-triggered light.
+
+# Listens for the rising edge of motion_param. When motion appears, drives
+# light_param to true. The light won't be turned OFF by this block — pair with
+# behaviors/auto_off_timer (target_param: light_param) to clear it after N
+# seconds of inactivity.
+
+driver_params:
+  motion_param:
+    type: bool
+    required: true
+    description: Source boolean (occupancy / PIR)
+  light_param:
+    type: bool
+    required: true
+    description: Target boolean (light power)

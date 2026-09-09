@@ -1,0 +1,15 @@
+schema: zc-board/1
+
+# THE HARDWARE, NOT THE PRODUCT — see c6-devkit-board-relay/board.yaml for the
+# long version. One of the catalog's SAMPLE board files: in a user's product
+# this document is supplied by the host.
+
+selected: esp32-c6-devkitc-1
+chip: esp32c6
+
+bmgr:
+  board: esp32_c6_devkitc_1
+  # exact: the pack defines this very board. Its WS2812 (gpio 8) and BOOT
+  # button (gpio 9) are claimed by the board — which is exactly why this
+  # product reaches them through adapters instead of pins.
+  resolved_from: exact

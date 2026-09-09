@@ -1,0 +1,42 @@
+description: "Thermostat controller (sends setpoint writes to bound thermostats; Matter: thermostat_controller; Zigbee: Combined Interface client)"
+# RainMaker: no equivalent (models state-holders only).
+# Zigbee: CONTROLLER binding — Thermostat client cluster on a Combined
+# Interface (0x0007) endpoint; setpoint_param changes are written to
+# Finding & Binding targets (`zb-bind`).
+device_types:
+  matter: thermostat_controller
+  zigbee: EZB_ZHA_COMBINED_INTERFACE_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client device — needs bindings to Thermostat, not a delegate"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+# Controller endpoints don't expose state — they emit commands to bound targets.
+# Zigbee command choice: the ZCL Thermostat cluster's only client command,
+# SetpointRaiseLower, carries a RELATIVE int8 delta (0.1 °C steps) — it cannot
+# express the ABSOLUTE setpoint the param bus publishes. We therefore send a
+# ZCL Write Attributes command (ezb_zcl_write_attr_cmd_req) targeting
+# OccupiedHeatingSetpoint (0x0012, S16, 0.01 °C) on bound destinations —
+# same i16 centi-°C encoding as the driver param (and as the thermostat
+# server block's heat_setpoint_param), so no conversion is needed.
+params:
+  zb_endpoint:
+    type: int
+    default: 73
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  setpoint_param:
+    type: i16
+    default: APP_DRIVER_PARAM_HEAT_SETPOINT
+    description: Driver param the controller's setpoint input publishes (i16, hundredths of °C, consumed)
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT-absent: controllers are inputs — over MQTT they would be button/event emitters, which HA models as device_triggers (a later, different binding).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.

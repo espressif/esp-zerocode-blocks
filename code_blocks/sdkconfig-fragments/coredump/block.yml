@@ -1,0 +1,6 @@
+description: Enable ELF-format core dump to flash on crash. Costs ~15-20 KB binary +
+
+# Original notes from the .defaults file:
+#   Enable ELF-format core dump to flash on crash. Costs ~15-20 KB binary +
+#   requires a `coredump` partition in the partition table. Useful for
+#   fielded devices to diagnose post-mortem from a flash dump.

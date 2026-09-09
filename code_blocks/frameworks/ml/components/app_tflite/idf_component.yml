@@ -1,0 +1,11 @@
+## Declared HERE, at component level, not at the block root: the component
+## manager adds a component's own manifest dependencies to its requirements
+## automatically, so app_tflite needs no PRIV_REQUIRES for esp-tflite-micro
+## and never hand-writes the `espressif__` mangled name. Same shape as
+## frameworks/agents. (frameworks/audio uses the block-root form and must
+## therefore spell out PRIV_REQUIRES espressif__esp-sr.)
+##
+## Pulls espressif/esp-nn (>=1.1.1) transitively — esp-nn is this component's
+## kernel backend, never a separate choice.
+dependencies:
+  espressif/esp-tflite-micro: "^1.4.0"

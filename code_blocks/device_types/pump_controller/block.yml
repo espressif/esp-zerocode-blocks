@@ -1,0 +1,38 @@
+description: "Pump controller (sends on/off commands to bound pumps; Matter: pump_controller; Zigbee: On/Off Switch client)"
+# RainMaker: no equivalent (models state-holders only).
+# Zigbee: CONTROLLER binding — On/Off client cluster; power_param changes
+# send On/Off commands to Finding & Binding targets (`zb-bind`).
+device_types:
+  matter: pump_controller
+  zigbee: EZB_ZHA_ON_OFF_SWITCH_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client device — needs bindings to On/Off, Pump Configuration and Control, not a delegate"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+# Controller endpoints don't expose state — they emit commands to bound targets.
+# Zigbee device id choice: the ZCL pump controller controls its target purely
+# via On/Off here, so the plain On/Off Switch id (0x0000) with the HA switch
+# creator is the honest declaration — Combined Interface (0x0007) would imply
+# a broader multi-cluster control surface than this block provides.
+params:
+  zb_endpoint:
+    type: int
+    default: 74
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param the controller's on/off input publishes (bool, consumed)
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT-absent: controllers are inputs — over MQTT they would be button/event emitters, which HA models as device_triggers (a later, different binding).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.

@@ -1,0 +1,8 @@
+dependencies:
+  # 2.4.x, deliberately: esp-sr 2.5 added an esp-dl dependency that puts
+  # 860 KB of esp-dl code into every voice image (esp32s3 voice-lamp: 2.44 MB
+  # on 2.5.3 vs 1.33 MB on 2.4.7, measured 2026-09-09, ESP-IDF 6.2), which
+  # overflows 8mb-voice's 2.25 MB OTA slot with nothing this framework uses.
+  # 2.4.7 builds on IDF 6.2 and ships libraries for every chip that claims
+  # audio (esp32s3, esp32s31, esp32p4). Move to 2.5 only with a measurement.
+  espressif/esp-sr: "~2.4.7"

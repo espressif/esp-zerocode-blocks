@@ -1,0 +1,13 @@
+description: "16 MB layout with an esp-sr `model` partition and full-size OTA slots — the flash budget that makes voice+transport combos (audio+matter) real."
+
+# Why this exists, with MEASURED numbers: on 8mb-voice, a minimal Matter +
+# esp-sr app is 2,313,680 bytes in a 2,359,296-byte OTA slot — 98% full,
+# 45 KB of headroom. It boots, but the first behavior you add (or a slightly
+# larger OTA image) kills the update path. The matrix ALLOWS audio+matter/
+# rainmaker/ble_mesh because the ENGINE enforces the budget: those combos
+# require THIS table (generate-time + catalog-validation error otherwise) —
+# a deliberate 16MB-board choice, never a default.
+#
+# 3.5 MB OTA slots (Matter + esp-sr + a real product's behaviors with ~35%
+# headroom), the measured 3.375 MB model slot, and ~1.5 MB spare for future
+# data partitions.

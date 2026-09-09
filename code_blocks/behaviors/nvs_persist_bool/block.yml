@@ -1,0 +1,20 @@
+description: Save/restore a boolean driver param across reboots via NVS
+
+# Registers as a solution that listens for changes to `target_param` and writes them to
+# NVS. On boot, restores the last value into the driver. Lets a smart-plug remember
+# its on/off state across power cycles.
+
+params:
+  nvs_namespace:
+    type: string
+    default: app
+  nvs_key:
+    type: string
+    required: true
+    description: NVS key (must be unique across persist behaviors in the same product)
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Driver param ID to persist (boolean)

@@ -1,0 +1,33 @@
+description: "Console command that makes the device write a story — `story once upon a time there was a robot`. Free-running generation from the on-device model, streamed as it is written. Needs frameworks: [lm] and partition_table: 8mb; the 2 MB story model overflows the default 4mb table."
+
+# A DEMO OF CAPABILITY, not a control path. Unlike drivers/lm_tool_calling this
+# samples freely — there is no schema constraining the output, so nothing here
+# is wired to the param bus and nothing should be. It exists to show that the
+# framework runs a real generative model at interactive speed, and to give the
+# 2 MB model somewhere to live.
+#
+# PARTITION: 2.0 MB of weights plus ~255 KB of app needs 2,349,504 B, and the
+# default 4mb table's OTA slot is 1,966,080 B — 20% short. 8mb (3 MB slot,
+# 75% full) is the minimum; the engine errors if a product selects this block
+# without one.
+#
+# SLOW BY MCU STANDARDS, fast for what it is: ~26.7 tok/s on esp32s31, 17.6 on
+# esp32s3. A 200-token story is roughly 8 seconds, which is why output streams
+# token by token rather than arriving at the end.
+
+sdkconfig:
+  CONFIG_ZC_LM_MODEL_STORY: "y"
+
+params:
+  command_name:
+    type: string
+    default: story
+    description: Console command name. `story <prompt words...>`.
+  max_tokens:
+    type: int
+    default: 200
+    description: Token budget per story. Generation also stops at end-of-sequence or the model's context limit, whichever comes first.
+  temperature_pct:
+    type: int
+    default: 80
+    description: Sampling temperature x100 (80 = 0.8). Lower is more predictable and more repetitive; higher wanders. Integer because block params carry no floats.

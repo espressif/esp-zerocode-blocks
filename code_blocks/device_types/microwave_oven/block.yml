@@ -1,0 +1,66 @@
+description: "Microwave oven (Matter: microwave_oven — OperationalState + MicrowaveOvenMode + MicrowaveOvenControl; RainMaker: esp.device.other — Cook Time + Power Level + Operational State)"
+device_types:
+  matter: microwave_oven
+  rainmaker: esp.device.other
+  # Zigbee-absent: no ZCL appliance equivalent
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the Microwave Oven Mode + Microwave Oven Control + Operational State delegates (mandatory); Fan Control is attribute-wired, its delegate optional (only for the Step command)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). MicrowaveOvenControl / OperationalState handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+
+params:
+  label:
+    type: string
+    default: Microwave Oven
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 380
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_set_the_microwave_to_one_minute:
+    type: string
+    default: "set the microwave to one minute"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "set the microwave to one minute"'
+  say_set_the_microwave_to_three_minutes:
+    type: string
+    default: "set the microwave to three minutes"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "set the microwave to three minutes"'
+  say_set_microwave_power_to_full:
+    type: string
+    default: "set microwave power to full"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "set microwave power to full"'
+  say_set_microwave_power_to_half:
+    type: string
+    default: "set microwave power to half"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "set microwave power to half"'
+
+driver_params:
+  cook_time_param:
+    type: u32
+    default: APP_DRIVER_PARAM_MICROWAVE_COOK_TIME
+    description: Driver param ID for cook time in seconds (uint32_t, 0-3600)
+  power_level_param:
+    type: u8
+    default: APP_DRIVER_PARAM_MICROWAVE_POWER_LEVEL
+    description: Driver param ID for power level percent (uint8_t, 10-100 in steps of 10)
+  state_param:
+    type: u8
+    default: APP_DRIVER_PARAM_MICROWAVE_STATE
+    description: "Driver param ID for operational state (uint8_t: 0 stopped, 1 running, 2 paused, 3 error; read-only from the cloud)"
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

@@ -1,0 +1,60 @@
+description: >-
+  Drive a GPIO device the BOARD already declares — its status LED, a vibration
+  motor, an onboard relay — through esp-board-manager. Board-only: it states no
+  pin, because the pin is the board's.
+
+# WHY THIS BLOCK EXISTS.
+#
+# A board's own LED is real hardware described in the board definition
+# (`type: gpio_ctrl` in board_devices.yaml), brought up by
+# esp_board_manager_init() with a handle waiting for anyone who asks. Nothing
+# asked. So a board product that wanted a light had to put a relay on an
+# EXTERNALLY WIRED pin and leave the board's LED dark — mosaico-room-panel-board
+# drove a relay on GPIO 4 for exactly that reason, while its hand-pinned twin
+# drove the board's LED on GPIO 3.
+#
+# The obvious repair — point drivers/relay at GPIO 3 — is wrong, and the engine
+# says so: the board claims pin 3 for `gpio_status_led`, the relay's amend
+# fragment claims it too, and that is an IO conflict. Correctly. One pin, one
+# owner. The way to use hardware someone else owns is to ASK THEM FOR IT, which
+# is what this block does.
+#
+# It is the same adapter shape as the board-provided display, one level down:
+# matched by TYPE (`bmgr.provided_by: gpio_ctrl` — which handle struct comes
+# back), fetched by NAME (`cfg.device` — which of them). Both are needed
+# because a board may carry several: the ESP-Mosaico declares `status_led` AND
+# `vibration_motor`, both gpio_ctrl.
+#
+# BOARD-ONLY, AND CHECKED. `bmgr.device_param` makes generation FAIL when there
+# is no board, when the pack cannot be read, or when the board declares no such
+# device. Unchecked, this block compiles and links against a device that does
+# not exist and reports it in one log line at boot — the failure shape the bus
+# rules exist to stop, and there is no reason to reintroduce it here.
+#
+# NOT hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [espressif__esp_board_manager]
+
+bmgr:
+  init: board_manager
+  # The board manager configures and owns the line; this block only asks for
+  # the handle. Nothing to replace — there is no non-board code path to drop,
+  # which is what makes device_param the thing that gates this block.
+  provided_by: gpio_ctrl
+  device_param: device
+
+params:
+  device:
+    type: string
+    required: true
+    description: >-
+      The board device's NAME in its board_devices.yaml (e.g. status_led,
+      vibration_motor). Must be a device of type gpio_ctrl on the board this
+      product runs on — generation fails otherwise.
+
+driver_params:
+  param_id:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID this output reacts to (boolean)

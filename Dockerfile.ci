@@ -1,0 +1,43 @@
+# ESP-IDF worker image for this repo's firmware-build matrix.
+#
+# IDF_REF and BMGR_REF come from pins.env (the GitLab image job passes them as
+# build args; the defaults below mirror the file) — the same commits the
+# ZeroCode AI platform builds with, so a drift never shows up as "works in CI,
+# fails in the cloud" (or worse, the reverse).
+#
+# Built by the manual image job and pushed to the project's registry; the
+# matrix jobs then just pull it. Rebuild it whenever pins.env or chips.txt
+# changes.
+FROM ubuntu:24.04
+
+ARG IDF_REF=e9da155a72624fce88b8ef2cf3cde9aee2e6067f
+ARG BMGR_REF=2beb9b22b0892b343bd555a1ebc9929a7edce8fc
+# CI passes the contents of chips.txt; the default mirrors it.
+ARG CHIPS="esp32,esp32c3,esp32c5,esp32c6,esp32h2,esp32p4,esp32s3,esp32s31"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV IDF_PATH=/opt/esp/idf IDF_TOOLS_PATH=/opt/esp/tools BMGR_PATH=/opt/esp/esp-board-manager
+# `-o Acquire::Retries=3`: Debian mirrors time out often enough that a bare apt
+# failure red-flags a pipeline with no code cause (same fix as the monorepo CI).
+RUN apt-get update -o Acquire::Retries=3 && apt-get install -y -o Acquire::Retries=3 --no-install-recommends \
+      git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build \
+      ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 ca-certificates xz-utils \
+      nodejs npm rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+# A commit cannot be `git clone -b <ref>` — that takes a branch or tag only.
+RUN mkdir -p $IDF_PATH \
+    && git -C $IDF_PATH init -q \
+    && git -C $IDF_PATH remote add origin https://github.com/espressif/esp-idf.git \
+    && git -C $IDF_PATH fetch --depth 1 origin $IDF_REF \
+    && git -C $IDF_PATH checkout -q FETCH_HEAD \
+    && git -C $IDF_PATH submodule update --init --depth 1 --recursive --jobs 4
+
+RUN $IDF_PATH/install.sh $CHIPS && rm -rf $IDF_TOOLS_PATH/dist
+
+RUN git clone -q https://github.com/espressif/esp-board-manager.git $BMGR_PATH \
+    && git -C $BMGR_PATH checkout -q $BMGR_REF \
+    && rm -rf $BMGR_PATH/.git
+
+ENV IDF_CCACHE_ENABLE=1 CCACHE_DIR=/opt/esp/ccache CCACHE_MAXSIZE=5G
+ENV CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,locale,pch_defines,time_macros,system_headers,clang_index_store

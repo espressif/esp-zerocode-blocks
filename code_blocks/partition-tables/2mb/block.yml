@@ -1,0 +1,4 @@
+description: Smallest layout — 2 MB flash, single app slot (no OTA). For dev/bring-up only.
+
+# The partitions.csv next to this manifest is what the generator copies
+# into the product tree as partitions.csv (replacing the base file).

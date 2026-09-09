@@ -1,0 +1,14 @@
+description: Long-press a dedicated GPIO button (default 5s) → erase NVS + reboot
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO of the reset button (can be the same button used for normal toggling)
+  active_level:
+    type: int
+    default: 0
+  hold_time_ms:
+    type: int
+    default: 5000
+    description: How long to hold before factory reset triggers

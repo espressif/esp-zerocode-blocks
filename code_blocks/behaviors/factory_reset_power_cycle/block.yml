@@ -1,0 +1,19 @@
+description: N rapid power-cycles → erase NVS + reboot. No button needed; useful for sealed devices.
+
+# Behavior:
+#  - On boot, increment a counter in NVS.
+#  - Schedule a timer to reset the counter to 0 after `stable_window_ms` (e.g. 5s).
+#  - If the counter reaches `count_threshold` before the window elapses, erase NVS + reboot.
+# Power-cycle the device N times in quick succession to factory-reset.
+
+params:
+  count_threshold:
+    type: int
+    default: 5
+    description: Number of rapid power cycles required to trigger reset
+  stable_window_ms:
+    type: int
+    default: 5000
+    description: Time to wait before resetting the counter (ms)
+  nvs_namespace: { type: string, default: app }
+  nvs_key: { type: string, default: pc_count }

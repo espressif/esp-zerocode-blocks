@@ -1,0 +1,50 @@
+description: "Fan with 0-100 percent speed (Matter: fan / FanControl; RainMaker: esp.device.fan)"
+device_types:
+  matter: fan
+  rainmaker: esp.device.fan
+  zigbee: EZB_ZHA_HEATING_COOLING_UNIT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Fan
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 40
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 180
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_fan:
+    type: string
+    default: "turn on the fan"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the fan"'
+  say_turn_off_the_fan:
+    type: string
+    default: "turn off the fan"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the fan"'
+  say_fan_faster:
+    type: string
+    default: "fan faster"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "fan faster"'
+  say_fan_slower:
+    type: string
+    default: "fan slower"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "fan slower"'
+
+driver_params:
+  speed_param:
+    type: u8
+    default: APP_DRIVER_PARAM_FAN_SPEED
+    description: Driver param ID for fan speed (uint8_t, 0-100)

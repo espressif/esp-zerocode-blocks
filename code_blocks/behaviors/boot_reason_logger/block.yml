@@ -1,0 +1,1 @@
+description: Logs esp_reset_reason() once at boot — invaluable for diagnosing panics, brownouts, watchdog resets, OTA reboots in the field.

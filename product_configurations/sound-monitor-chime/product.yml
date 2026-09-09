@@ -1,0 +1,117 @@
+id: sound-monitor-chime
+name: Sound Monitor & Chime
+description: >-
+  Standalone sound-level monitor with an I2S microphone and an I2S chime
+  speaker. Reports room loudness and plays tones on command, entirely over the
+  console — no smart-home stack.
+keywords: [sound, audio, microphone, speaker, chime, noise, i2s]
+
+# Deliberately framework-less (`frameworks: []`). Two reasons:
+#   1. No framework has a speaker or microphone device type. Verified against
+#      the SDK headers, not from memory: esp_matter 1.4.2 ships no media/AV
+#      endpoints at all, and neither the RainMaker nor the Zigbee HA device
+#      vocabularies used elsewhere in this catalog cover audio. Binding these
+#      drivers to a framework would mean inventing a device type.
+#   2. `frameworks: []` is documented as valid but had zero catalog coverage
+#      until this product, so nothing exercised the framework-less path.
+# Control is therefore via the console, which is framework-independent.
+#
+# GPIO defaults are chosen to be *usable* on every chip the validator's pin
+# check covers (esp32c3/esp32c6/esp32s3) — no pin-compatibility warning.
+#
+# They cannot also all be strapping-free. Two I2S devices need six pins, and
+# once GPIO 6-11 (classic esp32 flash), 18-21 (c3 USB-JTAG + UART0) and the
+# status LED are excluded, only about three fully-clean GPIOs remain in that
+# set. So some of these are strapping pins on some chips (4/5 on c6, 8 on
+# c3/c6). Strapping pins are sampled only at reset and these are all driven
+# after boot, which is why this is safe here — but it is exactly the kind of
+# choice that needs a real board before it is trusted, and it is why pins
+# should be reassigned per board rather than inherited from this default.
+#
+# GPIO 6 is a flash pin on the classic esp32, so this product's defaults are
+# for the RISC-V/S3 parts; the esp32 build in the matrix compiles but must not
+# be flashed with these pins.
+frameworks: []
+
+instances:
+  # ── Microphone: publishes RMS loudness ────────────────────────────
+  - block: drivers/mic_i2s
+    prefix: ROOM
+    cfg:
+      port: 1
+      bclk_gpio: 4
+      ws_gpio: 5
+      din_gpio: 6
+      sample_rate: 16000
+      window_samples: 1024
+      slot_right: 0
+      level_param: APP_DRIVER_PARAM_SOUND_LEVEL
+
+  # ── Speaker: tone chime ───────────────────────────────────────────
+  - block: drivers/speaker_i2s
+    prefix: CHIME
+    cfg:
+      port: 0
+      bclk_gpio: 1
+      ws_gpio: 7
+      dout_gpio: 8
+      sample_rate: 16000
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+      volume_param: APP_DRIVER_PARAM_VOLUME
+      mute_param: APP_DRIVER_PARAM_MUTE
+
+  # ── Status LED ────────────────────────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Volume survives reboot; tone/mute are transient by design ─────
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_VOLUME
+    cfg:
+      target_param: APP_DRIVER_PARAM_VOLUME
+      nvs_namespace: app
+      nvs_key: volume
+
+  - include: console-diagnostics
+
+  # ── Console control ───────────────────────────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_TONE
+    cfg:
+      command_name: tone
+      target_param: APP_DRIVER_PARAM_TONE_HZ
+      value_kind: u32
+  - block: behaviors/console_param_cmd
+    prefix: CMD_VOLUME
+    cfg:
+      command_name: volume
+      target_param: APP_DRIVER_PARAM_VOLUME
+      value_kind: u8
+  - block: behaviors/console_param_cmd
+    prefix: CMD_MUTE
+    cfg:
+      command_name: mute
+      target_param: APP_DRIVER_PARAM_MUTE
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LEVEL
+    cfg:
+      command_name: get-level
+      target_param: APP_DRIVER_PARAM_SOUND_LEVEL
+      value_kind: u16
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Sound Monitor

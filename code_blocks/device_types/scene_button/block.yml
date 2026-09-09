@@ -1,0 +1,40 @@
+description: "Event-emitting button / scene switch (Matter: generic_switch; Zigbee: On/Off Switch client — sends Toggle to bound targets)"
+# RainMaker: no equivalent (models state-holders only).
+# Zigbee: CONTROLLER binding — On/Off client cluster; each position_param
+# change sends a Toggle command to Finding & Binding targets (`zb-bind`).
+device_types:
+  matter: generic_switch
+  zigbee: EZB_ZHA_ON_OFF_SWITCH_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+# Generic Switch reports CurrentPosition; the Switch cluster also generates action events
+# (InitialPress / LongPress / MultiPressOngoing / MultiPressComplete). For V0 we expose
+# CurrentPosition only — action events can be emitted directly from app code if needed.
+params:
+  zb_endpoint:
+    type: int
+    default: 70
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  ble_hid_usage:
+    type: int
+    default: 205
+    description: >-
+      (BLE HID framework) Consumer usage this button sends, decimal.
+      205 = 0xCD play/pause; 226 = 0xE2 mute; 181 = 0xB5 next track;
+      182 = 0xB6 previous track. Ignored by every other framework.
+
+driver_params:
+  position_param:
+    type: u8
+    required: true
+    description: Driver param ID for switch position (uint8_t — 0..NumberOfPositions-1)
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT binding: an HA device_trigger (controllers are inputs — they emit
+# events for automations, not stateful entities).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.

@@ -1,0 +1,77 @@
+description: Shared I2C bus init. Drivers that talk to multiple I2C sensors should depend on this rather than init the bus themselves.
+
+# Why a separate peripheral: products with multiple I2C sensors (e.g. SHT4x + SCD4x on
+# the same bus) would otherwise each create the bus, and the second
+# i2c_new_master_bus() on a port fails. With this block the bus is created once
+# and every sensor block attaches a DEVICE to it — see CLAUDE.md → How an I2C
+# block gets its bus.
+
+# esp_driver_i2c carries driver/i2c_master.h. The base tree's app_driver only
+# lists the legacy `driver` component (which, on IDF 6, is legacy i2c and
+# nothing else), so the new API is a per-block dependency rather than something
+# every product pays for.
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c]
+
+# This block CONFIGURES the bus. Every sensor block that only TALKS on one
+# declares the mirror image (`requires_bus:`), and the validator then checks
+# that a product using such a sensor also instantiates a provider on the SAME
+# port, EARLIER in instances: — init order is product.yml order, so a bus
+# configured after its first transaction is the same bug as no bus at all.
+provides_bus:
+  type: i2c
+  port_param: port
+
+# esp-board-manager mapping — read ONLY by a product that names a `board:`.
+#
+# SHARED, which is the whole point here: N sensors hang off one bus, so the
+# amend must carry ONE i2c peripheral no matter how many instances mention it.
+# `shared_key` is what says so — the first instance resolving a given key emits
+# the fragment, later ones resolving the SAME key emit nothing, and a later one
+# resolving it to DIFFERENT yaml fails generation naming both instances and the
+# fields they disagree on. Without that, two instances claiming port 0 with
+# different SDA pins would be merged field by field by bmgr and the last one
+# would silently win.
+#
+# On a `board:` product this block hands the bus to esp_board_manager, which
+# creates it with i2c_new_master_bus() — the same call, the same driver, the
+# same registry. A sensor riding the bus asks IDF for the port's handle and
+# neither knows nor cares which of the two made it.
+bmgr:
+  init: board_manager
+  # The board manager configures the pins and creates the bus; the block's own
+  # i2c_new_master_bus() must not also.
+  replaces_slots: [driver_init]
+  peripherals:
+    - shared_key: 'i2c-{{cfg.port}}'
+      # NOT templated with {{prefix_lc}}: the name has to be identical across
+      # every instance sharing the bus, or bmgr sees two peripherals again.
+      name: 'i2c_zc_{{cfg.port}}'
+      type: i2c
+      role: master
+      version: default
+      config:
+        port: '{{cfg.port}}'
+        pins:
+          sda: '{{cfg.sda_gpio}}'
+          scl: '{{cfg.scl_gpio}}'
+
+params:
+  port:
+    type: int
+    default: 0
+    description: I2C peripheral number (0 or 1)
+  sda_gpio:
+    type: int
+    required: true
+  scl_gpio:
+    type: int
+    required: true
+  freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      ADVISORY. The new I2C driver clocks each DEVICE, not the bus
+      (i2c_device_config_t.scl_speed_hz), so what actually sets a sensor's SCL
+      frequency is that sensor block's own i2c_freq_hz. This value is logged at
+      init so a disagreement between the two shows up in a device log.

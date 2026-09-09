@@ -1,0 +1,66 @@
+# The first `kind: lm` manifest. A language model's cost is shaped differently
+# from a CNN's — no tensor arena, no input geometry; what matters is context
+# length, where the weights live, and how fast it decodes. The `kind`
+# discriminator lets both live in one catalogue without pretending the fields
+# are the same.
+kind: lm
+description: Smart-home command parser. Natural language in, one schema-valid tool-call out — {device, location, action[, value]}. 88.8% exact match, offline, no cloud.
+
+source:
+  kind: vendored
+  path: code_blocks/frameworks/lm/components/app_lm/nlu.bin
+  # Vendored rather than pulled: esp_tinylm is not on the component registry
+  # (ComponentNotFoundError, 2026-09) and its repo is internal, so a git
+  # dependency would resolve for Espressif and break the published catalogue.
+symbol: _binary_nlu_bin_start        # EMBED_FILES; esp_tinylm binds it in place
+size_bytes: 270272
+license: Apache-2.0
+license_holder: Espressif Systems (esp-tinylm, llama2-s31)
+
+architecture:
+  family: llama2
+  variant: PLE                       # Per-Layer Embeddings, after Gemma 3n
+  quantization: int4 weights, int8 activations
+  # PLE is why this is possible at all: a dense 15M model streams ~7.5 MB per
+  # token and is bandwidth-bound on an MCU. Here a dim-96 core of ~0.7 MB is
+  # streamed and the knowledge table is read ~6 rows/token from memory-mapped
+  # flash — small to stream AND still coherent.
+  streamed_per_token_bytes: 733184
+
+tokenizer:
+  kind: byte                         # token id == byte, 256 == EOS
+  eos_token: 256                     # no vocab file, no BPE, no merges table
+
+decoding:
+  constrained: true
+  schema_entries: 540
+  schema_path: code_blocks/frameworks/lm/components/app_lm/nlu_valid.h
+  # The decoder keeps the candidate set consistent with the bytes emitted so
+  # far, so output is ALWAYS one of the 540 valid tool-calls: no JSON parse can
+  # fail, and the model cannot invent a device the firmware does not know.
+  # THE SCHEMA AND THE WEIGHTS ARE ONE UNIT — same training run. Editing the
+  # schema alone constrains toward strings the model never saw and accuracy
+  # collapses quietly.
+
+vocabulary:
+  devices:   [light, fan, ac, tv, speaker, heater, purifier, humidifier, blind, lock]
+  locations: [living_room, bedroom, kitchen, bathroom, hallway, office]
+  actions:   [on, off, set]
+
+measured:
+  exact_match_pct: 88.8
+  # tok/s are upstream's story-generation figures on the same runtime; this
+  # model is smaller, so treat them as a floor rather than a spec.
+  tokens_per_second: { esp32s31: 26.7, esp32s3: 17.6 }
+  measured_on: [{chip: esp32s31, source: upstream-reported}]
+
+requires_psram: true                 # scratch + KV cache; load fails without it
+task_stack_bytes: 6144
+# EMBEDded in the app image, not flashed to a partition — esp_tinylm binds the
+# blob in place so the per-layer table stays memory-mapped. So it competes with
+# the OTA slot like every model here; 264 KB fits the default 4mb table
+# (1.875 MB slot) comfortably.
+links_into_app_image: true
+
+chips: [esp32s31, esp32s3, esp32p4]  # PIE on S31/P4, Espressif SIMD on S3
+consumed_by: [drivers/lm_tool_calling]

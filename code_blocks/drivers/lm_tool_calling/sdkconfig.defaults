@@ -1,0 +1,6 @@
+# Compile the command-parser model into the image. Both lm models default to
+# off so a product carries only what it uses — a storyteller has no business
+# shipping 264 KB of command parser, and vice versa.
+#
+# Quoted "y": scripts/assemble_blocks.py parses an unquoted value with int().
+CONFIG_ZC_LM_MODEL_NLU="y"

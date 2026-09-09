@@ -1,0 +1,21 @@
+description: H-bridge DC motor driver (forward/reverse + PWM speed). For DRV8833, L298N, TB6612, etc.
+
+# Two control GPIOs (in1/in2) plus one PWM-driven enable line.
+#  - in1=1, in2=0 → forward
+#  - in1=0, in2=1 → reverse
+#  - in1=in2     → coast (0,0) or brake (1,1)
+# Speed param is signed: positive forward, negative reverse, 0 stops.
+
+params:
+  in1_gpio: { type: int, required: true }
+  in2_gpio: { type: int, required: true }
+  pwm_gpio: { type: int, required: true }
+  ledc_channel: { type: int, default: 5 }
+  ledc_timer:   { type: int, default: 3 }
+  freq_hz:      { type: int, default: 20000 }
+
+driver_params:
+  speed_param:
+    type: i16
+    required: true
+    description: i16 speed (-1000 reverse-full to +1000 forward-full)

@@ -1,0 +1,75 @@
+description: >-
+  BMI270 6-axis IMU (accelerometer + gyroscope) over I2C — publishes tilt
+  orientation and a motion flag. The ESP-Mosaico's onboard IMU; depends on
+  peripherals/i2c_bus.
+
+# WHAT THIS PUBLISHES, and why not raw axes: the driver param bus carries
+# scalars, and six raw 16-bit axes at 100 Hz is a firehose no device type can
+# bind to. What products actually want from an IMU is "is it moving" and "which
+# way up is it", so that is what this reports — motion as a debounced bool,
+# orientation as an enum. Raw streaming belongs to a future block that owns its
+# own transport.
+#
+# THE CONFIG LOAD IS DELIBERATELY SKIPPED. A BMI270 normally needs an 8 KB
+# firmware blob written to it before its gyro and interrupt engine work. That
+# blob is a licensed binary from Bosch's BMI270-Sensor-API and is not something
+# this repo can vendor. Accelerometer-only mode needs NO blob: power up, set
+# PWR_CTRL, read ACC_X/Y/Y. Tilt and motion both come from the accelerometer,
+# so the blob buys nothing this block reports. If gyro rates are ever needed,
+# that is the moment to pull in Bosch's driver as a managed component.
+#
+# ESP-Mosaico: 0x69 on the shared I2C0 bus (SDA 0 / SCL 1), SENSOR_INT on
+# GPIO2. The interrupt line is not used here — polling at 10 Hz costs almost
+# nothing and avoids owning an ISR for a feature this coarse.
+# NOT yet hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c, esp_timer]
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port:  { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x69, description: 0x69 on the Mosaico; 0x68 with SDO low }
+  poll_interval_ms: { type: int, default: 100 }
+  motion_threshold_mg:
+    type: int
+    default: 120
+    description: >-
+      How far total acceleration must deviate from 1 g before it counts as
+      motion, in milli-g. Below ~80 the sensor's own noise trips it.
+  motion_hold_ms:
+    type: int
+    default: 2000
+    description: motion stays asserted this long after the last movement
+
+driver_params:
+  motion_param:
+    type: bool
+    required: true
+    description: true while the board is being moved
+  orientation_param:
+    type: u8
+    required: false
+    default: ""
+    description: >-
+      (Optional) 0 unknown, 1 face-up, 2 face-down, 3 portrait, 4 portrait
+      inverted, 5 landscape, 6 landscape inverted.

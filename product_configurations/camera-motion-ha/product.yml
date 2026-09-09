@@ -1,0 +1,71 @@
+id: camera-motion-ha
+name: Camera Motion Sensor for Home Assistant
+description: >-
+  A camera that shows up in Home Assistant as a motion sensor — on-device
+  frame-difference detection on the ESP32-CAM, published over MQTT discovery.
+  The image never leaves the device; only "motion / clear" does.
+keywords: [camera, motion, occupancy, mqtt, home assistant, vision, combo, presence]
+
+# COMBO: frameworks: [vision, mqtt]. The SAME occupancy_sensor instance
+# consumes the camera's motion events (vision_event_cases → occupied_param)
+# AND publishes them to Home Assistant (mqtt binary_sensor with the
+# occupancy device class) — the param bus is the join.
+#
+# Pin map is the AI-Thinker ESP32-CAM (same note as camera-motion-sensor:
+# there is no cross-chip pin story for a DVP camera). Wi-Fi + broker are
+# configured on the serial console (mqtt-wifi / mqtt-broker).
+frameworks: [vision, mqtt]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32, esp32s3]
+
+instances:
+  - block: drivers/camera_motion_dvp
+    prefix: CAM
+    cfg:
+      pixel_threshold: 25
+      area_threshold_pct: 3
+      hold_ms: 10000
+      poll_ms: 200
+
+  # ── ONE instance, TWO framework bindings: vision in, MQTT out ─────
+  - block: device_types/occupancy_sensor
+    prefix: OCC
+    cfg:
+      label: Motion
+      occupied_param: APP_DRIVER_PARAM_OCCUPANCY
+
+  # ── On-board red LED: solid when the broker session is up ─────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 33
+      active_level: 0
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 33
+      active_level: 0
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_get
+    prefix: GET_OCC
+    cfg:
+      command_name: get-motion
+      target_param: APP_DRIVER_PARAM_OCCUPANCY
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode HA Camera Motion Sensor

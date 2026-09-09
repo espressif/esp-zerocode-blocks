@@ -1,0 +1,58 @@
+description: >-
+  I2S microphone capture for the voice framework. Owns an I2S RX channel and
+  provides the raw PCM stream that esp-sr's AFE feed task consumes. Required by
+  any product with frameworks: [audio]; contributes nothing on its own.
+
+# Why this is separate from drivers/mic_i2s, given both drive an I2S mic:
+#   - mic_i2s is a SENSOR. It reduces the stream to an RMS loudness scalar and
+#     publishes it on the driver param bus for behaviors/device types to bind.
+#   - this block is a SOURCE. AFE needs the raw PCM stream at its own chunk
+#     size, and the param bus carries scalars only (bool/u8/i16/u16/u32), so
+#     there is no way to route audio through it. The framework must read
+#     samples directly.
+# A product wanting both loudness reporting AND voice would instantiate both,
+# on different I2S ports.
+#
+# Why this block and not the framework block: framework blocks are loaded by
+# name from product.frameworks and carry no cfg, so they cannot take GPIO
+# params. Capture therefore lives in an instance block, and the framework
+# calls into it through the fixed-name contract below.
+#
+# CONTRACT: defines zc_audio_mic_read(), declared in app_audio.h. The name is
+# fixed rather than prefixed because a product carries at most one voice mic —
+# two instances of this block would be a duplicate-symbol link error, which is
+# the intended failure.
+#
+# 32-bit slots for the same reason as mic_i2s: INMP441 / ICS-43434 / SPH0645
+# are 24-bit parts that left-justify into a 32-bit slot, and reading them as
+# 16-bit yields noise that looks like a working signal.
+
+cmake_priv_requires:
+  app_audio: [esp_driver_i2s]
+
+params:
+  port:
+    type: int
+    default: 0
+    description: I2S peripheral number. Must differ from any other I2S block on the same product.
+  bclk_gpio:
+    type: int
+    required: true
+    description: Bit clock (BCLK / SCK)
+  ws_gpio:
+    type: int
+    required: true
+    description: Word select / left-right clock (LRC / WS)
+  din_gpio:
+    type: int
+    required: true
+    description: Serial data in from the microphone (SD / DOUT on the breakout)
+  slot_right:
+    type: int
+    default: 0
+    description: >-
+      0 = read the LEFT slot (breakout L/R pin tied to GND — the usual wiring),
+      1 = read the RIGHT slot. Must match the hardware or every sample reads zero.
+
+# No driver_params: this block publishes nothing on the param bus. Its output
+# is the PCM stream, which the bus cannot carry.

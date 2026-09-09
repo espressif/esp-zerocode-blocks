@@ -1,0 +1,9 @@
+description: Route the IDF console / log output to the chip's USB-Serial-JTAG
+
+# Original notes from the .defaults file:
+#   Route the IDF console / log output to the chip's USB-Serial-JTAG
+#   instead of UART0. Useful for products that don't expose UART pins
+#   (sealed enclosures with USB-only access). Available on chips with
+#   built-in USB-Serial-JTAG: esp32c3, esp32c5, esp32c6, esp32s3,
+#   esp32h2, esp32p4.
+#   sdkconfig_fragments: [usb_serial_console]

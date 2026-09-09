@@ -1,0 +1,4 @@
+dependencies:
+  # Carries the ES8311 register driver plus the codec-device abstraction that
+  # ties it to an I2S channel and an I2C bus.
+  espressif/esp_codec_dev: "~1.6.2"

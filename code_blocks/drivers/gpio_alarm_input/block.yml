@@ -1,0 +1,36 @@
+description: Polled GPIO input that publishes a u8 alarm-state enum (e.g. smoke/CO/gas/heat — 0=Normal, 2=Critical). The enum8 counterpart of drivers/gpio_input_sensor.
+
+# Reads a digital alarm/detector line at a configurable interval and publishes a
+# u8 state param (Matter SmokeCoAlarm SmokeState/COState use 0=Normal, 1=Warning,
+# 2=Critical). Use this for any binary detector that maps onto an enum8 state attr
+# so the model does NOT hand-write the GPIO poll + state cast (the int->uint8_t
+# narrowing under -Werror is a common trap). For real graded detectors (ADC/I2C),
+# replace with a dedicated sensor block.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO connected to the detector output
+  active_level:
+    type: int
+    default: 1
+    description: Logic level that means "alarm asserted"
+  poll_interval_ms:
+    type: int
+    default: 1000
+    description: Polling period (ms)
+  asserted_state:
+    type: int
+    default: 2
+    description: u8 state value published when asserted (2 = Critical)
+  cleared_state:
+    type: int
+    default: 0
+    description: u8 state value published when cleared (0 = Normal)
+
+driver_params:
+  target_param:
+    type: u8
+    required: true
+    description: Driver param ID to publish (u8 enum state)

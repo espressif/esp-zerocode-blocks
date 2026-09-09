@@ -1,0 +1,16 @@
+description: Soil Sensor device type stub (soil moisture measurement; SoilMeasurement cluster)
+# Matter-only today. RainMaker/Zigbee: bindings can be added when a driver produces the value.
+device_types:
+  matter: soil_sensor
+
+# Endpoint exists on the fabric; no attribute<->driver wiring yet.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "SoilMeasurement endpoint created; measured-value reporting from a driver is a follow-up"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+params: {}
+param_refs: {}
+maturity: stub

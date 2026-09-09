@@ -1,0 +1,17 @@
+description: Watches for prolonged Wi-Fi disconnection and logs the outage; can optionally reboot the device after a grace period as a last resort for a stuck radio. Rebooting is OPT-IN — off by default, because a device with any local automation (a pump, a fan, a lock) must keep doing its job through a network fault, and a reboot drops every output and resets every timer.
+
+# Framework-independent: hooks plain WIFI_EVENT (L2 station connect/disconnect)
+# on the default event loop from app_logic — works for Matter-over-WiFi,
+# RainMaker, and framework-less Wi-Fi products alike. Deliberately NOT IP
+# events: Matter products are IPv6-only and RainMaker is IPv4, so L2 state is
+# the transport-neutral signal.
+#
+# On Wi-Fi-less chips (esp32h2, Thread-only) the whole body compiles out via
+# CONFIG_SOC_WIFI_SUPPORTED — Thread network recovery is a separate concern.
+# CONFIG_SOC_WIRELESS_HOST_SUPPORTED keeps it compiled IN on esp32p4, where
+# WIFI_EVENT is real but comes from the companion radio over esp_wifi_remote
+# (that symbol tracks the same targets as the esp_wifi_remote rule in
+# base_firmware/main/idf_component.yml).
+
+params:
+  reboot_after_seconds: { type: int, default: 0, description: "0 (default) = never reboot, only log the outage. Set to N > 0 to reboot after N seconds offline — a last resort for products whose only job is being online; never for one with local control." }

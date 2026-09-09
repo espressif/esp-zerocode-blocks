@@ -1,0 +1,57 @@
+description: >-
+  DVP camera motion detector on the esp_video (V4L2) stack — frame-difference
+  motion on grayscale QQVGA, reported as vision event 0. Same detector as
+  drivers/camera_motion_dvp, on the camera stack the newer silicon uses.
+
+# WHY A SIBLING BLOCK AND NOT A CHIP-CONDITIONAL ONE:
+# espressif/esp32-camera hard-gates every source file on
+# `IDF_TARGET STREQUAL esp32|esp32s2|esp32s3`, so on any other chip it registers
+# an EMPTY component and every esp_camera_* call fails at LINK, not at compile —
+# undefined reference, no hint about the cause. It has no esp32s31 target dir and
+# no version does.
+#
+# The two stacks also cannot coexist in one block: a block's cmake_priv_requires
+# is a static list, and naming a component that the dependency rules did not
+# fetch fails resolution outright. Two blocks, one per stack, is the same shape
+# the display drivers already use (display_co5300_qspi is Mosaico/S31,
+# display_ek79007_mipi is P4).
+#
+# WHICH CHIPS: esp_video + esp_cam_sensor both publish esp32s31 in their target
+# lists, and IDF's own esp_driver_cam builds its DVP controller whenever
+# CONFIG_SOC_LCDCAM_CAM_SUPPORTED — which the S31 sets. The classic esp32 is NOT
+# on esp_video's target list, so it keeps camera_motion_dvp.
+#
+# Detector semantics are deliberately identical to camera_motion_dvp: frame
+# difference, no model files, no model partition. zc_vision_emit(0, motion) on
+# TRANSITIONS only, with a hold window so brief stillness doesn't flap.
+#
+# GRAYSCALE QQVGA (160x120): the previous-frame buffer is 19 KB in DRAM.
+
+cmake_priv_requires:
+  app_vision: [espressif__esp_video, esp_timer]
+
+params:
+  # SCCB (camera I2C) — the sensor's control channel.
+  pin_sda:   { type: int, default: 4,  description: SCCB (camera I2C) data }
+  pin_scl:   { type: int, default: 5,  description: SCCB (camera I2C) clock }
+  pin_reset: { type: int, default: -1, description: sensor reset, -1 if wired to the board reset }
+  pin_pwdn:  { type: int, default: -1, description: sensor power-down, -1 if tied off }
+  # DVP parallel data bus (8-bit) + sync.
+  pin_xclk:  { type: int, default: 6 }
+  pin_pclk:  { type: int, default: 7 }
+  pin_vsync: { type: int, default: 8 }
+  pin_de:    { type: int, default: 9,  description: DVP data-enable (HREF on OV parts) }
+  pin_d0:    { type: int, default: 10 }
+  pin_d1:    { type: int, default: 11 }
+  pin_d2:    { type: int, default: 12 }
+  pin_d3:    { type: int, default: 13 }
+  pin_d4:    { type: int, default: 14 }
+  pin_d5:    { type: int, default: 15 }
+  pin_d6:    { type: int, default: 16 }
+  pin_d7:    { type: int, default: 17 }
+  xclk_hz:   { type: int, default: 20000000, description: XCLK driven to the sensor }
+  sccb_hz:   { type: int, default: 100000 }
+  poll_ms:   { type: int, default: 200, description: frame interval between diffs }
+  pixel_threshold: { type: int, default: 25, description: per-pixel luma delta that counts as changed }
+  area_threshold_pct: { type: int, default: 3, description: percent of frame that must change }
+  hold_ms:   { type: int, default: 3000, description: motion stays asserted this long after the last change }

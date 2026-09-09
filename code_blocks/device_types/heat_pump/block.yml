@@ -1,0 +1,31 @@
+description: "Heat Pump (Matter: heat_pump; RainMaker: esp.device.other — no controllable params in this block yet)"
+device_types:
+  matter: heat_pump
+  rainmaker: esp.device.other
+  # Zigbee-absent: no bindable params (label only) — no Zigbee endpoint
+  # contributed; bind once this block gains controllable/reportable params
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "composite — no cluster of its own; composes electrical_sensor, thermostat (their delegates live on those endpoints)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Heat Pump
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+param_refs: {}
+
+# slot notes (applies to the files in slots/):
+# ── RainMaker binding (rendered only when frameworks includes rainmaker) ──
+
+# Voice-absent: the block exposes no driver_params, so there is nothing to drive.
+
+# MQTT-absent: no driver_params — nothing to mirror.
+
+# Display-absent: no driver_params — nothing to render.

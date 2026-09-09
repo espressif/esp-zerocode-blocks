@@ -1,0 +1,14 @@
+# Core diagnostics every product ships: boot reason, boot counter,
+# task watchdog.
+instances:
+  - block: behaviors/boot_reason_logger
+    prefix: BOOT_REASON
+    cfg: {}
+  - block: behaviors/boot_count
+    prefix: BOOT_CNT
+    cfg:
+      nvs_namespace: app
+      nvs_key: bootcount
+  - block: behaviors/task_watchdog
+    prefix: WDT
+    cfg: {}

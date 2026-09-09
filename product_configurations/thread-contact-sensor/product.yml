@@ -1,0 +1,90 @@
+id: thread-contact-sensor
+name: Thread Contact Sensor
+description: Reed-switch door/window sensor joining a Matter fabric over Thread
+keywords: [contact, door, window, reed, thread, 802.15.4, matter]
+frameworks: [matter]
+
+# Matter over Thread instead of Wi-Fi: the fragment turns on the 802.15.4
+# radio, which only esp32c5 / esp32c6 / esp32h2 carry. ci_chips pins that —
+# it is also what gets the product built at all in the per-chip CI matrix
+# (scripts/ci-build-frameworks.sh builds ci_chips products on the chips they
+# name; without it this one is never picked as a framework representative).
+sdkconfig_fragments: [matter_thread]
+ci_chips: [esp32c5, esp32c6, esp32h2]
+
+instances:
+  - block: drivers/gpio_input_sensor
+    prefix: REED
+    cfg:
+      gpio: 4
+      pull: pullup
+      active_level: 0   # reed switch pulls to GND when closed
+      poll_interval_ms: 200
+      target_param: APP_DRIVER_PARAM_CONTACT
+
+  - block: device_types/contact_sensor
+    prefix: CONTACT
+    cfg:
+      state_param: APP_DRIVER_PARAM_CONTACT
+
+  # Deliberately NOT `- include: baseline-connectivity`: that group carries
+  # behaviors/wifi_disconnect_recovery, which hooks WIFI_EVENT and pulls
+  # esp_wifi into app_logic's requires. This product has no Wi-Fi to recover.
+  # Its other four blocks are transport-agnostic and are listed directly. If a
+  # second Thread product appears, split them into a shared baseline rather
+  # than copying again — this list will otherwise drift from the group, which
+  # 51 products still include.
+  - block: behaviors/ota_basic
+    prefix: OTA
+    cfg: {}
+
+  - block: behaviors/factory_reset_power_cycle
+    prefix: FRPC
+    cfg:
+      count_threshold: 5
+      stable_window_ms: 5000
+
+  - block: behaviors/uptime_log
+    prefix: UP
+    cfg:
+      interval_seconds: 300
+
+  # Logs kThreadConnectivityChange, so it earns its place here more than on a
+  # Wi-Fi product.
+  - block: behaviors/network_status_log
+    prefix: NETLOG
+    cfg: {}
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Thread Contact Sensor

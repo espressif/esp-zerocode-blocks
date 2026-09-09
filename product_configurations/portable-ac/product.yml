@@ -1,0 +1,130 @@
+id: portable-ac
+name: Portable / Window Air Conditioner
+description: Portable AC controller with relay-driven compressor and PWM fan
+keywords: [ac, air conditioner, portable, window, cooling]
+frameworks: [matter]
+
+instances:
+  - block: drivers/relay
+    prefix: COMP
+    cfg:
+      gpio: 7
+      active_level: 1
+      param_id: APP_DRIVER_PARAM_AC_POWER
+
+  - block: drivers/fan_pwm
+    prefix: FAN
+    cfg:
+      gpio: 5
+      ledc_channel: 0
+      ledc_timer: 0
+      freq_hz: 25000
+      speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - block: device_types/room_air_conditioner
+    prefix: AC
+    cfg:
+      power_param: APP_DRIVER_PARAM_AC_POWER
+      cool_setpoint_param: APP_DRIVER_PARAM_COOL_SETPOINT
+      fan_speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_ACPOWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_AC_POWER
+      nvs_namespace: app
+      nvs_key: acpower
+
+  - block: behaviors/nvs_persist_i16
+    prefix: PERSIST_COOLSP
+    cfg:
+      target_param: APP_DRIVER_PARAM_COOL_SETPOINT
+      nvs_namespace: app
+      nvs_key: coolsp
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_FANSPD
+    cfg:
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      nvs_namespace: app
+      nvs_key: fanspd
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_ACPOWER
+    cfg:
+      command_name: acpower
+      target_param: APP_DRIVER_PARAM_AC_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_ACPOWER
+    cfg:
+      command_name: get-acpower
+      target_param: APP_DRIVER_PARAM_AC_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_COOLSP
+    cfg:
+      command_name: coolsp
+      target_param: APP_DRIVER_PARAM_COOL_SETPOINT
+      value_kind: i16
+  - block: behaviors/console_param_get
+    prefix: GET_COOLSP
+    cfg:
+      command_name: get-coolsp
+      target_param: APP_DRIVER_PARAM_COOL_SETPOINT
+      value_kind: i16
+  - block: behaviors/console_param_cmd
+    prefix: CMD_FANSPD
+    cfg:
+      command_name: fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_FANSPD
+    cfg:
+      command_name: get-fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Portable AC

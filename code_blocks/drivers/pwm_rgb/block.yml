@@ -1,0 +1,20 @@
+description: 3-channel PWM RGB LED driver (HSB → RGB conversion done in driver)
+
+# Maps OnOff/brightness/hue/saturation to per-channel duty using a simple HSB→RGB conversion.
+# Suitable for analog RGB LEDs driven through MOSFETs / constant-current sinks.
+
+params:
+  red_gpio:   { type: int, required: true }
+  green_gpio: { type: int, required: true }
+  blue_gpio:  { type: int, required: true }
+  red_channel:   { type: int, default: 0 }
+  green_channel: { type: int, default: 1 }
+  blue_channel:  { type: int, default: 2 }
+  ledc_timer: { type: int, default: 0 }
+  freq_hz:    { type: int, default: 5000 }
+
+driver_params:
+  power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
+  brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+  hue_param:        { type: u8, default: APP_DRIVER_PARAM_HUE }
+  saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }

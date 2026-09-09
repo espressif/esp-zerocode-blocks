@@ -1,0 +1,3 @@
+# 16MB layout: full-size 3.5MB OTA slots + the 3.375MB model slot — the
+# flash budget that makes voice+transport combos real. Requires a 16MB board.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB="y"

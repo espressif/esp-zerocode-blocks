@@ -1,0 +1,22 @@
+description: Opens the ESP-NOW pairing window when a bus param fires — bind it to a button (a board_button / momentary_button event param) so "hold the button on both devices" pairs a kit. ESP-NOW products only.
+
+# Behavior on the espnow framework: a solution that watches ONE param and
+# calls zc_espnow_pair_start() when it goes true (or on every event fire).
+# The trigger is whatever publishes that param — a button block, a touch
+# gesture, a console command via console_param_cmd (mode: event).
+#
+# Why a param and not a GPIO: the button is usually already composed (the
+# board's own button, a factory-reset combo) and owning a second iot_button
+# on the same pin races the first. Reading the bus is how blocks share it.
+
+params:
+  window_seconds:
+    type: int
+    default: 30
+    description: How long the window stays open; both devices must have it open at once
+
+driver_params:
+  trigger_param:
+    type: bool
+    required: true
+    description: Bool/event param that opens the window when true (fired by a button block)

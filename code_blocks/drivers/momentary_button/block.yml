@@ -1,0 +1,13 @@
+description: Push-button without a local-param action — for controller products that emit Matter binding commands
+
+# Use this when the button shouldn't toggle a local driver param. The block sets up the
+# GPIO + iot_button device and registers a single-click callback that just logs and
+# delegates to a user-overridable hook. Wire your Matter command emission in app code.
+
+params:
+  gpio:
+    type: int
+    required: true
+  active_level:
+    type: int
+    default: 0

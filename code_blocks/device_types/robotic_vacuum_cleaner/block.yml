@@ -1,0 +1,57 @@
+description: "Robotic vacuum cleaner (Matter: robotic_vacuum_cleaner — RvcRunMode + RvcOperationalState; RainMaker: esp.device.other — Run Mode + Operational State)"
+device_types:
+  matter: robotic_vacuum_cleaner
+  rainmaker: esp.device.other
+  # Zigbee-absent: no ZCL appliance equivalent
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the RVC Run Mode + RVC Operational State delegates (mandatory); optional: RVC Clean Mode, Service Area"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub. RvcRunMode / RvcOperationalState handlers are
+# product-specific and must be wired up post-generation. The cluster is created with
+# default mode/state values from the esp_matter config struct.
+params:
+  label:
+    type: string
+    default: Robot Vacuum
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 330
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_start_cleaning:
+    type: string
+    default: "start cleaning"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "start cleaning"'
+  say_stop_cleaning:
+    type: string
+    default: "stop cleaning"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "stop cleaning"'
+  say_start_mapping:
+    type: string
+    default: "start mapping"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "start mapping"'
+
+driver_params:
+  run_mode_param:
+    type: u8
+    default: APP_DRIVER_PARAM_RVC_RUN_MODE
+    description: "Driver param ID for run mode (uint8_t: 0 idle, 1 cleaning, 2 mapping)"
+  state_param:
+    type: u8
+    default: APP_DRIVER_PARAM_RVC_STATE
+    description: "Driver param ID for operational state (uint8_t, RvcOperationalState values incl. 0x40 seeking charger, 0x41 charging, 0x42 docked; read-only from the cloud)"
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

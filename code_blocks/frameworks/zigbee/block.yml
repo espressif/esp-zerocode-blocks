@@ -1,0 +1,33 @@
+description: "Zigbee 3.0 protocol — esp-zigbee-lib router (ZCZR), joins any Zigbee hub via network steering"
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32c5, esp32c6, esp32h2, esp32s31]
+# Needs a radio? true — a transport, a mesh, a BLE link or an internet
+# connection is the point. On the ESP32-P4 the radio is a companion chip over
+# ESP-Hosted; a product with no radio framework gets no hosted stack at all.
+radio: true
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [zigbee, ...] by loading it, copying its components/ subtree into the
+# output, and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# Device-type blocks (device_types/*) populate the zigbee_includes /
+# zigbee_statics / zigbee_endpoint_create / zigbee_*_cases slots that get
+# rendered into components/app_zigbee/app_zigbee.cpp (whose stub source lives
+# under frameworks/zigbee/components/app_zigbee/).
+#
+# NOTE: Zigbee NVRAM lives in the default `nvs` partition. Any SoC with an
+# 802.15.4 radio.
+#
+# NOTE (cluster lists): the `ezb_zha_create_*()` device factory helpers
+# (`ezb_zha_create_on_off_switch()`, `ezb_zha_create_on_off_light()`, …)
+# create endpoints that already include the mandatory Basic / Identify /
+# Groups / Scenes clusters. Do NOT also add Groups/Scenes to those endpoints —
+# a duplicate
+# cluster registration compiles + passes review but CRASHES at boot (only
+# functional_testing catches it). Add only the EXTRA clusters the device needs.
+# If you need full control, build the cluster list manually instead of using the
+# helper (see the app_zigbee scaffold / the OTA-endpoint pattern).
+
+# Pin esp-zigbee-lib ~2.0.0. That is the only Zigbee component the app declares.

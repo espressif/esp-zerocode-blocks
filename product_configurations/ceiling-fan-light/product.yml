@@ -1,0 +1,152 @@
+id: ceiling-fan-light
+name: Ceiling Fan + Light
+description: Ceiling fan with integrated dimmable light. Two Matter endpoints (Fan + Dimmable Light).
+keywords: [ceiling fan, fan, light, dimmable, combo]
+frameworks: [matter]
+
+instances:
+  - block: drivers/pwm_led
+    prefix: LIGHT
+    cfg:
+      gpio: 4
+      ledc_channel: 0
+      ledc_timer: 0
+      freq_hz: 5000
+      power_param: APP_DRIVER_PARAM_LIGHT_POWER
+      brightness_param: APP_DRIVER_PARAM_LIGHT_BRIGHTNESS
+
+  - block: drivers/fan_pwm
+    prefix: FAN
+    cfg:
+      gpio: 5
+      ledc_channel: 1
+      ledc_timer: 1
+      freq_hz: 25000
+      speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - block: drivers/button
+    prefix: LIGHT_BTN
+    cfg:
+      gpio: 9
+      active_level: 0
+      target_param: APP_DRIVER_PARAM_LIGHT_POWER
+
+  - block: device_types/dimmable_light
+    prefix: LIGHT_EP
+    cfg:
+      power_param: APP_DRIVER_PARAM_LIGHT_POWER
+      brightness_param: APP_DRIVER_PARAM_LIGHT_BRIGHTNESS
+
+  - block: device_types/fan
+    prefix: FAN_EP
+    cfg:
+      speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── Long-press factory reset (button hold 5 s) ─────────────────
+  - block: behaviors/factory_reset_long_press
+    prefix: FR
+    cfg:
+      gpio: 9
+      active_level: 0
+      hold_time_ms: 5000
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_LPOWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_LIGHT_POWER
+      nvs_namespace: app
+      nvs_key: lpower
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_LBRI
+    cfg:
+      target_param: APP_DRIVER_PARAM_LIGHT_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: lbri
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_FANSPD
+    cfg:
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      nvs_namespace: app
+      nvs_key: fanspd
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LPOWER
+    cfg:
+      command_name: lpower
+      target_param: APP_DRIVER_PARAM_LIGHT_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LPOWER
+    cfg:
+      command_name: get-lpower
+      target_param: APP_DRIVER_PARAM_LIGHT_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LBRI
+    cfg:
+      command_name: lbri
+      target_param: APP_DRIVER_PARAM_LIGHT_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_LBRI
+    cfg:
+      command_name: get-lbri
+      target_param: APP_DRIVER_PARAM_LIGHT_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_cmd
+    prefix: CMD_FANSPD
+    cfg:
+      command_name: fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_FANSPD
+    cfg:
+      command_name: get-fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Ceiling Fan with Light

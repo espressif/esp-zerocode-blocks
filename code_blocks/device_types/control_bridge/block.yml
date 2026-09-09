@@ -1,0 +1,23 @@
+description: Control Bridge device type stub (multi-button universal remote — emits commands via bindings)
+# Matter-only today. RainMaker: no equivalent (models state-holders only).
+# Zigbee-absent: bridge semantics need dynamic endpoints (gateway-scale) — no block-level equivalent
+device_types:
+  matter: control_bridge
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client device — needs bindings to On/Off, Level Control, Color Control, not a delegate"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
+# this block contributes only bindings.
+
+params: {}
+param_refs: {}
+
+# Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
+
+# MQTT-absent: controllers are inputs — over MQTT they would be button/event emitters, which HA models as device_triggers (a later, different binding).
+
+# Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.
+maturity: stub

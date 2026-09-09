@@ -1,0 +1,32 @@
+description: "Smoke + CO Alarm device type (combined smoke and carbon monoxide detector) (Matter: smoke_co_alarm; RainMaker: esp.device.other; Zigbee: IAS Zone / Fire Sensor)"
+device_types:
+  matter: smoke_co_alarm
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_IAS_ZONE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Reports SmokeState + COState (each: 0 = Normal, 1 = Warning, 2 = Critical).
+# We model two parameters; either or both can be wired to driver-level detectors.
+params:
+  label:
+    type: string
+    default: Smoke CO Alarm
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 31
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  smoke_state_param:
+    type: u8
+    required: true
+    description: Driver param ID for smoke state (uint8 — 0=Normal, 1=Warning, 2=Critical)
+  co_state_param:
+    type: u8
+    required: true
+    description: Driver param ID for CO state (uint8 — same encoding)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

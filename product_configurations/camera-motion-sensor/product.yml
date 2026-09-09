@@ -1,0 +1,66 @@
+id: camera-motion-sensor
+name: Camera Motion Sensor
+description: >-
+  A camera that acts as a motion/occupancy sensor — frame-difference detection
+  on the classic ESP32-CAM board, with the on-board red LED as the motion
+  indicator. Fully local; the image never leaves the device.
+keywords: [camera, motion, occupancy, vision, esp32-cam, presence, detector]
+
+# First frameworks: [vision] product. Pin map IS the AI-Thinker ESP32-CAM —
+# a DVP camera consumes most of the chip's pins, so unlike other products
+# there is no cross-chip pin story at all: the chip/pin warnings for c3/c6
+# in validation are expected and unfixable (those chips have no camera
+# interface; the vision profile excludes them).
+#
+# Privacy by construction: frames are diffed in DRAM and discarded — nothing
+# is stored, nothing is transmitted (no network stack in this product).
+frameworks: [vision]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32, esp32s3]
+
+instances:
+  - block: drivers/camera_motion_dvp
+    prefix: CAM
+    cfg:
+      pixel_threshold: 25
+      area_threshold_pct: 3
+      hold_ms: 10000
+      poll_ms: 200
+
+  - block: device_types/occupancy_sensor
+    prefix: OCC
+    cfg:
+      label: Motion
+      occupied_param: APP_DRIVER_PARAM_OCCUPANCY
+
+  # ── On-board red LED (GPIO 33 on the AI-Thinker board, active low)
+  #     mirrors the occupancy param ─────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 33
+      active_level: 0
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 33
+      active_level: 0
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_get
+    prefix: GET_OCC
+    cfg:
+      command_name: get-motion
+      target_param: APP_DRIVER_PARAM_OCCUPANCY
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Camera Motion Sensor

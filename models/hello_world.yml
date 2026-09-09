@@ -1,0 +1,28 @@
+# The framework's reference model. Vendored (not pulled from the component)
+# because the framework must LINK with no product-supplied model at all — it is
+# what ml-inference-demo and CI compile.
+description: Sine regressor. A SMOKE TEST — its output is meaningless. Present so the framework links and runs standalone; never ship it in a product.
+
+source:
+  kind: vendored
+  path: code_blocks/frameworks/ml/components/app_tflite/model_reference.cc
+symbol: zc_tflite_reference_model
+size_bytes: 2488
+license: Apache-2.0
+license_holder: The TensorFlow Authors
+
+input:  { width: 1, height: 1, channels: 1, dtype: int8 }
+output: { count: 1, labels: [sin_x] }
+
+ops_profile: minimal
+
+arena:
+  base_bytes: 4096          # upstream's example declares 2000; 4 KB is our default
+  scratch_bytes: 0          # one FullyConnected — esp-nn has no conv scratch to want
+  source: upstream-declared
+  measured_on: []
+
+task_stack_bytes: 4096
+
+chips: [esp32, esp32c3, esp32c6, esp32s3, esp32p4, esp32s31]
+consumed_by: [drivers/ml_classifier]

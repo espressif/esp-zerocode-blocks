@@ -1,0 +1,85 @@
+description: >-
+  EK79007 MIPI-DSI LCD panel (1024x600, the 7" screen on the
+  ESP32-P4-Function-EV-Board) for the display framework. Owns the DSI bus +
+  DPI panel and creates the LVGL display; contributes nothing without
+  frameworks: [display]. esp32p4 only — no other chip in the lineup has a
+  MIPI-DSI host.
+
+# The P4's first-class display path. Same contract as display_ili9341_spi: one
+# panel block per product, its display_node_init assigns the shared `s_disp`.
+# Everything else about the display framework (cards, the LVGL lock, the param
+# bus) is unchanged — which is the point of panels being driver blocks.
+#
+# NO PIN PARAMS, unlike every other display driver: MIPI-DSI runs on dedicated
+# D-PHY pads, not GPIO matrix pins, so there is nothing to assign. That also
+# means it costs none of the P4's 31 usable GPIOs — the whole pin budget stays
+# available for sensors and buttons.
+#
+# FRAMEBUFFERS LIVE IN PSRAM, and that is not tunable here: 1024x600 at 16bpp
+# is 1.2 MB per buffer, against the P4's 768 KB of internal SRAM. The block
+# turns PSRAM on itself (sdkconfig below) rather than relying on a product to
+# remember, and asks esp_lvgl_port for spiram buffers. A product that wants
+# tear-free full-frame double buffering needs ~2.4 MB and should say so
+# explicitly via extra_sdkconfig — the default here is a partial buffer, which
+# is what fits comfortably alongside a Matter-sized app.
+#
+# WHAT IS VERIFIED: this builds for esp32p4 against ESP-IDF 5.5.4 and the
+# pinned esp_lcd_ek79007. It has NOT been brought up on a physical panel —
+# nobody has run it on a board yet. Two things a real bring-up will need and
+# this block deliberately does not pretend to do:
+#   - PANEL RESET on the Function EV Board goes through a TCA9554 I2C IO
+#     expander, not a GPIO. reset_gpio_num is -1 here, so the panel relies on
+#     its power-on reset. A board that wires RST to a real GPIO can pass
+#     reset_gpio; the expander path wants its own small block.
+#   - TOUCH on that board is a GT911 (I2C), which does not exist as a block
+#     yet — display_touch_ft5x06 is a different controller. A product using
+#     this panel today is display-only.
+#
+# Versions: esp_lcd_ek79007 1.x + the lvgl/esp_lvgl_port pair the display
+# framework pins (lvgl 9.4 / esp_lvgl_port 2.7). lvgl_port_add_disp_dsi is a
+# port-2.x API; a major bump of either is an API review, not a routine bump.
+
+cmake_priv_requires:
+  # The DSI host driver is INSIDE esp_lcd (components/esp_lcd/dsi) in IDF 5.5 —
+  # there is no separate esp_lcd_mipi_dsi component, and naming one fails
+  # configure with a "could not be found" hint that reads like a typo.
+  app_display: [espressif__esp_lcd_ek79007, esp_lcd, esp_driver_gpio]
+
+# PSRAM is a hard requirement, not a preference — see the framebuffer note.
+# Hex mode + 200 MHz is what the P4 modules carry; a board with quad PSRAM can
+# override via extra_sdkconfig.
+sdkconfig:
+  CONFIG_SPIRAM: 'y'
+  CONFIG_SPIRAM_MODE_HEX: 'y'
+  CONFIG_SPIRAM_SPEED_200M: 'y'
+  CONFIG_SPIRAM_USE_MALLOC: 'y'
+
+params:
+  hres: { type: int, default: 1024 }
+  vres: { type: int, default: 600 }
+  dpi_clock_mhz:
+    type: int
+    default: 52
+    description: DPI pixel clock. 52 MHz is 60 Hz at 1024x600 with the stock porches.
+  lane_bit_rate_mbps:
+    type: int
+    default: 1000
+    description: D-PHY lane rate. Must clear the pixel clock with the porch overhead.
+  reset_gpio:
+    type: int
+    default: -1
+    description: >-
+      Panel reset GPIO, or -1 for none. -1 on the Function EV Board, whose RST
+      sits behind an I2C IO expander (see the note above).
+  backlight_gpio:
+    type: int
+    default: -1
+    description: >-
+      Backlight enable GPIO, active high, or -1 if always on / behind an
+      expander.
+  buffer_lines:
+    type: int
+    default: 100
+    description: >-
+      Partial-buffer height in lines. 100 lines at 1024 wide is ~200 KB per
+      buffer in PSRAM, double buffered.

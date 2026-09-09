@@ -1,0 +1,15 @@
+CONFIG_OPENTHREAD_ENABLED="y"
+CONFIG_ENABLE_WIFI_STATION="n"
+CONFIG_OPENTHREAD_RADIO_NATIVE="y"
+CONFIG_OPENTHREAD_FTD="y"
+CONFIG_MBEDTLS_CMAC_C="y"
+CONFIG_LWIP_IPV6="y"
+# Thread is IPv6-only — turn off the IPv4 the framework leaves on for Wi-Fi.
+CONFIG_DISABLE_IPV4="y"
+CONFIG_LWIP_IPV4="n"
+# Override the framework's Wi-Fi-shaped IPv6 defaults (fragments append
+# later, so these take effect): esp-matter Thread examples use 8 addresses +
+# multicast ping; SLAAC off — OpenThread assigns its own addresses.
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING="y"
+CONFIG_LWIP_IPV6_AUTOCONFIG="n"

@@ -1,0 +1,23 @@
+description: Drives a u8 LED pattern_param from onboarding + connectivity state (Matter commissioning / RainMaker provisioning) — the user-visible signal of "what is this device doing right now"
+
+# SINGLE-OWNER CONTRACT: the status LED is owned solely by drivers/status_led.
+# This block never touches the pin — it only pushes a u8 onto the shared
+# LED_PATTERN param, which drivers/status_led consumes and renders through its
+# one led_indicator handle. Never gpio_set_level() the LED pin from here.
+#
+# Same-block multi-framework behavior: the Matter side lives in
+# matter_event_cases, the RainMaker side in rainmaker_event_cases — only the
+# selected frameworks' code is generated.
+#
+# Standard mapping (shared vocabulary with drivers/status_led):
+#   - Boot, unprovisioned:     slow blink (2)  — "I'm waiting to be set up"
+#   - Onboarding in flight:    fast blink (3)  — "pairing/provisioning"
+#   - Onboarding complete:     solid (1)       — "online"
+#   - Lost network:            breathe (4)     — "trying to reconnect"
+#   - Reset to unprovisioned:  slow blink (2)
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 LED pattern param (read by behaviors/blink_pattern or drivers/status_led wiring)

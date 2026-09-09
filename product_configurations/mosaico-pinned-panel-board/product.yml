@@ -1,0 +1,85 @@
+id: mosaico-pinned-panel-board
+name: ESP-Mosaico Pinned Panel (board)
+description: >-
+  A HAND-PINNED CO5300 + CST9220 display product paired with the esp_mosaico
+  board definition — the step-aside sample. The display and touch blocks state
+  the board's own pins; because the board already carries `display_lcd` and
+  `lcd_touch` devices, both blocks step aside (their bmgr `provided_by`
+  matches) and the board's devices are the one owner. The light is the
+  board's own status LED through drivers/board_gpio_ctrl.
+keywords: [mosaico, esp32s31, display, touchscreen, board-manager, bmgr, step-aside, co5300, cst9220]
+
+# WHY THIS PRODUCT EXISTS. mosaico-room-panel-board proves the board can
+# CONTRIBUTE the display (no display block at all); this one proves the other
+# half of the same contract: a product that DOES carry hand-pinned display
+# blocks, handed a board that already owns that hardware, steps aside instead
+# of double-initializing — and the validator agrees with the generator that
+# those pins are not conflicts (they render nowhere). The validator used to
+# re-derive that decision separately and got it wrong: an 11-pin conflict
+# wall for a composition the generator handled cleanly.
+#
+# THE BOARD IS NOT NAMED HERE — the board.yaml beside this file says what
+# hardware this sample runs on. One of the catalog's SAMPLE board files.
+#
+# Display-only (no transport) on purpose: this product must fail for
+# board/step-aside reasons only.
+frameworks: [display]
+ci_chips: [esp32s31]
+
+instances:
+  # ── HAND-PINNED panel + touch, on the board's own wiring ──────────
+  #     Same cfg as mosaico-room-panel. On a bare module these pins are the
+  #     product's claims; on THIS board the definition already declares the
+  #     CO5300 (`display_lcd`) and CST9220 (`lcd_touch`), so both blocks step
+  #     aside: their mapped slots are dropped, the board manager brings the
+  #     hardware up, and the display framework fetches the handles.
+  - block: drivers/display_co5300_qspi
+    prefix: PANEL
+    cfg:
+      spi_host: 1
+      sclk_gpio: 44
+      d0_gpio: 36
+      d1_gpio: 51
+      d2_gpio: 35
+      d3_gpio: 9
+      cs_gpio: 50
+      rst_gpio: 42
+      hres: 480
+      vres: 480
+
+  - block: drivers/display_touch_cst9220
+    prefix: TOUCH
+    cfg:
+      i2c_port: 0
+      sda_gpio: 0
+      scl_gpio: 1
+      int_gpio: 6
+      x_max: 480
+      y_max: 480
+
+  # ── The light — the board's own status LED, by ADAPTER not by pin.
+  #     (drivers/relay on GPIO 3 would collide with the board's
+  #     `gpio_status_led`, and the validator now names this block as the fix.)
+  - block: drivers/board_gpio_ctrl
+    prefix: LAMP
+    cfg:
+      device: status_led
+      param_id: APP_DRIVER_PARAM_POWER
+
+  # Drive it from the console, so the product is testable without a transport.
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Mosaico Pinned Panel
+# Bench fixture, not a product: proves a build path.
+internal: true

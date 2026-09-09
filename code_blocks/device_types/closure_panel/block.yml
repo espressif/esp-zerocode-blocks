@@ -1,0 +1,19 @@
+description: "Closure Panel device type (a panel of a multi-panel closure — louvre, slat, shutter section; Matter ClosureDimension with the Positioning + Translation features, linear motion). SetTarget drives a position param via a delegate."
+# Matter-only today. RainMaker/Zigbee: no equivalent (composed sub-device of a closure).
+device_types:
+  matter: closure_panel
+
+# SetTarget/Step are handled by a ClosureDimension delegate that writes
+# position_param; no attribute<->driver reflection yet, so from the validator's
+# attribute-wiring view this is endpoint_only. check.py keeps this in step.
+matter_wiring: endpoint_only
+matter_wiring_note: "Matter-only; ClosureDimension SetTarget handled by a delegate (a command, not attribute wiring) driving the position param; attribute feedback is a follow-up"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+driver_params:
+  position_param:
+    type: u16
+    required: true
+    description: Driver param ID the delegate writes on SetTarget (u16 position, 0 closed .. 10000 open; pair with drivers/curtain_motor)

@@ -1,0 +1,37 @@
+description: Polled GPIO input that publishes a boolean param (PIR, reed switch, leak probe, etc.)
+
+# Reads a GPIO at a configurable interval, debounces it, and publishes its level (after
+# optional inversion) as a boolean driver param. The driver OWNS that param: it re-asserts
+# its debounced reading whenever the bus value differs (a console override, a controller
+# bug, anything), so a stale write can never stick past the next poll. Suitable for any binary sensor whose state appears as a digital
+# logic level. For low-latency or interrupt-driven use cases, replace this with a dedicated
+# block that uses GPIO ISR.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO to read
+  pull:
+    type: string
+    default: pullup
+    enum: [pullup, pulldown, none]
+    description: Internal pull resistor direction
+  active_level:
+    type: int
+    default: 1
+    description: Logic level that means "asserted" (matches what target_param=true should mean)
+  poll_interval_ms:
+    type: int
+    default: 250
+    description: Polling period (ms)
+  debounce_ms:
+    type: int
+    default: 20
+    description: "A level must hold for this long (rounded up to whole polls) before it is published — contact bounce on reed switches, floats and buttons otherwise becomes a burst of edges on the param bus. 0 disables (publish on the first differing sample)."
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Driver param ID to publish (boolean)

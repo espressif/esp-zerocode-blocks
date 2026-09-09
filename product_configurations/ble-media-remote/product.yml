@@ -1,0 +1,71 @@
+id: ble-media-remote
+name: BLE Media Remote
+description: >-
+  A Bluetooth media remote — a volume knob (rotary encoder) and a mute button
+  that pair with any phone, PC, or TV as a standard BLE HID consumer-control
+  device. No app, no hub: it shows up in the host's Bluetooth settings as
+  "ZeroCode Remote".
+keywords: [ble, bluetooth, hid, remote, media, volume, knob, mute, encoder]
+
+# First frameworks: [ble_hid] product — and the first product built on the
+# CONTROLLER device types (dimmer_remote), which every other framework
+# leaves orphaned: they're inputs, and transports model state-holders.
+# Here the binding is "what does this device SEND": encoder deltas → volume
+# up/down, button toggle → mute.
+#
+# Pairing is Just Works (no display for a passkey); bonds persist in NVS;
+# the device re-advertises on disconnect.
+frameworks: [ble_hid]
+
+instances:
+  # ── Volume knob ───────────────────────────────────────────────────
+  - block: drivers/encoder
+    prefix: KNOB
+    cfg:
+      a_gpio: 4
+      b_gpio: 5
+      position_param: APP_DRIVER_PARAM_DIAL_POSITION
+
+  # ── Mute button ───────────────────────────────────────────────────
+  - block: drivers/button
+    prefix: MUTE_BTN
+    cfg:
+      gpio: 3
+      active_level: 0
+      target_param: APP_DRIVER_PARAM_POWER
+
+  # ── The remote itself: params in → HID reports out ────────────────
+  - block: device_types/dimmer_remote
+    prefix: REMOTE
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      level_param: APP_DRIVER_PARAM_DIAL_POSITION
+
+  # ── Status LED ────────────────────────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_MUTE
+    cfg:
+      command_name: mute
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode BLE Media Remote

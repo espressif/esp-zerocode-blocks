@@ -1,0 +1,127 @@
+id: tunable-bulb
+name: Tunable White Bulb (CCT)
+description: 2-channel PWM warm/cool white bulb (Matter Color Temperature Light)
+keywords: [tunable, cct, color temperature, warm cool, smart bulb]
+frameworks: [matter]
+
+instances:
+  - block: drivers/pwm_led_2ch
+    prefix: BULB
+    cfg:
+      warm_gpio: 4
+      cool_gpio: 5
+      warm_channel: 0
+      cool_channel: 1
+      ledc_timer: 0
+      freq_hz: 5000
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      color_temp_param: APP_DRIVER_PARAM_COLOR_TEMP
+
+  - block: device_types/color_temperature_light
+    prefix: BULB
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      color_temp_param: APP_DRIVER_PARAM_COLOR_TEMP
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_BRIGHTNESS
+    cfg:
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      nvs_namespace: app
+      nvs_key: brightness
+
+  - block: behaviors/nvs_persist_u16
+    prefix: PERSIST_CCT
+    cfg:
+      target_param: APP_DRIVER_PARAM_COLOR_TEMP
+      nvs_namespace: app
+      nvs_key: cct
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_POWER
+    cfg:
+      command_name: get-power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_BRIGHTNESS
+    cfg:
+      command_name: brightness
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_BRIGHTNESS
+    cfg:
+      command_name: get-brightness
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_cmd
+    prefix: CMD_CCT
+    cfg:
+      command_name: cct
+      target_param: APP_DRIVER_PARAM_COLOR_TEMP
+      value_kind: u16
+  - block: behaviors/console_param_get
+    prefix: GET_CCT
+    cfg:
+      command_name: get-cct
+      target_param: APP_DRIVER_PARAM_COLOR_TEMP
+      value_kind: u16
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Tunable Bulb

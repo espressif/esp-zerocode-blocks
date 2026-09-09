@@ -1,0 +1,63 @@
+description: >-
+  Self-contained bit-banged DHT22 / AM2301 / DHT21 / DHT11 single-wire
+  temperature + humidity sensor. No external component — the single-wire
+  protocol is bundled in-block (same self-contained style as the I2C
+  sht4x/aht21 blocks). Publishes temperature + humidity via
+  app_driver_set_param so temperature_sensor + humidity_sensor endpoints
+  can bind. ESP32-C3 / single-core safe.
+
+# DHT single-wire protocol (DHT22/AM2301/DHT21 and DHT11 share framing):
+#   1. MCU pulls the data line LOW >=1 ms (DHT22) / >=18 ms (DHT11) to wake it.
+#   2. MCU releases (pull-up high); sensor pulls low ~80 us then high ~80 us.
+#   3. Sensor sends 40 bits: each bit = ~50 us low + a high pulse whose width
+#      encodes the value (~26-28 us = 0, ~70 us = 1).
+#   4. 40 bits = [hum_hi, hum_lo, temp_hi, temp_lo, checksum].
+#      checksum = (sum of first 4 bytes) & 0xFF.
+#
+# Decoding differs by variant (selected via cfg.sensor_variant), branched at
+# runtime off a single generated flag (cfg.is_dht11):
+#   DHT22/AM2301/DHT21: 16-bit, RH = raw/10 %; T = raw/10 °C
+#                       (temp high bit 0x8000 = sign).
+#   DHT11:              8-bit integer bytes; RH = hum_hi %; T = temp_hi °C.
+#
+# The bit read is timing-critical (microsecond pulse widths), so it runs
+# inside a portMUX critical section with interrupts masked — a scheduler
+# tick or ISR mid-frame would corrupt the timing and fail the checksum.
+# DHT sensors sample at <=0.5 Hz; poll_interval_ms is clamped to >=2000.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: Single-wire data GPIO (needs an external ~4.7k-10k pull-up to VCC)
+  sensor_variant:
+    type: string
+    default: dht22
+    enum: [dht22, am2301, dht21, dht11]
+    description: >-
+      Sensor family, for documentation/validation. dht22/am2301/dht21 share
+      16-bit /10 scaling; dht11 uses 8-bit integer bytes. When the variant is
+      dht11 you MUST also set is_dht11: 1 (the decode/start-pulse branch keys
+      off is_dht11, since the template engine only supports truthiness, not
+      string equality).
+  is_dht11:
+    type: int
+    default: 0
+    description: >-
+      Set to 1 for DHT11 (longer start pulse + 8-bit integer decode); leave 0
+      for DHT22/AM2301/DHT21. Decoupled from sensor_variant because slot
+      conditionals can only test truthiness.
+  poll_interval_ms:
+    type: int
+    default: 2000
+    description: How often to read (ms). Clamped to >=2000 (DHT max sample rate ~0.5 Hz).
+
+driver_params:
+  temp_param:
+    type: i16
+    required: true
+    description: Driver param ID for temperature (int16, hundredths of °C, e.g. 2500 = 25.00 °C)
+  humidity_param:
+    type: i16
+    required: true
+    description: Driver param ID for humidity (int16, hundredths of %RH, e.g. 5500 = 55.00 %RH)

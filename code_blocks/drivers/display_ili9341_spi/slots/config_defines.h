@@ -1,0 +1,10 @@
+#define {{prefix}}_LCD_SPI_HOST  {{cfg.spi_host}}
+#define {{prefix}}_LCD_SCLK      {{cfg.sclk_gpio}}
+#define {{prefix}}_LCD_MOSI      {{cfg.mosi_gpio}}
+#define {{prefix}}_LCD_DC        {{cfg.dc_gpio}}
+#define {{prefix}}_LCD_CS        {{cfg.cs_gpio}}
+#define {{prefix}}_LCD_RST       {{cfg.rst_gpio}}
+#define {{prefix}}_LCD_BACKLIGHT {{cfg.backlight_gpio}}
+#define {{prefix}}_LCD_HRES      {{cfg.hres}}
+#define {{prefix}}_LCD_VRES      {{cfg.vres}}
+#define {{prefix}}_LCD_PCLK_HZ   {{cfg.pclk_hz}}

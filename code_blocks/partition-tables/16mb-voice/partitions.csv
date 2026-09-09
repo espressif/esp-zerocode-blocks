@@ -1,0 +1,26 @@
+# 16MB flash layout WITH an esp-sr model partition — for voice+transport
+# combos on 16MB boards. OTA slots 4.5MB each; `model` sized from measured
+# srmodels.bin (wn9 + mn7_en = 3.05MB).
+#
+# SLOTS WERE 3.5MB AND THE TABLE LEFT 5.4MB OF THE PART UNUSED. Everything
+# ended at 0xA90000 on a 0x1000000 device — so a voice+Matter build could
+# overflow its OTA slot while a third of the flash sat empty. Measured: audio +
+# matter on the ESP32-S31 links to 0x3cdef0 (3.80 MB), which overflowed 3.5 MB
+# by 319 KB and now fits with 0.7 MB to spare. The S31 is what exposed it — its
+# Matter is ~29% larger than the C3's — but the waste was there for every 16MB
+# board.
+#
+# Still ends at 0xC90000, leaving ~3.4MB unallocated on purpose: room for the
+# model partition to grow when a second language or a larger MultiNet lands,
+# without moving every offset above it again.
+#
+# Name,          Type, SubType,  Offset,    Size,     Flags
+esp_secure_cert, 0x3F, ,         0xd000,    0x2000,   encrypted
+nvs,             data, nvs,      0x10000,   0xC000,
+nvs_keys,        data, nvs_keys, ,          0x1000,   encrypted
+otadata,         data, ota,      ,          0x2000,
+phy_init,        data, phy,      ,          0x1000,
+ota_0,           app,  ota_0,    0x20000,   0x480000,
+ota_1,           app,  ota_1,    0x4A0000,  0x480000,
+fctry,           data, nvs,      0x920000,  0x6000,
+model,           data, spiffs,   0x930000,  0x360000,

@@ -1,0 +1,62 @@
+description: "Dimmable light — on/off + brightness (Matter: dimmable_light; RainMaker: esp.device.lightbulb; Zigbee: Dimmable Light)"
+device_types:
+  matter: dimmable_light
+  rainmaker: esp.device.lightbulb
+  zigbee: EZB_ZHA_DIMMABLE_LIGHT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Dimmable Light
+    description: "User-visible device name (RainMaker device name; must be unique per node)"
+  zb_endpoint:
+    type: int
+    default: 14
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 110
+    description: >-
+      First voice-command phrase id for this instance (frameworks: [audio]).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_light:
+    type: string
+    default: "turn on the light"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the light"'
+  say_turn_off_the_light:
+    type: string
+    default: "turn off the light"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the light"'
+  say_make_it_brighter:
+    type: string
+    default: "make it brighter"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make it brighter"'
+  say_make_it_dimmer:
+    type: string
+    default: "make it dimmer"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make it dimmer"'
+  say_set_brightness_to_maximum:
+    type: string
+    default: "set brightness to maximum"
+    description: 'Voice phrase (customizable) for command slot 4 — default: "set brightness to maximum"'
+  say_set_brightness_to_minimum:
+    type: string
+    default: "set brightness to minimum"
+    description: 'Voice phrase (customizable) for command slot 5 — default: "set brightness to minimum"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID for OnOff (boolean)
+  brightness_param:
+    type: u8
+    default: APP_DRIVER_PARAM_BRIGHTNESS
+    description: Driver param ID for CurrentLevel (1–254; 0 and 255 are reserved)

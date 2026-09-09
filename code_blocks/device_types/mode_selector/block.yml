@@ -1,0 +1,61 @@
+description: "Mode selector — named-mode selection; Matter cluster mappings wired by user code (Matter: mode_select; RainMaker: esp.device.other)"
+device_types:
+  matter: mode_select
+  rainmaker: esp.device.other
+  zigbee: "manufacturer-specific custom-attribute endpoint (no native ZHA device-ID constant)"
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the Mode Select delegate (mandatory)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# The Matter ModeSelect cluster mappings are still a stub (wired by user
+# code); the RainMaker binding exposes the mode index directly as a
+# writable integer param (0 .. mode_count-1).
+params:
+  mode_count:
+    type: int
+    default: 4
+    description: Number of selectable modes (RainMaker bounds are 0 .. mode_count-1)
+  label:
+    type: string
+    default: Mode Selector
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 62
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 340
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_set_mode_one:
+    type: string
+    default: "set mode one"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "set mode one"'
+  say_set_mode_two:
+    type: string
+    default: "set mode two"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "set mode two"'
+  say_set_mode_three:
+    type: string
+    default: "set mode three"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "set mode three"'
+
+driver_params:
+  mode_param:
+    type: u8
+    required: true
+    description: Driver param ID for the current mode index (uint8, 0-based)
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

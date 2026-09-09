@@ -1,0 +1,34 @@
+id: lm-storyteller-demo
+name: On-Device Storyteller
+description: The device writes a story itself — a 2 MB language model generating coherent prose at interactive speed, with no network
+keywords: [lm, llm, story, generation, offline, tinystories]
+frameworks: [lm]
+
+# What this exists to prove: the lm framework is not a one-model toy. The
+# command parser is 264 KB and answers a fixed schema; this is 2 MB of weights
+# sampling freely, and it still runs at ~26.7 tok/s on esp32s31.
+#
+# PARTITION TABLE IS LOAD-BEARING. 2.0 MB of weights plus ~255 KB of app needs
+# 2,349,504 B and the default 4mb table's OTA slot is 1,966,080 B — 20% short.
+# 8mb gives a 3 MB slot at 75% full. The engine errors if this is omitted, so
+# the failure is a validation message rather than an image that overflows flash
+# at flash time.
+partition_table: 8mb
+
+# The story model needs the vector kernels and PSRAM. esp32s31 is the
+# hardware-validated target; esp32s3 uses the Espressif SIMD path.
+ci_chips: [esp32s31, esp32s3]
+
+instances:
+  - block: behaviors/lm_storyteller
+    prefix: STORY
+    cfg:
+      command_name: story
+      max_tokens: 200
+      temperature_pct: 80
+
+  - include: console-diagnostics
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode On-Device Storyteller

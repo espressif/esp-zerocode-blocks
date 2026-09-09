@@ -1,0 +1,11 @@
+description: NVS-persisted boot counter, incremented and logged at every startup. Helps detect flapping devices and provides a quick "device age in boots" metric for support.
+
+params:
+  nvs_namespace:
+    type: string
+    default: app
+    description: NVS namespace to store the counter under
+  nvs_key:
+    type: string
+    default: bootcount
+    description: NVS key (uint32_t)

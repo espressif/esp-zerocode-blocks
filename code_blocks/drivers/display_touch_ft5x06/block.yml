@@ -1,0 +1,29 @@
+description: >-
+  FT5x06/FT6x36 capacitive touch controller (I2C) for the display framework —
+  makes the panel a touchscreen. Order it AFTER the panel block in
+  product.yml; it registers an LVGL input device against `s_disp`.
+
+# Optional companion to drivers/display_ili9341_spi (capacitive touch
+# variants of the common TFT modules carry an FT6236/FT6336 on I2C). Uses
+# esp_lcd_touch's own I2C panel-io path — it does not ride peripherals/
+# i2c_bus, because esp_lcd_touch owns its bus handle. It ADOPTS an existing
+# bus on its port when one is already there and only creates one otherwise,
+# so sharing a port with peripherals/i2c_bus is benign either way round.
+# x/y max must match the panel resolution or touches land on the wrong widgets.
+
+cmake_priv_requires:
+  app_display: [espressif__esp_lcd_touch_ft5x06, espressif__esp_lcd_touch, esp_driver_i2c, esp_lcd]
+
+params:
+  i2c_port: { type: int, default: 0 }
+  sda_gpio: { type: int, required: true }
+  scl_gpio: { type: int, required: true }
+  int_gpio:
+    type: int
+    default: -1
+    description: Touch interrupt GPIO (-1 = polled)
+  rst_gpio:
+    type: int
+    default: -1
+  x_max: { type: int, default: 240, description: Must match the panel hres }
+  y_max: { type: int, default: 320, description: Must match the panel vres }

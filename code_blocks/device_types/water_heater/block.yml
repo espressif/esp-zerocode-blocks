@@ -1,0 +1,53 @@
+description: "Water Heater (Matter: water_heater — OnOff + Thermostat; RainMaker: esp.device.other — no standard water-heater type in this SDK)"
+device_types:
+  matter: water_heater
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_THERMOSTAT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Water Heater
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 44
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 280
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_water_heater:
+    type: string
+    default: "turn on the water heater"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the water heater"'
+  say_turn_off_the_water_heater:
+    type: string
+    default: "turn off the water heater"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the water heater"'
+  say_make_the_water_hotter:
+    type: string
+    default: "make the water hotter"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make the water hotter"'
+  say_make_the_water_cooler:
+    type: string
+    default: "make the water cooler"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make the water cooler"'
+
+driver_params:
+  power_param:
+    type: bool
+    required: true
+  setpoint_param:
+    type: i16
+    required: true
+    description: Heating setpoint (int16, hundredths of °C)

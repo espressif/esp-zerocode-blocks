@@ -1,0 +1,82 @@
+id: rainmaker-temp-sensor
+name: RainMaker Temperature Sensor
+description: Cloud-connected temperature + humidity sensor reporting to the ESP RainMaker app (I2C SHT-class sensor; read-only telemetry reference for the rainmaker binding)
+keywords: [rainmaker, cloud, temperature, humidity, sensor, climate]
+frameworks: [rainmaker]
+
+instances:
+  # ── Hardware ────────────────────────────────────────────────
+  - block: drivers/i2c_temp_humidity
+    prefix: SENSOR
+    cfg:
+      i2c_port: 0
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_TEMPERATURE
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  # ── Device types (RainMaker bindings, read-only) ────────────
+  - block: device_types/temperature_sensor
+    prefix: TEMP
+    cfg:
+      value_param: APP_DRIVER_PARAM_TEMPERATURE
+      label: Temperature
+  - block: device_types/humidity_sensor
+    prefix: HUM
+    cfg:
+      value_param: APP_DRIVER_PARAM_HUMIDITY
+      label: Humidity
+
+  - include: baseline-connectivity
+
+  # ── Status LED (GPIO 10 — safe on all supported chips) ──────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Console + diagnostics ───────────────────────────────────
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_version
+    prefix: CON_VER
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}
+  - block: behaviors/console_param_get
+    prefix: GET_TEMP
+    cfg:
+      command_name: get-temp
+      target_param: APP_DRIVER_PARAM_TEMPERATURE
+      value_kind: i16
+  - block: behaviors/console_param_get
+    prefix: GET_HUM
+    cfg:
+      command_name: get-humidity
+      target_param: APP_DRIVER_PARAM_HUMIDITY
+      value_kind: u16
+  - include: diagnostics-core
+
+partition_table: 4mb
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode RainMaker Temp Sensor

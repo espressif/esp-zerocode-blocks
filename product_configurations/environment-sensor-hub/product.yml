@@ -1,0 +1,245 @@
+id: environment-sensor-hub
+name: Environment Sensor Hub
+description: >-
+  A multi-probe indoor environment station on ONE two-wire bus: three
+  temperature/humidity probes placed at different heights, CO2, VOC, light
+  level, the current and voltage of the supply feeding the fans and lamp it
+  sits beside, and a small OLED for a local readout. Everything reports to
+  Matter; nothing needs a phone to be read.
+keywords: [environment, sensor, hub, i2c, temperature, humidity, co2, voc, illuminance, oled, grow tent, greenhouse]
+frameworks: [matter]
+
+# WHY THIS PRODUCT EXISTS, and why it looks the way it does.
+#
+# Eight I2C sensor blocks (aht21, bh1750, ina219, oled_ssd1306, scd4x, sgp40,
+# sht3x, sht4x) were in NO catalog product, so CI never compiled one of them.
+# A block nothing builds rots quietly: it keeps passing every gate we have
+# right up to the day somebody's product is the first to instantiate it. This
+# product is where they are all built.
+#
+# It is a real archetype rather than a bag of parts. A grow tent, a server
+# closet or a fermentation room is monitored by SEVERAL probes at different
+# heights, because a single reading at one point in the room is the thing such
+# a monitor exists to stop you trusting:
+#
+#   CANOPY  SHT4x  @0x44  the air the plants/gear actually sit in
+#   ROOT    SHT3x  @0x45  down at floor/root level, where it is colder and wetter
+#   AMBIENT AHT21  @0x38  outside the enclosure, the baseline to compare against
+#
+# Three different PARTS for the same measurement is what a hub really looks
+# like: you buy whichever cheap two-wire probe is in stock, and the hub takes
+# it. It is also why the addresses matter — SHT3x and SHT4x both default to
+# 0x44, so the SHT3x is strapped to 0x45 here. Every one of the nine devices
+# below is on a distinct address:
+#
+#   0x23 BH1750 · 0x38 AHT21 · 0x3C SSD1306 · 0x40 INA219 · 0x44 SHT4x
+#   0x45 SHT3x · 0x59 SGP40 · 0x62 SCD4x
+#
+# THE BUS IS THE FIRST INSTANCE. Instance order is init order, and every block
+# below only TALKS on the bus (they declare `requires_bus:`); the validator
+# refuses this product if the provider ever moves down.
+#
+# Pin cost is two GPIOs for nine devices, which is the whole point of doing it
+# this way, and is why this product is chip-portable rather than pinned to one
+# board.
+#
+# NOT hardware-verified: the drivers are real protocol implementations and the
+# build is proven, but no bench has had all nine parts on one bus.
+
+instances:
+  # ── The shared I2C bus. FIRST, because init order is instance order. ──
+  - block: peripherals/i2c_bus
+    prefix: BUS
+    cfg:
+      port: 0
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+
+  # ── Three temperature/humidity probes, three placements ──────────────
+  - block: drivers/sht4x
+    prefix: CANOPY
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x44
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_CANOPY_TEMP
+      humidity_param: APP_DRIVER_PARAM_CANOPY_HUMIDITY
+
+  # 0x45, not the 0x44 default: the SHT4x above already holds that address.
+  - block: drivers/sht3x
+    prefix: ROOT
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x45
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_ROOT_TEMP
+      humidity_param: APP_DRIVER_PARAM_ROOT_HUMIDITY
+
+  - block: drivers/aht21
+    prefix: AMBIENT
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x38
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_AMBIENT_TEMP
+      humidity_param: APP_DRIVER_PARAM_AMBIENT_HUMIDITY
+
+  # ── Air: CO2 (SCD4x, a true NDIR part) and VOC (SGP40) ───────────────
+  - block: drivers/scd4x
+    prefix: CO2
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x62
+      poll_interval_ms: 6000
+      co2_param: APP_DRIVER_PARAM_CO2_PPM
+      air_quality_param: APP_DRIVER_PARAM_AIR_QUALITY
+
+  - block: drivers/sgp40
+    prefix: VOC
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x59
+      poll_interval_ms: 1000
+      raw_param: APP_DRIVER_PARAM_VOC_RAW
+
+  # ── Light level at the canopy ────────────────────────────────────────
+  - block: drivers/bh1750
+    prefix: LUX
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x23
+      poll_interval_ms: 1000
+      value_param: APP_DRIVER_PARAM_ILLUMINANCE
+
+  # ── What the enclosure's fans and lamp are drawing ───────────────────
+  - block: drivers/ina219
+    prefix: SUPPLY
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x40
+      poll_interval_ms: 2000
+      shunt_milliohm: 100
+      bus_voltage_mv_param: APP_DRIVER_PARAM_SUPPLY_MV
+      current_ma_param: APP_DRIVER_PARAM_SUPPLY_MA
+
+  # ── Local readout. The block gives app code a clear/print API on a
+  #     128x64 panel; it does not render the readings by itself, so this
+  #     is a screen a generated product can write to, not a dashboard. ──
+  - block: drivers/oled_ssd1306
+    prefix: SCREEN
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x3C
+
+  # ── Matter endpoints. One per probe, so the three placements stay
+  #     distinguishable in the controller — averaging them into one
+  #     endpoint would throw away the only thing a multi-probe monitor
+  #     knows that a single sensor does not. ──────────────────────────
+  - block: device_types/temperature_sensor
+    prefix: CANOPY_TEMP_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_CANOPY_TEMP
+
+  - block: device_types/humidity_sensor
+    prefix: CANOPY_HUM_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_CANOPY_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: ROOT_TEMP_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_ROOT_TEMP
+
+  - block: device_types/humidity_sensor
+    prefix: ROOT_HUM_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_ROOT_HUMIDITY
+
+  - block: device_types/temperature_sensor
+    prefix: AMBIENT_TEMP_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_AMBIENT_TEMP
+
+  - block: device_types/humidity_sensor
+    prefix: AMBIENT_HUM_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_AMBIENT_HUMIDITY
+
+  - block: device_types/air_quality_sensor
+    prefix: AIR_EP
+    cfg:
+      air_quality_param: APP_DRIVER_PARAM_AIR_QUALITY
+      co2_ppm_param: APP_DRIVER_PARAM_CO2_PPM
+
+  - block: device_types/light_sensor
+    prefix: LUX_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_ILLUMINANCE
+
+  # ── Reported over the console rather than bound to an endpoint, and
+  #     deliberately so. The SGP40 publishes RAW resistance counts, not
+  #     TVOC ppb — binding it to the air-quality endpoint's tvoc cluster
+  #     would put a number on the wire under a name it does not mean.
+  #     And there is no Matter device TYPE for a DC supply rail: the
+  #     electrical-sensor endpoint wants active power in mW, which an
+  #     INA219 alone does not report. Both are honest as diagnostics. ──
+  - block: behaviors/console_param_get
+    prefix: GET_VOC
+    cfg:
+      command_name: voc
+      target_param: APP_DRIVER_PARAM_VOC_RAW
+      value_kind: u16
+
+  - block: behaviors/console_param_get
+    prefix: GET_SUPPLY_MV
+    cfg:
+      command_name: supply-mv
+      target_param: APP_DRIVER_PARAM_SUPPLY_MV
+      value_kind: u32
+
+  - block: behaviors/console_param_get
+    prefix: GET_SUPPLY_MA
+    cfg:
+      command_name: supply-ma
+      target_param: APP_DRIVER_PARAM_SUPPLY_MA
+      value_kind: i16
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # Status-LED blocks share APP_DRIVER_PARAM_LED_PATTERN so blink_pattern
+  # arbitrates between commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Environment Sensor Hub

@@ -1,0 +1,28 @@
+schema: zc-board/1
+
+# THE HARDWARE, NOT THE PRODUCT.
+#
+# A product_configuration says what a product DOES; this file says what one
+# instance of it RUNS ON. They are separate because the same composition is a
+# bare module for one person and a devkit for the next — welding a board into
+# product.yml made a general catalog entry describe somebody's desk.
+#
+# In the product this is the user's answer, supplied by the host. In the
+# catalog it exists for exactly two SAMPLE products, this one and
+# mosaico-bmgr-probe, so CI keeps exercising the board path. No other product
+# has one, and none should grow one.
+
+# What the user picked: an esp-virtual-parts board id (boards/<id>/board.json).
+selected: esp32-c6-devkitc-1
+chip: esp32c6
+
+bmgr:
+  # The resolved esp-board-manager board directory. The mapping is DATA —
+  # esp-virtual-parts' board.json carries `bmgr_board` / `bmgr_fallback` for
+  # all 128 boards — not a string transform: `m5-*` resolves to `m5stack_*`,
+  # and the naive rule gets 63 of 128 right.
+  board: esp32_c6_devkitc_1
+  # exact: the pack defines this very board. Its WS2812 (gpio 8) and BOOT
+  # button (gpio 9) are therefore claimed, which is what makes the relay's
+  # gpio 10 a checkable choice rather than a hopeful one.
+  resolved_from: exact

@@ -1,0 +1,58 @@
+description: "Laundry dryer (Matter: laundry_dryer — OperationalState + LaundryDryerControls; RainMaker: esp.device.other — Dryness Level + Operational State)"
+device_types:
+  matter: laundry_dryer
+  rainmaker: esp.device.other
+  # Zigbee-absent: no ZCL appliance equivalent
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the Operational State delegate (mandatory); optional: Laundry Dryer Controls, Laundry Washer Mode; Temperature Control is attribute-wired, its delegate optional (only for the TemperatureLevel feature)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). LaundryDryerControls / OperationalState handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+
+params:
+  label:
+    type: string
+    default: Dryer
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 370
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_set_the_dryer_to_low:
+    type: string
+    default: "set the dryer to low"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "set the dryer to low"'
+  say_set_the_dryer_to_normal:
+    type: string
+    default: "set the dryer to normal"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "set the dryer to normal"'
+  say_set_the_dryer_to_extra:
+    type: string
+    default: "set the dryer to extra"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "set the dryer to extra"'
+
+driver_params:
+  dryness_param:
+    type: u8
+    default: APP_DRIVER_PARAM_DRYER_DRYNESS
+    description: "Driver param ID for selected dryness level (uint8_t: 0 low, 1 normal, 2 extra, 3 max)"
+  state_param:
+    type: u8
+    default: APP_DRIVER_PARAM_DRYER_STATE
+    description: "Driver param ID for operational state (uint8_t: 0 stopped, 1 running, 2 paused, 3 error; read-only from the cloud)"
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

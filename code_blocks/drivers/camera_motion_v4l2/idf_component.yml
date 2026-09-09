@@ -1,0 +1,7 @@
+dependencies:
+  # The modern camera stack: esp_video is the V4L2 layer over IDF's own
+  # esp_driver_cam (which builds its DVP controller whenever
+  # CONFIG_SOC_LCDCAM_CAM_SUPPORTED) plus esp_cam_sensor for the sensor itself.
+  # Both publish esp32s31 in their registry target lists; espressif/esp32-camera
+  # does not, and gates every source on esp32/s2/s3.
+  espressif/esp_video: "~2.4.1"

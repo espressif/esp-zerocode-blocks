@@ -1,0 +1,22 @@
+description: Drives a u8 LED pattern_param from the voice listening state — fast blink while the command window is open after the wake word, solid when idle. The user-visible "the device heard you".
+
+# The audio-framework sibling of behaviors/commissioning_led — the same
+# SINGLE-OWNER CONTRACT applies: this block never touches the pin, it only
+# pushes a u8 onto the shared LED_PATTERN param that drivers/status_led (via
+# behaviors/blink_pattern) renders. Never gpio_set_level() from here.
+#
+# Hooks audio_event_cases, which the generator renders into
+# app_audio.cpp's audio_on_event(int listening):
+#   listening = 1 → wake word detected, command window open → fast blink (3)
+#   listening = 0 → command handled or timed out            → solid (1)
+#
+# Pattern vocabulary is shared with drivers/status_led: 1 solid, 2 slow
+# blink, 3 fast blink, 4 breathe. A voice device is "online" from boot
+# (there is no onboarding), so logic_init sets solid rather than
+# commissioning_led's slow-blink-until-provisioned.
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 LED pattern param (read by behaviors/blink_pattern or drivers/status_led wiring)

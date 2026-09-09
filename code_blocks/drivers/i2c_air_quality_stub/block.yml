@@ -1,0 +1,33 @@
+description: I2C air-quality sensor stub. Publishes an AirQuality enum value periodically. Replace with real sensor (SCD4x, BME688, etc.).
+
+# CONFIGURES its own I2C bus (it takes its own sda_gpio/scl_gpio/freq_hz), so
+# it is a provider: a sensor block declaring `requires_bus:` on the same port
+# is satisfied by an instance of this one placed earlier in instances:.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c]
+
+provides_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_port: { type: int, default: 0 }
+  sda_gpio: { type: int, required: true }
+  scl_gpio: { type: int, required: true }
+  freq_hz:  { type: int, default: 100000 }
+  poll_interval_ms: { type: int, default: 30000 }
+  initial_quality:  { type: int, default: 1 }   # 1 = Good
+  initial_co2_ppm:  { type: int, default: 800 } # plausible indoor baseline
+
+driver_params:
+  air_quality_param:
+    type: u8
+    required: true
+  co2_ppm_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) param ID to publish CO2 concentration in ppm (uint16). Empty disables.
+maturity: stub

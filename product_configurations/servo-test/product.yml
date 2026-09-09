@@ -1,0 +1,59 @@
+id: servo-test
+name: Servo Test
+description: Minimal test product exercising the servo_pwm driver block (50 Hz RC servo)
+keywords: [servo, test, actuator]
+frameworks: [matter]
+
+instances:
+  - block: drivers/servo_pwm
+    prefix: SERVO
+    cfg:
+      gpio: 6
+      ledc_channel: 4
+      ledc_timer: 3
+      position_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # A dimmable_light endpoint drives the servo position (u8) via LevelControl,
+  # giving the servo_pwm driver a Matter consumer so the tree is coherent.
+  - block: device_types/dimmable_light
+    prefix: SERVO
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # Console command drives the servo position param from the shell.
+  - block: behaviors/console_param_cmd
+    prefix: CMD_SERVO
+    cfg:
+      command_name: servo
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+
+  - block: behaviors/console_param_get
+    prefix: GET_SERVO
+    cfg:
+      command_name: get-servo
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+
+  # ── Baseline behaviors ─────────
+  - block: behaviors/ota_basic
+    prefix: OTA
+    cfg: {}
+  - block: behaviors/factory_reset_power_cycle
+    prefix: FRPC
+    cfg:
+      count_threshold: 5
+      stable_window_ms: 5000
+
+  # ── Core diagnostic baseline ──────────
+  - block: behaviors/boot_reason_logger
+    prefix: BOOT_REASON
+    cfg: {}
+  - block: behaviors/task_watchdog
+    prefix: WDT
+    cfg: {}
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Servo Test

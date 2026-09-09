@@ -1,0 +1,83 @@
+id: rainmaker-smart-plug
+name: RainMaker Smart Plug
+description: Cloud-connected smart plug with a manual toggle button — controlled via the ESP RainMaker app (relay + button, bool actuator reference for the rainmaker binding)
+keywords: [rainmaker, cloud, plug, socket, outlet]
+frameworks: [rainmaker]
+
+instances:
+  # ── Hardware ────────────────────────────────────────────────
+  - block: drivers/relay_with_button
+    prefix: APP
+    cfg:
+      relay_gpio: 7
+      relay_active_level: 1
+      button_gpio: 9
+      button_active_level: 0
+      param_id: APP_DRIVER_PARAM_POWER
+
+  # ── Device type (RainMaker binding) ─────────────────────────
+  - block: device_types/smart_plug
+    prefix: APP
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      label: Smart Plug
+
+  - include: baseline-connectivity
+
+  # ── Status LED (GPIO 10 — safe on all supported chips; 15 is a
+  #    flash pin on esp32c3) ──────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Persistence + console ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_version
+    prefix: CON_VER
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_POWER
+    cfg:
+      command_name: get-power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+partition_table: 4mb
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode RainMaker Smart Plug

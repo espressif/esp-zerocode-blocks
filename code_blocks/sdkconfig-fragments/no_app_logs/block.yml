@@ -1,0 +1,8 @@
+description: Strip all application-side log output (ESP_LOGI / ESP_LOGW / ESP_LOGE).
+
+# Original notes from the .defaults file:
+#   Strip all application-side log output (ESP_LOGI / ESP_LOGW / ESP_LOGE).
+#   The Matter profile already strips Matter SDK logs; this extends that
+#   to our own app code. Saves ~20-50 KB by dropping log format strings.
+#   Use only for production builds where serial logs aren't read.
+#   sdkconfig_fragments: [no_app_logs]

@@ -1,0 +1,96 @@
+id: ble-mesh-light
+name: BLE Mesh Light
+description: Dimmable BLE Mesh light — a Generic OnOff/Level node any mesh app or ZeroCode provisioner can add to a network, controllable from the group its servers subscribe to (first ble_mesh product; exercises the ble_mesh_* bindings on dimmable_light)
+keywords: [ble mesh, bluetooth, light, dimmable, mesh]
+frameworks: [ble_mesh]
+
+instances:
+  # ── Hardware ────────────────────────────────────────────────
+  - block: drivers/pwm_led
+    prefix: LIGHT
+    cfg:
+      gpio: 8
+      ledc_channel: 0
+      ledc_timer: 0
+      freq_hz: 5000
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # ── Device type (BLE Mesh bindings) ─────────────────────────
+  - block: device_types/dimmable_light
+    prefix: LIGHT
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+      label: Light
+
+  # ── Baseline behaviors. Omitted as N/A for BLE Mesh:
+  #    wifi_disconnect_recovery / network_status_log (no Wi-Fi; the
+  #    app_ble_mesh scaffold logs provisioning natively),
+  #    identify_blink (Matter identify). ──
+  - block: behaviors/factory_reset_power_cycle
+    prefix: FRPC
+    cfg:
+      count_threshold: 5
+      stable_window_ms: 5000
+  - block: behaviors/uptime_log
+    prefix: UP
+    cfg:
+      interval_seconds: 300
+
+  # ── Status LED (GPIO 10 — safe on all supported chips) ──────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Persistence + console + diagnostics ─────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_BRIGHTNESS
+    cfg:
+      command_name: brightness
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+  - include: diagnostics-core
+
+partition_table: 4mb
+
+# The mesh stack plus the BLE host is a large image; these are the two chips
+# the framework has been built on for this product.
+ci_chips: [esp32c6, esp32c3]
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode BLE Mesh Light

@@ -1,0 +1,98 @@
+id: zigbee-remote
+name: Zigbee Remote
+description: Zigbee 3.0 wireless remote — dimmer control (on/off + level) and a scene toggle button, sent to devices bound via Finding & Binding (first zigbee CONTROLLER product; exercises client-cluster bindings on dimmer_remote + scene_button)
+keywords: [zigbee, remote, dimmer, switch, controller, scene]
+frameworks: [zigbee]
+
+instances:
+  # ── Hardware: one physical scene button; dimmer inputs are console-driven
+  #    in this reference (wire a rotary encoder for a physical dimmer). ──
+  - block: drivers/momentary_button
+    prefix: SCENE_BTN
+    cfg:
+      gpio: 9
+      active_level: 0
+
+  # ── Controller device types (Zigbee client bindings) ────────
+  - block: device_types/dimmer_remote
+    prefix: DIMMER
+    cfg:
+      power_param: APP_DRIVER_PARAM_POWER
+      level_param: APP_DRIVER_PARAM_BRIGHTNESS
+      zb_endpoint: 71
+
+  - block: device_types/scene_button
+    prefix: SCENE
+    cfg:
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
+      zb_endpoint: 70
+
+  # ── Baseline behaviors (Matter-free subset; wifi_disconnect_recovery /
+  #    network_status_log omitted — no Wi-Fi; identify_blink omitted —
+  #    Matter identify) ──
+  - block: behaviors/ota_basic
+    prefix: OTA
+    cfg: {}
+  - block: behaviors/factory_reset_power_cycle
+    prefix: FRPC
+    cfg:
+      count_threshold: 5
+      stable_window_ms: 5000
+  - block: behaviors/uptime_log
+    prefix: UP
+    cfg:
+      interval_seconds: 300
+
+  # ── Status LED ──────────────────────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Console: drive the remote's inputs over serial ──────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LEVEL
+    cfg:
+      command_name: level
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+  - block: behaviors/console_param_cmd
+    prefix: CMD_SCENE
+    cfg:
+      command_name: scene
+      target_param: APP_DRIVER_PARAM_SWITCH_POSITION
+      value_kind: u8
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}
+
+  - include: diagnostics-core
+
+partition_table: 4mb
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Zigbee Remote

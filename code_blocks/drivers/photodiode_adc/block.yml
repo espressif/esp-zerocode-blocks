@@ -1,0 +1,36 @@
+description: Real ADC oneshot read for ambient light (photodiode / photoresistor / phototransistor)
+
+# Generic ADC photodiode reader. Publishes a u16 value scaled to the spec's
+# IlluminanceMeasurement::MeasuredValue range. The exact mapping from raw ADC to lux
+# depends on the photodiode + amplifier circuit — replace the simple linear scale
+# below with whatever your sensor datasheet recommends.
+
+params:
+  adc_unit:
+    type: int
+    default: 0
+    description: ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2)
+  adc_channel:
+    type: int
+    required: true
+    description: ADC channel (chip-specific — see esp_adc/adc_oneshot.h)
+  attenuation:
+    type: int
+    default: 3
+    description: 0=0dB, 1=2.5dB, 2=6dB, 3=12dB (full scale)
+  poll_interval_ms:
+    type: int
+    default: 1000
+  raw_max:
+    type: int
+    default: 4095
+    description: Maximum raw ADC value (depends on bitwidth)
+  value_scale:
+    type: int
+    default: 50000
+    description: Output u16 = raw * value_scale / raw_max (tune for your sensor)
+
+driver_params:
+  value_param:
+    type: u16
+    required: true

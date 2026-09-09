@@ -1,0 +1,50 @@
+description: "Pump (Matter: pump stub — cluster mappings to be wired by user code; RainMaker: esp.device.other with on/off power toggle)"
+device_types:
+  matter: pump
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_MAINS_POWER_OUTLET_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "no delegate — attribute wiring for On/Off, Pump Configuration and Control"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Pump
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 46
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 220
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_pump:
+    type: string
+    default: "turn on the pump"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the pump"'
+  say_turn_off_the_pump:
+    type: string
+    default: "turn off the pump"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the pump"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID for pump on/off (boolean; RainMaker binding only — Matter PumpConfigAndControl mapping is still a stub)
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

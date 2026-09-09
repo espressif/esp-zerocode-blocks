@@ -1,0 +1,56 @@
+id: mosaico-bmgr-probe
+name: ESP-Mosaico Board Manager Probe
+description: >-
+  The smallest product that proves the board path: it composes NO hardware
+  blocks at all, and on an ESP-Mosaico its display, touch panel, audio codec,
+  buttons and power rails all come from the esp-board-manager board
+  definition, which brings them up at boot and prints what it found.
+  Everything else is the standard console + diagnostics baseline, so the only
+  thing this product is testing is the board.
+keywords: [mosaico, esp32s31, board-manager, bmgr, probe, spike]
+
+# SPIKE PRODUCT — the plumbing test for the board path, not a shippable
+# device.
+#
+# THE BOARD IS NOT NAMED HERE. A product.yml never names a board: this file
+# says what the product does, and the `board.yaml` beside it says what hardware
+# this sample runs on (ESP-Mosaico → the esp-board-manager board `esp_mosaico`).
+# The build path then runs `idf.py bmgr -b esp_mosaico -c <pack>` before
+# `idf.py build`, which writes components/gen_bmgr_codes (the board's
+# peripherals + devices, WHOLE_ARCHIVE) and a board_manager.defaults that
+# outranks the project sdkconfig. The generator's whole contribution is the
+# esp_board_manager dependency, the esp_board_manager_init() call in app_main,
+# and a `.zc-board` marker the build step reads.
+#
+# The point of the empty instance list: mosaico-room-panel pins the SAME
+# board's CO5300 panel and CST9220 touch by hand, as driver blocks with
+# fifteen GPIO numbers between them. Here that is one word. What this product
+# does NOT yet have is a way for a device_type to reach the board's devices —
+# collapsing display/touch/codec drivers into board-manager adapters is the
+# next step, not this one.
+
+# Framework-less on purpose: a transport would drag esp_matter (or a Wi-Fi
+# stack) into the picture and a failure could then be about either one. This
+# product must fail for board reasons only.
+frameworks: []
+
+# ci_chips is CI's chip list, not a claim about hardware. It is pinned here
+# because the sample board.yaml beside this file is an ESP-Mosaico (esp32s31)
+# and a build on any other chip would prove nothing about the board it names.
+ci_chips: [esp32s31]
+
+# The ESP-Mosaico has 16 MB of NOR and board_manager.defaults sets
+# CONFIG_ESPTOOLPY_FLASHSIZE_16MB from the board's own
+# sdkconfig.defaults.board. Nothing here is close to a 4 MB table's OTA slot,
+# so the default table is left alone rather than adding a second, competing
+# statement about the board's flash.
+
+instances:
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Mosaico Board Probe
+# Bench fixture, not a product: proves a build path.
+internal: true

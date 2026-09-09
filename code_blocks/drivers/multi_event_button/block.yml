@@ -1,0 +1,12 @@
+description: GPIO button with single-click + double-click + long-press events. Single-click toggles target_param; the other events call weak override hooks.
+
+params:
+  gpio: { type: int, required: true }
+  active_level: { type: int, default: 0 }
+  long_press_ms: { type: int, default: 2000 }
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Boolean driver param toggled on single-click

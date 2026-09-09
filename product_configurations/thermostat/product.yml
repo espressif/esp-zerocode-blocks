@@ -1,0 +1,118 @@
+id: thermostat
+name: Smart Thermostat
+description: Heating thermostat with local temperature sensor and configurable setpoint. Driver currently a stub.
+keywords: [thermostat, heating, hvac, temperature, climate]
+frameworks: [matter]
+
+# A real thermostat needs: temp sensor input + relay/triac output to fire heat/cool source.
+# This manifest reuses the i2c_temp_humidity stub for local temperature.
+instances:
+  - block: drivers/i2c_temp_humidity
+    prefix: TS
+    cfg:
+      i2c_port: 0
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_LOCAL_HUM   # captured but not exposed as endpoint
+
+  - block: device_types/thermostat
+    prefix: THERMO
+    cfg:
+      local_temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      heat_setpoint_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      system_mode_param: APP_DRIVER_PARAM_SYSTEM_MODE
+
+  # ── Heat-call output (relay/contactor firing the heat source) ──
+  # The actuator a real thermostat needs. Driven by app logic comparing
+  # LOCAL_TEMP vs HEAT_SETPOINT under SYSTEM_MODE — use this relay block
+  # (correct gpio_config) rather than hand-writing the output GPIO.
+  - block: drivers/relay
+    prefix: HEAT
+    cfg:
+      gpio: 10
+      param_id: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 18
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 18
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_i16
+    prefix: PERSIST_HEATSP
+    cfg:
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      nvs_namespace: app
+      nvs_key: heatsp
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_SYSMODE
+    cfg:
+      target_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      nvs_namespace: app
+      nvs_key: sysmode
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_HEATSP
+    cfg:
+      command_name: heatsp
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      value_kind: i16
+  - block: behaviors/console_param_get
+    prefix: GET_HEATSP
+    cfg:
+      command_name: get-heatsp
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      value_kind: i16
+  - block: behaviors/console_param_cmd
+    prefix: CMD_SYSMODE
+    cfg:
+      command_name: sysmode
+      target_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_SYSMODE
+    cfg:
+      command_name: get-sysmode
+      target_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Thermostat

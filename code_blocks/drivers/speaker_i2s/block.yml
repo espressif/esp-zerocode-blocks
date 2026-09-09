@@ -1,0 +1,65 @@
+description: >-
+  I2S speaker / amplifier (MAX98357A, PCM5102, generic I2S DAC) driving a
+  synthesized square-wave tone. Owns its own I2S TX channel — I2S is
+  point-to-point, so unlike I2C there is no shared bus block. Publishes
+  tone / volume / mute through the driver param bus, so any device type or
+  behavior can bind it. Framework-independent.
+
+# Why a tone generator and not a file player: the driver param bus carries
+# scalars only (bool/u8/i16/u16/u32), so "play sample N" has nowhere to put
+# audio content. A synthesized tone needs no filesystem, no partition and no
+# codec, which makes this block buildable and testable on any chip with I2S.
+# Sample playback belongs in a later block that owns a data partition.
+#
+# The tone runs in its own task rather than a timer callback: i2s_channel_write
+# blocks until the DMA buffer drains, which paces the loop for free but must
+# never run on the esp_timer task.
+#
+# Wiring (MAX98357A): BCLK->bclk_gpio, LRC->ws_gpio, DIN->dout_gpio, and tie
+# the board's GAIN/SD pins per its datasheet. Check the chip's usable GPIO list
+# before picking pins — strapping/flash pins reboot-loop at runtime with no
+# backtrace, and the build matrix cannot catch that.
+
+# app_driver already PRIV_REQUIRES the legacy `driver` umbrella, which pulls in
+# esp_driver_i2s transitively — named explicitly so the include never depends on
+# that umbrella surviving an IDF version bump.
+cmake_priv_requires:
+  app_driver: [esp_driver_i2s]
+
+params:
+  port:
+    type: int
+    default: 0
+    description: I2S peripheral number. Must differ from any other I2S block on the same product.
+  bclk_gpio:
+    type: int
+    required: true
+    description: Bit clock (BCLK / SCK)
+  ws_gpio:
+    type: int
+    required: true
+    description: Word select / left-right clock (LRC / WS)
+  dout_gpio:
+    type: int
+    required: true
+    description: Serial data out to the amplifier (DIN on a MAX98357A)
+  sample_rate:
+    type: int
+    default: 16000
+    description: I2S sample rate in Hz. 16000 is ample for tones; raise it only if you replace the generator.
+
+driver_params:
+  tone_param:
+    type: u32
+    required: true
+    description: Tone frequency in Hz (uint32, 0 = silent)
+  volume_param:
+    type: u8
+    required: false
+    default: ""
+    description: (Optional) param ID for playback volume 0-100 (uint8). Empty disables — level stays at 50%.
+  mute_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) param ID for mute (bool, true = silent regardless of tone/volume). Empty disables.

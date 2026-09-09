@@ -1,0 +1,58 @@
+id: ml-inference-demo
+name: On-device ML Inference Demo
+description: On-device machine-learning inference driving the param bus — the reference wiring for the ml framework
+keywords: [tflite, ml, inference, tensorflow, occupancy]
+frameworks: [ml]
+
+# Reference product for frameworks/ml. Its job is to get the two
+# TFLite blocks COMPILED by CI: ci-affected.sh builds one product per changed
+# block, and a block that no product names is validated but never built.
+#
+# DELIBERATELY NO CONNECTIVITY FRAMEWORK. An earlier draft used
+# frameworks: [matter] so the occupancy endpoint would be real, and that made
+# the reference product for a ~40 KB inference framework pull esp_matter —
+# the heaviest dependency in the catalog — on every MR that touches a TFLite
+# block. The build tier exists to compile the changed block, so the product it
+# picks should be the cheapest thing that does. Matter's own products already
+# prove Matter builds.
+#
+# device_types/occupancy_sensor is still here even though no framework binds
+# it: it is what CONSUMES the classifier's param, which keeps the wiring
+# honest and the validator strict-clean. Its slots are all framework-specific,
+# so with no framework selected it contributes no code and costs no flash.
+# Add `frameworks: [matter]` to this file and the endpoint materializes.
+#
+# No ci_chips: esp-tflite-micro builds on any target with IDF >= 5.1 and
+# esp-nn picks kernels per chip. Verified on esp32c6, esp32s3, esp32p4.
+
+instances:
+  # The inference. arena_base_kb 4 covers the reference model's 2 KB plus the
+  # interpreter's bookkeeping; ops_profile minimal registers the single
+  # FullyConnected operator its graph uses.
+  - block: drivers/ml_classifier
+    prefix: INFER
+    cfg:
+      interval_ms: 2000
+      arena_base_kb: 4
+      arena_scratch_kb: 0    # one FullyConnected — esp-nn has no conv scratch to want
+      arena_in_psram: 0
+      ops_profile: minimal
+      threshold_pct: 50
+      detect_param: APP_DRIVER_PARAM_OCCUPANCY
+
+  # Consumes the verdict. Binds to a real endpoint as soon as a framework is
+  # added; contributes nothing until then.
+  - block: device_types/occupancy_sensor
+    prefix: APP
+    cfg:
+      label: ML Occupancy
+      occupied_param: APP_DRIVER_PARAM_OCCUPANCY
+
+  # Console commands only — no network, no OTA. diagnostics-core is
+  # deliberately NOT included: its OTA and Wi-Fi-recovery blocks need a
+  # connectivity stack this product does not have.
+  - include: console-diagnostics
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode TFLite Inference Demo

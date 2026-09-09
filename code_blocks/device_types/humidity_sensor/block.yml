@@ -1,0 +1,26 @@
+description: "Humidity Sensor device type (read-only, MeasuredValue in 0.01 %RH) (Matter: humidity_sensor; RainMaker: esp.device.other)"
+device_types:
+  matter: humidity_sensor
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_SIMPLE_SENSOR_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Humidity Sensor
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 22
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  value_param:
+    type: i16
+    required: true
+    description: Driver param ID this endpoint mirrors (int16 / uint16, hundredths of %RH)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

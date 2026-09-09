@@ -1,0 +1,12 @@
+menu "esp_tinylm"
+
+    config ESP_TINYLM_ENABLE_PIE
+        bool "Use ESP32-S31 PIE vector kernel when available"
+        default y
+        help
+            On ESP32-S31, run the int4 matvec on the PIE (xespv) vector unit for
+            a large speedup. Has no effect on other targets, which always use the
+            portable scalar path. Disable to force the scalar path everywhere
+            (e.g. for A/B numerical comparison).
+
+endmenu

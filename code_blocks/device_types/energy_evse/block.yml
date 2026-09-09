@@ -1,0 +1,50 @@
+description: "Energy EVSE device type — Electric Vehicle Supply Equipment / charging stations (Matter: energy_evse; RainMaker: esp.device.other)"
+device_types:
+  matter: energy_evse
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_MAINS_POWER_OUTLET_DEVICE_ID
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "requires the Energy EVSE + Energy EVSE Mode delegates (mandatory); composes electrical_sensor (their delegates live on those endpoints)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# EnergyEvse cluster has command-driven state (Enable / Disable / EnableCharging) plus
+# read-only attributes (State, SupplyState, FaultState, MaximumCurrent, etc.).
+# For V0 we expose a single "enabled" boolean and let app code wire up the cluster commands.
+params:
+  label:
+    type: string
+    default: EV Charger
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 66
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 240
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_start_charging:
+    type: string
+    default: "start charging"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "start charging"'
+  say_stop_charging:
+    type: string
+    default: "stop charging"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "stop charging"'
+
+driver_params:
+  enabled_param:
+    type: bool
+    required: true
+    description: Driver param ID for enabled/charging state (boolean)

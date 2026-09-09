@@ -1,0 +1,44 @@
+description: "Electrical Sensor device type (ElectricalPowerMeasurement / ElectricalEnergyMeasurement) (Matter: electrical_sensor; RainMaker: esp.device.other)"
+device_types:
+  matter: electrical_sensor
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_METER_INTERFACE_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Active power measurement in mW (int64 in spec, expressed as u32 here for the param interface).
+# Wire up your CT/shunt/HLW8012 driver to publish updated readings periodically.
+params:
+  label:
+    type: string
+    default: Electrical Sensor
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+# voltage_param / current_param are optional param_refs (same idiom as
+# device_types/air_quality_sensor): set → establishes this endpoint as the
+# param's u32 consumer; left empty (default "") → the generator + validator
+# skip them. Matter's ElectricalPowerMeasurement doesn't expose them (see the
+# matter_driver_cb_cases note), but the RainMaker binding reports them.
+  zb_endpoint:
+    type: int
+    default: 26
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  active_power_param:
+    type: u32
+    required: true
+    description: Driver param ID for instantaneous active power (uint32 mW)
+  voltage_param:
+    type: u32
+    required: false
+    default: ""
+    description: (Optional) param ID for RMS voltage (uint32 mV). Empty disables.
+  current_param:
+    type: u32
+    required: false
+    default: ""
+    description: (Optional) param ID for RMS current (uint32 mA). Empty disables.
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

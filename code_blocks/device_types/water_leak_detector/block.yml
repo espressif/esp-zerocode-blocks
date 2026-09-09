@@ -1,0 +1,26 @@
+description: "Water Leak Detector device type (Boolean State + alarm) (Matter: water_leak_detector; RainMaker: esp.device.other; Zigbee: IAS Zone / Water Sensor)"
+device_types:
+  matter: water_leak_detector
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_IAS_ZONE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Water Leak Detector
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 30
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  leak_param:
+    type: bool
+    required: true
+    description: Driver param ID for leak state (boolean — true if leak detected)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

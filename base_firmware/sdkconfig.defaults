@@ -1,0 +1,28 @@
+# ZeroCode AI - Common sdkconfig defaults
+# Protocol-specific configs are added by templates via sdkconfig merge.
+
+# eFuse virtualization — MANDATORY, do not remove. Compiles the eFuse-program path
+# out of the app AND bootloader, so a generated image can never permanently burn a
+# one-time eFuse (secure boot / flash encryption / download-mode / JTAG lockout).
+# Platform-enforced: the agent write tool and every build refuse its removal.
+CONFIG_EFUSE_VIRTUAL=y
+
+# Partition table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Flash size — the floor, matching the default 4mb partition table. A board with
+# more flash overrides it (sdkconfig.defaults.board), and a bigger partition
+# table block sets the matching size.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Compiler optimization for size
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+CONFIG_NEWLIB_NANO_FORMAT=y
+
+# Logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Stack sizes
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

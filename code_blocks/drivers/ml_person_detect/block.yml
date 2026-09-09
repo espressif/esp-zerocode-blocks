@@ -1,0 +1,82 @@
+description: "Person detection from a DVP camera — runs the upstream TensorFlow person-detect CNN on 96x96 grayscale frames and publishes presence + confidence to the param bus. Needs frameworks: [ml]. Unlike drivers/ml_classifier this needs no fill-input hook: it owns its camera and feeds the model itself, so it is the block to reach for when the answer wanted is 'is somebody there'."
+
+# THE FIRST BLOCK WITH A REAL MODEL. ml_classifier ships the framework's 2.5 KB
+# reference graph on zeroed input — a working smoke test and nothing more. This
+# one answers a real question, which is what makes the ml framework worth
+# offering to a user rather than only to the AI.
+#
+# THE MODEL IS NOT VENDORED HERE, on purpose. person_detect_model_data.cc is
+# 1.85 MB of hex — seven times the entire catalog tarball — and esp-tflite-micro
+# already ships it (examples/person_detection), which every ml product already
+# depends on. frameworks/ml's component CMakeLists compiles it straight out of
+# that component, so the catalog carries a reference and not a copy. Apache-2.0,
+# © The TensorFlow Authors; the licence travels with the component.
+#
+# SELF-CONTAINED, like drivers/camera_motion_dvp and unlike a fill_input
+# companion: ml_classifier's input hook is named for ITS instance prefix, so a
+# second block cannot target it without being told that prefix. Owning the
+# camera and the session is fewer moving parts than wiring two instances
+# together, and it is the shape the sibling camera block already uses.
+#
+# GRAYSCALE 96x96 straight from the sensor: the model's input geometry is the
+# camera's frame size, so there is no resize step to get wrong, and the frame
+# buffer is 9 KB in DRAM — no PSRAM needed for capture (the ARENA may still
+# want it; see arena_in_psram).
+#
+# STATE, NOT EVENTS: presence persists, so both params are written every cycle
+# and change-detected downstream. A block that must count each arrival wants
+# app_driver_fire_event and is a different block.
+
+cmake_priv_requires:
+  app_logic: [espressif__esp32-camera, esp_timer, esp_driver_ledc]
+
+params:
+  # AI-Thinker ESP32-CAM pin map, matching drivers/camera_motion_dvp so a
+  # product can swap detectors without rewiring.
+  pin_pwdn:  { type: int, default: 32 }
+  pin_reset: { type: int, default: -1 }
+  pin_xclk:  { type: int, default: 0 }
+  pin_sda:   { type: int, default: 26, description: SCCB (camera I2C) data }
+  pin_scl:   { type: int, default: 27, description: SCCB (camera I2C) clock }
+  pin_d7:    { type: int, default: 35 }
+  pin_d6:    { type: int, default: 34 }
+  pin_d5:    { type: int, default: 39 }
+  pin_d4:    { type: int, default: 36 }
+  pin_d3:    { type: int, default: 21 }
+  pin_d2:    { type: int, default: 19 }
+  pin_d1:    { type: int, default: 18 }
+  pin_d0:    { type: int, default: 5 }
+  pin_vsync: { type: int, default: 25 }
+  pin_href:  { type: int, default: 23 }
+  pin_pclk:  { type: int, default: 22 }
+  xclk_freq_hz: { type: int, default: 20000000 }
+  interval_ms:
+    type: int
+    default: 2000
+    description: Milliseconds between inferences. Keep it above invoke() time — this CNN is ~400 ms on an esp32 and ~55 ms on an esp32s3.
+  arena_base_kb:
+    type: int
+    default: 100
+    description: Tensor arena the model needs on the generic-C kernel path (esp32, esp32c3, esp32c6). Measured against esp-tflite-micro's own person_detection example, which declares 100 KB.
+  arena_scratch_kb:
+    type: int
+    default: 60
+    description: EXTRA arena on chips where esp-nn's optimized kernels are compiled in (CONFIG_NN_OPTIMIZED — esp32s3, esp32p4). Upstream declares 60 KB of scratch for this model. Added on those chips only, so one product value is correct everywhere; a single flat number is not.
+  arena_in_psram:
+    type: int
+    default: 1
+    description: 1 to prefer PSRAM for the arena (falls back to internal RAM). The ESP32-CAM boards this block is pinned for all have it.
+  threshold_pct:
+    type: int
+    default: 60
+    description: Person score at or above this counts as present. The model is small and noisy — 60 is a deliberately unexcited default.
+
+driver_params:
+  present_param:
+    type: bool
+    required: true
+    description: Driver param ID set true while the person score is at or above threshold_pct.
+  score_param:
+    type: u8
+    required: false
+    description: Optional driver param ID receiving the raw person score as a percentage.

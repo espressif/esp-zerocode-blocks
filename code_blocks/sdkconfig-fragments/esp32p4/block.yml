@@ -1,0 +1,12 @@
+description: ESP32-P4 per-chip sdkconfig base — no on-die radio; Wi-Fi/BLE via hosted C6.
+
+# A chip block, not a product-selectable fragment: `target:` marks it, and the
+# generator merges it into sdkconfig.defaults for the SELECTED chip only.
+#
+# P4 has NO radio on the die. Wi-Fi and BLE come from a companion ESP32-C6 over
+# ESP-Hosted; the app keeps calling the normal esp_wifi / NimBLE APIs, and the
+# companion's slave firmware must be flashed separately. Two P4 needs are NOT
+# sdkconfig and live in base_firmware: the `target in [esp32p4]` esp_wifi_remote
+# / esp_hosted rules in main/idf_component.yml, and the BLEManagerImpl.cpp patch
+# in CMakeLists.txt.
+target: esp32p4

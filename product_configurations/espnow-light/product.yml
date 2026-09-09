@@ -1,0 +1,52 @@
+id: espnow-light
+name: ESP-NOW Light
+description: >-
+  A dimmable light that answers a ZeroCode ESP-NOW remote directly — no
+  router, no hub, no app. Half of the espnow-remote + espnow-light kit.
+keywords: [espnow, light, kit, dimmable, wireless, no-hub]
+
+# THE KIT CONTRACT (with espnow-remote): listens for POWER + BRIGHTNESS by
+# name. v1 is open broadcast on channel 1, trusted spaces only.
+frameworks: [espnow]
+
+instances:
+  - block: drivers/pwm_led
+    prefix: LAMP
+    cfg:
+      gpio: 7
+      ledc_channel: 0
+      ledc_timer: 0
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  # Listens for POWER + BRIGHTNESS broadcasts from the kit.
+  - block: device_types/dimmable_light
+    prefix: LAMP_EP
+    cfg:
+      label: Kit Light
+      audio_cmd_base: 110
+      power_param: APP_DRIVER_PARAM_POWER
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg: { gpio: 10, active_level: 1 }
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg: { gpio: 10, active_level: 1, pattern_param: APP_DRIVER_PARAM_LED_PATTERN }
+
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg: { target_param: APP_DRIVER_PARAM_POWER, nvs_namespace: app, nvs_key: power }
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg: { command_name: power, target_param: APP_DRIVER_PARAM_POWER, value_kind: bool }
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode ESP-NOW Light

@@ -1,0 +1,47 @@
+description: "Door Lock device type (Matter: door_lock — LockState attribute + Lock/Unlock commands; RainMaker: esp.device.lock)"
+device_types:
+  matter: door_lock
+  rainmaker: esp.device.lock
+  zigbee: EZB_ZHA_DOOR_LOCK_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# DoorLock LockState enum: Locked=1, Unlocked=2, NotFullyLocked=0.
+# We model this with a boolean param: true = locked, false = unlocked.
+params:
+  label:
+    type: string
+    default: Door Lock
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 60
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 200
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_lock_the_door:
+    type: string
+    default: "lock the door"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "lock the door"'
+
+driver_params:
+  locked_param:
+    type: bool
+    required: true
+    description: Driver param ID for lock state (boolean — true if locked)
+
+# Voice binding is LOCK-ONLY, deliberately. "lock the door" is bound; there is
+# no "unlock the door" phrase and there should not be one. Wake word plus a
+# phrase is not authentication — anyone within earshot can say it, through a
+# window or from a TV, and MultiNet has no notion of who is speaking. Locking
+# on a false positive is a nuisance; unlocking on one is a break-in. Unlock
+# stays on the authenticated paths (Matter/RainMaker client, physical keypad).

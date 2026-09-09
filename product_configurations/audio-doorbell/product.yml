@@ -1,0 +1,35 @@
+id: audio-doorbell
+name: Audio Doorbell
+description: >-
+  A doorbell that actually rings — press the button and the speaker plays a
+  two-tone chime, fully on-device. First frameworks: [sound] product (the
+  Audio framework: the speaker half of the Voice/Audio split).
+keywords: [audio, sound, doorbell, chime, speaker, button]
+
+frameworks: [sound]
+
+instances:
+  - block: drivers/momentary_button
+    prefix: BELL_BTN
+    cfg:
+      gpio: 9
+      active_level: 0
+
+  - block: device_types/scene_button
+    prefix: BELL
+    cfg:
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
+
+  - block: drivers/speaker_i2s
+    prefix: CHIME
+    cfg:
+      port: 0
+      bclk_gpio: 1
+      ws_gpio: 7
+      dout_gpio: 8
+      sample_rate: 16000
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core

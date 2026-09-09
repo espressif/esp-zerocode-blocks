@@ -1,0 +1,54 @@
+id: garage-door
+name: Garage Door Controller
+description: Matter Closure garage-door opener — open/close/stop via an H-bridge DC motor
+keywords: [garage, door, gate, closure, opener, motor]
+frameworks: [matter]
+
+instances:
+  - block: drivers/dc_motor_h_bridge
+    prefix: DOOR_MOTOR
+    cfg:
+      in1_gpio: 2
+      in2_gpio: 3
+      pwm_gpio: 4
+      speed_param: APP_DRIVER_PARAM_MOTOR_SPEED
+
+  - block: device_types/closure
+    prefix: DOOR
+    cfg:
+      motor_param: APP_DRIVER_PARAM_MOTOR_SPEED
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Garage Door

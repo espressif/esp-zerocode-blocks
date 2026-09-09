@@ -1,0 +1,39 @@
+description: >-
+  Haptic vibration motor on a single GPIO — a one-shot buzz of a given length,
+  driven from a param so any framework can trigger it. The ESP-Mosaico's
+  onboard motor (GPIO8, active-high) is the reference wiring.
+
+# WHY NOT drivers/relay: a relay's param is LEVEL — set it on, it stays on. A
+# haptic is an EVENT: buzz, then stop by itself. Modelling it as a relay makes
+# every caller responsible for scheduling the off, and forgetting that leaves
+# the motor running against the battery.
+#
+# So the param here is a TRIGGER: write non-zero and the motor runs for
+# pulse_ms, then the driver turns it off. Writing again while it runs restarts
+# the window rather than queueing — latest wins, the same rule the sound
+# sequencer uses, because a stale buzz is worse than a missed one.
+#
+# One-shot esp_timer rather than a task: a buzz is a single deadline, and a
+# task would cost a stack permanently for something that runs for 40 ms.
+
+cmake_priv_requires:
+  app_driver: [esp_timer, esp_driver_gpio]
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: motor drive pin
+  active_level:
+    type: int
+    default: 1
+    description: level that runs the motor (Mosaico's is active-high)
+  pulse_ms:
+    type: int
+    default: 40
+    description: how long one buzz lasts
+
+driver_params:
+  trigger_param:
+    type: u8
+    description: write non-zero to buzz; the driver clears it when the pulse ends

@@ -1,0 +1,19 @@
+description: "Chime device type (plays a chime sound on command; Matter Chime cluster). PlayChimeSound fires a speaker tone via a delegate."
+# Matter-only today. RainMaker/Zigbee: no direct equivalent.
+device_types:
+  matter: chime
+
+# PlayChimeSound is handled by a Chime delegate that fires tone_param on the
+# speaker; no attribute<->driver reflection, so from the validator's
+# attribute-wiring view this is endpoint_only. check.py keeps this in step.
+matter_wiring: endpoint_only
+matter_wiring_note: "Matter-only; Chime PlayChimeSound handled by a delegate (a command, not attribute wiring) that fires the speaker tone and silences it after ~2s"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+driver_params:
+  tone_param:
+    type: u32
+    required: true
+    description: Driver param ID the delegate fires on PlayChimeSound (u32 tone frequency in Hz; pair with drivers/speaker_i2s)

@@ -1,0 +1,68 @@
+id: scene-button
+name: Wireless Scene Button
+description: Battery-powered scene controller — single button mapped to a Matter Generic Switch endpoint
+keywords: [scene, button, controller, wireless, generic switch]
+frameworks: [matter]
+
+# The momentary button doesn't toggle a local param — instead, override scene_btn_on_press()
+# in app code to advance APP_DRIVER_PARAM_SWITCH_POSITION or emit Matter Switch events.
+instances:
+  - block: drivers/momentary_button
+    prefix: SCENE_BTN
+    cfg:
+      gpio: 9
+      active_level: 0
+
+  - block: device_types/scene_button
+    prefix: SWITCH
+    cfg:
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── Long-press factory reset (button hold 5 s) ─────────────────
+  - block: behaviors/factory_reset_long_press
+    prefix: FR
+    cfg:
+      gpio: 9
+      active_level: 0
+      hold_time_ms: 5000
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Scene Button

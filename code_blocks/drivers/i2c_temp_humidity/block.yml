@@ -1,0 +1,60 @@
+description: "I2C bus + poll timer scaffold for a temp/humidity sensor. Implements NO sensor protocol and publishes NO readings — use a real-sensor block (sht4x / sht3x / aht21 / ds18b20) for actual measurements."
+
+# This block initializes an I2C bus and starts a periodic timer. It implements
+# NO sensor protocol and publishes NOTHING on the param bus.
+#
+# It used to publish a fixed 25.00C / 55.00%RH and describe that as "correct
+# for dev firmware". It is not: a fabricated reading is indistinguishable from
+# a real one, so the controller shows a plausible constant temperature forever
+# and no gate can catch it. It now fails CLOSED and logs an error instead —
+# a missing reading is visible, a fake one is not.
+#
+# For real readings use a dedicated real-sensor block: drivers/sht4x,
+# drivers/sht3x, drivers/aht21, or drivers/ds18b20. Do NOT hand-write raw I2C
+# register reads on top of this block — sensor protocols are easy to get wrong
+# under -Werror (compound-literal addresses, packed structs, byte order), and a
+# wrong one fabricates just as convincingly as the old stub did.
+
+# CONFIGURES its own I2C bus (it takes its own sda_gpio/scl_gpio/freq_hz), so
+# it is a provider: a sensor block declaring `requires_bus:` on the same port
+# is satisfied by an instance of this one placed earlier in instances:.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c]
+
+provides_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_port:
+    type: int
+    default: 0
+    description: I2C peripheral number (0 or 1)
+  sda_gpio:
+    type: int
+    required: true
+    description: SDA GPIO
+  scl_gpio:
+    type: int
+    required: true
+    description: SCL GPIO
+  freq_hz:
+    type: int
+    default: 100000
+    description: I2C clock frequency
+  poll_interval_ms:
+    type: int
+    default: 5000
+    description: How often to read the sensor (ms)
+
+driver_params:
+  temp_param:
+    type: i16
+    required: true
+    description: Driver param ID for temperature (int16, value × 100, e.g. 2500 = 25.00°C)
+  humidity_param:
+    type: i16
+    required: true
+    description: Driver param ID for humidity (int16, value × 100, e.g. 5500 = 55.00%RH)

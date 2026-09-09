@@ -1,0 +1,99 @@
+id: bath-exhaust-fan
+name: Bathroom Exhaust Fan with Humidity Sensor
+description: Exhaust fan with companion humidity sensor (auto-trigger fan on high humidity in app code)
+keywords: [bath, exhaust, fan, humidity, vent]
+frameworks: [matter]
+
+instances:
+  - block: drivers/fan_pwm
+    prefix: FAN
+    cfg:
+      gpio: 5
+      ledc_channel: 0
+      ledc_timer: 0
+      freq_hz: 25000
+      speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - block: drivers/i2c_temp_humidity
+    prefix: HUM
+    cfg:
+      i2c_port: 0
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+      poll_interval_ms: 10000
+      temp_param: APP_DRIVER_PARAM_HUM_TEMP_INTERNAL
+      humidity_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - block: device_types/fan
+    prefix: FAN_EP
+    cfg:
+      speed_param: APP_DRIVER_PARAM_FAN_SPEED
+
+  - block: device_types/humidity_sensor
+    prefix: HUM_EP
+    cfg:
+      value_param: APP_DRIVER_PARAM_HUMIDITY
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_FANSPD
+    cfg:
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      nvs_namespace: app
+      nvs_key: fanspd
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_FANSPD
+    cfg:
+      command_name: fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+  - block: behaviors/console_param_get
+    prefix: GET_FANSPD
+    cfg:
+      command_name: get-fanspd
+      target_param: APP_DRIVER_PARAM_FAN_SPEED
+      value_kind: u8
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Bath Exhaust Fan

@@ -1,0 +1,9 @@
+# Compile the person-detection model into the image. The framework's component
+# guards every catalogued model behind its own Kconfig so the catalogue can
+# grow without every product paying for it; this block is the one that needs
+# this model, so this block is what turns it on.
+#
+# Quoted "y", not bare y: scripts/assemble_blocks.py parses an unquoted value
+# with int(), so a bare y raises ValueError and the whole assembly fails. Every
+# other block in the catalogue quotes booleans for the same reason.
+CONFIG_ZC_ML_MODEL_PERSON_DETECT="y"

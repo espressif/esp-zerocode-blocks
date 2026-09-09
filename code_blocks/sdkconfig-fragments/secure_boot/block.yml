@@ -1,0 +1,14 @@
+description: Enables Secure Boot v2 — bootloader verifies the app image signature
+
+# Original notes from the .defaults file:
+#   Enables Secure Boot v2 — bootloader verifies the app image signature
+#   against a key burned into eFuse. Once enabled and burned, only signed
+#   images can boot. ONE-WAY: cannot be undone.
+#   Requires:
+#   - A signing key at the path indicated by CONFIG_SECURE_BOOT_SIGNING_KEY
+#   (defaults to ./secure_boot_signing_key.pem in the build dir)
+#   - The build will FAIL if the key is missing.
+#   Apply via:
+#   sdkconfig_fragments: [secure_boot]
+#   For production manufacturing: do NOT check the signing key into git.
+#   Inject it from the build CI's secret store.

@@ -1,0 +1,20 @@
+description: After target_param becomes true, automatically set it back to false after N seconds. Cancellable by setting it false manually.
+
+# Common pattern for motion-triggered lights and exhaust fans:
+#  - Motion sensor or user toggles power ON
+#  - Timer counts down from `timeout_seconds`
+#  - On expiry, sets power back to OFF
+#  - If something else turns it OFF first, the timer is cancelled
+#  - If something extends it (sets ON again), the timer restarts
+
+params:
+  timeout_seconds:
+    type: int
+    required: true
+    description: How long to stay on before auto-off
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Boolean param to auto-clear (typically POWER)

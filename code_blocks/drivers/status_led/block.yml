@@ -1,0 +1,47 @@
+description: Single GPIO LED indicator for commissioning / connection state — SOLE owner of the status LED pin
+
+# SINGLE-OWNER CONTRACT
+# ---------------------
+# This block is the ONE and ONLY owner of the status-LED GPIO. It creates the
+# single espressif/led_indicator handle on the pin and exposes the shared API
+# that EVERY status-LED effect must route through:
+#
+#     void    {{prefix_lc}}_status_led_set(bool on);          // solid on/off
+#     void    {{prefix_lc}}_status_led_set_pattern(uint8_t);  // 0..4 pattern table
+#     led_indicator_handle_t {{prefix_lc}}_status_led_handle(void);
+#
+# Pattern table (shared vocabulary with behaviors/blink_pattern,
+# behaviors/commissioning_led, behaviors/identify_blink):
+#   0 = off
+#   1 = solid on
+#   2 = slow blink (1 Hz)
+#   3 = fast blink (4 Hz)
+#   4 = breathe
+#
+# NO other block may create a second led_indicator on this pin, and NOTHING —
+# not this block, not any behavior — may call raw gpio_set_level() /
+# gpio_config() on the status-LED GPIO. led_indicator owns the pin; a second
+# raw driver on the same GPIO fights it (the recurring "double-drive" bug).
+#
+# The behavior blocks (commissioning_led / identify_blink / blink_pattern) are
+# pure pattern *contributors*: they only push a u8 onto the LED_PATTERN param.
+# This driver consumes that param in its apply case and is the single code path
+# that touches the LED. Wire the param via cfg.pattern_param.
+
+params:
+  gpio:
+    type: int
+    required: true
+  active_level:
+    type: int
+    default: 1
+
+driver_params:
+  pattern_param:
+    type: u8
+    default: APP_DRIVER_PARAM_LED_PATTERN
+    description: >
+      u8 LED pattern param this LED reacts to. Behaviors (commissioning_led,
+      identify_blink, blink_pattern) push values here; this driver is the sole
+      consumer that drives the LED. Leave empty to disable param-driven patterns
+      (solid on/off via the helper still works).

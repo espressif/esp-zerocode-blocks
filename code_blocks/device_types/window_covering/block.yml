@@ -1,0 +1,52 @@
+description: "Window Covering device type — curtain/blind/shade (Matter: window_covering; RainMaker: esp.device.blinds-internal)"
+device_types:
+  matter: window_covering
+  rainmaker: esp.device.blinds-internal
+  zigbee: EZB_ZHA_WINDOW_COVERING_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Reports CurrentPositionLiftPercent100ths (uint16, 0-10000 = 0-100%).
+# Driver translates target lift% to motor commands.
+params:
+  label:
+    type: string
+    default: Blinds
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 61
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 250
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_open_the_blinds:
+    type: string
+    default: "open the blinds"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "open the blinds"'
+  say_close_the_blinds:
+    type: string
+    default: "close the blinds"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "close the blinds"'
+  say_raise_the_blinds:
+    type: string
+    default: "raise the blinds"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "raise the blinds"'
+  say_lower_the_blinds:
+    type: string
+    default: "lower the blinds"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "lower the blinds"'
+
+driver_params:
+  position_param:
+    type: u16
+    required: true
+    description: Driver param ID for current lift position (uint16, 0-10000 = 0-100%)

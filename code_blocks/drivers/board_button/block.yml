@@ -1,0 +1,62 @@
+description: >-
+  Use a button the BOARD already declares — its BOOT button, an AI button —
+  through esp-board-manager: single click toggles a boolean driver param.
+  Board-only: it states no pin, because the pin is the board's.
+
+# WHY THIS BLOCK EXISTS.
+#
+# A devkit's BOOT button is real hardware described in the board definition
+# (`type: button` in board_devices.yaml), brought up by esp_board_manager_init()
+# with an iot_button handle waiting for anyone who asks. Nothing asked. So a
+# board product that wanted a button had to wire its own on a free pin and
+# leave the one soldered to the board dead — and pointing drivers/button at
+# the BOOT pin instead is an IO conflict with the board's `gpio_boot_button`,
+# correctly: one pin, one owner. The way to use hardware someone else owns is
+# to ASK THEM FOR IT. Same shape as drivers/board_gpio_ctrl, for inputs.
+#
+# THE HANDLE IS AN IOT_BUTTON HANDLE, so nothing is lost in adaptation:
+# dev_button is built ON iot_button (dev_button_handles_t.button_handles[] are
+# button_handle_t), and this block registers an ordinary
+# iot_button_register_cb() on it — the same callback API every other button
+# block in this catalog uses. It does NOT go through
+# esp_board_device_callback_register (one callback for every enabled event) or
+# app_button_get_or_create (that would CREATE a second iot_button device on a
+# pin the board's device already owns — the exact race the registry exists to
+# prevent).
+#
+# BOARD-ONLY, AND CHECKED. `bmgr.device_param` makes generation FAIL when
+# there is no board, when the pack cannot be read, or when the board declares
+# no such button. Unchecked, this block compiles and links against a device
+# that does not exist and reports it in one log line at boot.
+#
+# NOT hardware-verified.
+
+# Slots are logic family (like every other button block — the callback talks
+# app_driver params), so app_logic is the component that needs the board
+# manager's headers.
+cmake_priv_requires:
+  app_logic: [espressif__esp_board_manager]
+
+bmgr:
+  init: board_manager
+  # The board manager creates and owns the iot_button device; this block only
+  # asks for the handle and registers a callback. Nothing to replace — there
+  # is no non-board code path to drop, which is what makes device_param the
+  # thing that gates this block.
+  provided_by: button
+  device_param: device
+
+params:
+  device:
+    type: string
+    required: true
+    description: >-
+      The board device's NAME in its board_devices.yaml (e.g. boot_button,
+      ai_button). Must be a device of type button on the board this product
+      runs on — generation fails otherwise.
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Driver param ID a single click toggles (must be boolean)

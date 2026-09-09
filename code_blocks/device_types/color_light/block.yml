@@ -1,0 +1,63 @@
+description: "Full-color light — on/off + brightness + color (Matter: extended_color_light, controllable via HS, XY or colour temperature, all mapped to the hue/sat driver params; RainMaker: esp.device.lightbulb; Zigbee: Color Dimmable Light)"
+device_types:
+  matter: extended_color_light
+  rainmaker: esp.device.lightbulb
+  zigbee: EZB_ZHA_COLOR_DIMMABLE_LIGHT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label: { type: string, default: Color Light, description: "User-visible device name (RainMaker device name; must be unique per node)" }
+  zb_endpoint:
+    type: int
+    default: 12
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 160
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_light:
+    type: string
+    default: "turn on the light"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the light"'
+  say_turn_off_the_light:
+    type: string
+    default: "turn off the light"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the light"'
+  say_make_it_brighter:
+    type: string
+    default: "make it brighter"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "make it brighter"'
+  say_make_it_dimmer:
+    type: string
+    default: "make it dimmer"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "make it dimmer"'
+  say_make_it_red:
+    type: string
+    default: "make it red"
+    description: 'Voice phrase (customizable) for command slot 4 — default: "make it red"'
+  say_make_it_green:
+    type: string
+    default: "make it green"
+    description: 'Voice phrase (customizable) for command slot 5 — default: "make it green"'
+  say_make_it_blue:
+    type: string
+    default: "make it blue"
+    description: 'Voice phrase (customizable) for command slot 6 — default: "make it blue"'
+  say_make_it_white:
+    type: string
+    default: "make it white"
+    description: 'Voice phrase (customizable) for command slot 7 — default: "make it white"'
+
+driver_params:
+  power_param: { type: bool, default: APP_DRIVER_PARAM_POWER }
+  brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+  hue_param: { type: u8, default: APP_DRIVER_PARAM_HUE }
+  saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }

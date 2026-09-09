@@ -1,0 +1,43 @@
+description: Sensirion SHT3x I2C temp+humidity sensor (predecessor to SHT4x — slightly different commands). Depends on peripherals/i2c_bus.
+
+# SHT3x protocol:
+#   - I2C addr 0x44 (or 0x45 with ADDR pin high)
+#   - Single-shot high-repeatability with clock stretching: 0x2C 0x06
+#   - Wait ~15 ms
+#   - Read 6 bytes: t_msb, t_lsb, t_crc, h_msb, h_lsb, h_crc
+#   - T_C = -45 + 175 * t_raw / 65535
+#   - RH = 100 * h_raw / 65535
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_logic: [esp_driver_i2c]
+
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x44 }
+  poll_interval_ms: { type: int, default: 5000 }
+
+driver_params:
+  temp_param: { type: i16, required: true }
+  humidity_param: { type: i16, required: true }

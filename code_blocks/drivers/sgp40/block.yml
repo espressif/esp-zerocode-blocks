@@ -1,0 +1,42 @@
+description: Sensirion SGP40 I2C VOC sensor (Volatile Organic Compounds). Publishes a raw resistance value; pair with Sensirion's VOC algorithm in app code for the VOC index 1-500.
+
+# SGP40 protocol (simplified):
+#   - I2C addr 0x59
+#   - 0x26 0x0F + RH/T compensation bytes: measure_raw → 30 ms
+#   - Read 3 bytes: raw_msb, raw_lsb, crc — raw resistance in counts
+# This block publishes the raw counts. To get the proper VOC index (1-500),
+# integrate Sensirion's voc_algorithm_v2 component (gas_index_algorithm) and call
+# voc_algorithm_process(raw_counts) on each sample.
+
+# This block TALKS on an I2C bus it does not configure: it attaches a device to
+# whatever bus already exists on the port below (driver/i2c_master.h,
+# i2c_master_get_bus_handle). Declared so the validator can check that
+# assumption — without it a product composed with this sensor and no bus
+# provider builds clean, links clean, boots, and is silent on the device with
+# nothing in any report saying why. The provider may be an earlier
+# peripherals/i2c_bus instance or a board that owns the port; this block cannot
+# tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
+# CLAUDE.md → Shared buses.
+
+# esp_driver_i2c carries driver/i2c_master.h — see peripherals/i2c_bus.
+cmake_priv_requires:
+  app_logic: [esp_driver_i2c]
+
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 100000
+    description: >-
+      SCL clock for THIS device, in Hz. The new I2C driver clocks each device
+      rather than the bus, so two sensors sharing one bus may legitimately ask
+      for different speeds.
+  i2c_port: { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x59 }
+  poll_interval_ms: { type: int, default: 1000 }
+
+driver_params:
+  raw_param: { type: u16, required: true, description: "u16 raw VOC resistance counts" }

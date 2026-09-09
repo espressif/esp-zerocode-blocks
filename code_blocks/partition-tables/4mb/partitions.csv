@@ -1,0 +1,13 @@
+# 4MB flash layout — fits chips with 4MB flash (esp32c3, esp32h2, most ESP32-WROOM modules).
+# OTA slots are 1.875MB each — enough for a small/mid product (Matter on/off, dimmer, sensor)
+# but tight for the full production build with all behaviors. Use 8mb for richer products.
+#
+# Name,          Type, SubType,  Offset,    Size,     Flags
+esp_secure_cert, 0x3F, ,         0xd000,    0x2000,   encrypted
+nvs,             data, nvs,      0x10000,   0xC000,
+nvs_keys,        data, nvs_keys, ,          0x1000,   encrypted
+otadata,         data, ota,      ,          0x2000,
+phy_init,        data, phy,      ,          0x1000,
+ota_0,           app,  ota_0,    0x20000,   0x1E0000,
+ota_1,           app,  ota_1,    0x200000,  0x1E0000,
+fctry,           data, nvs,      0x3E0000,  0x6000,

@@ -1,0 +1,25 @@
+description: LEDC PWM-driven DC fan (speed 0-100, mapped to 0-100% duty)
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO pin connected to fan PWM input (typically through MOSFET)
+  ledc_channel:
+    type: int
+    default: 1
+    description: LEDC channel (must differ from any other LEDC user)
+  ledc_timer:
+    type: int
+    default: 1
+    description: LEDC timer
+  freq_hz:
+    type: int
+    default: 25000
+    description: PWM frequency (25 kHz typical for DC fans, above audible range)
+
+driver_params:
+  speed_param:
+    type: u8
+    default: APP_DRIVER_PARAM_FAN_SPEED
+    description: Driver param ID for fan speed (uint8_t, 0-100)

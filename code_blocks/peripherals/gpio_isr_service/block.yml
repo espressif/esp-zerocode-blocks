@@ -1,0 +1,11 @@
+description: Initialize the shared GPIO ISR service so multiple drivers can register pin-specific ISRs.
+
+# Many drivers want gpio_isr_handler_add() — but gpio_install_isr_service() must be
+# called exactly once per system. This peripheral handles that, and tolerates
+# being called when the service is already installed.
+
+params:
+  intr_alloc_flags:
+    type: int
+    default: 0
+    description: ESP_INTR_FLAG_* bitmask (default 0 = no special flags)

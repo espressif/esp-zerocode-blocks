@@ -1,0 +1,25 @@
+version: "0.1.0"
+description: >-
+  Tiny language-model inference for ESP32 (Per-Layer-Embeddings + vector
+  assembly). Runs small llama2-style LLMs on-device: coherent story generation
+  and natural-language -> JSON tool-calling. Accelerated per target — PIE
+  (xespv) on ESP32-S31/ESP32-P4, Espressif SIMD (EE.*) on ESP32-S3 — with a
+  portable scalar fallback elsewhere.
+# VENDORED copy (see ../../block.yml): esp_tinylm is not published to the
+# component registry yet. These URLs name the INTENDED public home; swap this
+# directory for the registry dependency once it exists there.
+url: "https://github.com/espressif/esp-tinylm"
+repository: "https://github.com/espressif/esp-tinylm.git"
+documentation: "https://github.com/espressif/esp-tinylm/blob/main/README.md"
+issues: "https://github.com/espressif/esp-tinylm/issues"
+license: "Apache-2.0"
+tags:
+  - llm
+  - transformer
+  - llama2
+  - ple
+  - inference
+  - on-device
+dependencies:
+  idf:
+    version: ">=5.1"

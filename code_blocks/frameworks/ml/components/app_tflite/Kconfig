@@ -1,0 +1,28 @@
+menu "ZeroCode ML models"
+
+# One switch per catalogued model (models/<id>.yml in esp-zerocode-blocks).
+# Default n so the catalogue can grow without every product paying the compile
+# time: a model is only built when a block that consumes it turns it on from
+# its own sdkconfig.defaults sidecar.
+#
+# The reference model is NOT here — it is vendored into this component's SRCS
+# unconditionally, because the framework has to link with no model selected at
+# all (that is what ml-inference-demo and CI compile).
+
+config ZC_ML_MODEL_PERSON_DETECT
+    bool "Person detection (96x96 grayscale, ~294 KB)"
+    default n
+    help
+        Compiles esp-tflite-micro's person_detect_model_data.cc out of the
+        managed component. Turned on by drivers/ml_person_detect. Adds ~294 KB
+        to the app image and needs ~160 KB of tensor arena on esp32s3/esp32p4.
+
+config ZC_ML_MODEL_MICRO_SPEECH
+    bool "Keyword spotter — yes/no (~18 KB)"
+    default n
+    help
+        Compiles esp-tflite-micro's micro_speech model. NOTE: unusable on its
+        own — the features come from a separate audio-preprocessor model whose
+        ops are outside every current ops_profile. No block consumes it yet.
+
+endmenu

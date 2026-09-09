@@ -1,0 +1,4 @@
+# The table ends at the 8MB boundary; base_firmware defaults every target to
+# 4MB, so the block that ships the layout also ships the matching flash size
+# (choice symbol — rides the per-chip append, read last, wins).
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB="y"

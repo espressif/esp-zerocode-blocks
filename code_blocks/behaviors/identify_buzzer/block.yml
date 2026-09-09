@@ -1,0 +1,13 @@
+description: On Matter Identify command, fire a buzzer melody pattern (uses drivers/buzzer_melody)
+
+params:
+  identify_pattern:
+    type: int
+    default: 4
+    description: Buzzer pattern on identify (4 = chime up by default)
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 — the buzzer_melody's pattern_param

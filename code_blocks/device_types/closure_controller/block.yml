@@ -1,0 +1,17 @@
+description: Closure Controller device type stub (controls a closure via bindings — emits commands, holds no state)
+# Matter-only today. RainMaker: no equivalent (models state-holders only).
+# Zigbee-absent: controller semantics need dynamic endpoints, no block-level equivalent.
+device_types:
+  matter: closure_controller
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "client-side device type by design — controller role, sends commands"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+params: {}
+param_refs: {}
+maturity: stub

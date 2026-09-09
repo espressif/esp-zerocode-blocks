@@ -1,0 +1,18 @@
+description: Relay + companion button on the same logical switch in one block. Most plug/switch products want this combo.
+
+# Equivalent to one drivers/relay + one drivers/button instance, but as a single
+# block so products don't need to repeat themselves and prefixes line up.
+# - Relay drives target_param when set via Matter or NVS restore
+# - Button single-click toggles target_param locally
+
+params:
+  relay_gpio: { type: int, required: true }
+  relay_active_level: { type: int, default: 1 }
+  button_gpio: { type: int, required: true }
+  button_active_level: { type: int, default: 0 }
+
+driver_params:
+  param_id:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Boolean param the relay drives and the button toggles

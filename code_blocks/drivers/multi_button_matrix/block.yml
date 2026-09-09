@@ -1,0 +1,26 @@
+description: Scanned button matrix (rows = outputs, cols = inputs). Publishes the index of the last-pressed key into a u8 param.
+
+# Standard row/column matrix scan: drive each row LOW in turn, read all cols.
+# A pressed key bridges its row to its col, pulling that col LOW. Index reported
+# is row * num_cols + col (0-based, 0xFF = no key).
+#
+# Up to 8 rows × 8 cols (64 keys). Configured GPIOs are listed in row_gpios / col_gpios.
+
+params:
+  num_rows: { type: int, required: true }
+  num_cols: { type: int, required: true }
+  row_gpios:
+    type: string
+    required: true
+    description: "Comma-separated row GPIOs (length must equal num_rows). Example: \"4,5,6,7\""
+  col_gpios:
+    type: string
+    required: true
+    description: "Comma-separated column GPIOs (length must equal num_cols)."
+  scan_interval_ms: { type: int, default: 30 }
+
+driver_params:
+  index_param:
+    type: u8
+    required: true
+    description: u8 last-pressed-key index (0..rows*cols-1), 0xFF means no key

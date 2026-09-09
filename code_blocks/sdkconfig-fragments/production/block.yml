@@ -1,0 +1,10 @@
+description: Hardening and aggressive size optimizations for release builds. NOT for
+
+# Original notes from the .defaults file:
+#   Hardening and aggressive size optimizations for release builds. NOT for
+#   development — strips logs and assertion strings, enables compressed
+#   bootloader, sets secure-version baseline. Apply via:
+#   sdkconfig_fragments: [production]
+#   Pair with `production_secure_boot` and `production_flash_encryption` if
+#   the device must be secure-boot signed and flash-encrypted.
+#   Bootloader compression saves ~30-40 KB on flash.

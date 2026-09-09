@@ -1,0 +1,228 @@
+# esp-zerocode-blocks CI.
+#
+# THIS is where firmware compilation is tested. The products live here, so the
+# matrix lives here — a hardcoded product list elsewhere had gone stale (39 names
+# against a catalog of 73, so the newest products were the ones nobody built).
+#
+# Three tiers, and the sizing is the point:
+#   validate        — seconds, every push, GATES. ALL 73 products, no compiler:
+#                     params published/consumed, pin legality, block wiring.
+#   build:affected  — every MR. ONE product per CHANGED block, on ONE chip.
+#                     Typically 1-3 builds.
+#   build:firmware  — main + schedule. The full framework x chip grid.
+#
+# 73 products x 8 chips is ~584 builds asking maybe 20 distinct questions.
+# Three reductions, each with a reason:
+#
+# 1. One product per FRAMEWORK, not per product. A second Matter light cannot
+#    fail where the first passed — what a compiler tells us that the validator
+#    cannot is "does this framework's generated code build for this chip".
+#    584 -> ~90.
+# 2. On an MR, one product per CHANGED BLOCK, not per framework. Nothing else
+#    in the catalog can have changed behaviour. ~90 -> 1-3.
+# 3. On an MR, ONE chip. Evidence from the ESP-IDF 6 migration: of a dozen
+#    distinct compile failures, only FOUR were chip-specific — the rest failed
+#    identically everywhere, so one chip catches two thirds of them at one
+#    eighth the cost. The full grid still runs on main and nightly, where the
+#    remaining third is caught before a release rather than before a merge.
+stages: [validate, build, image]
+
+# Runner selection. `build` is the tag the runners advertise — a job with no
+# tag sits pending forever against a fleet where every runner is tagged, which
+# looks like a hung pipeline rather than a misconfiguration.
+#
+# Set as a DEFAULT rather than per job so a job added later inherits it: the
+# failure mode of the per-job form is that someone adds a job, it never picks up
+# a runner, and nothing says why. image:idf-worker overrides it — building a
+# container needs the docker-in-docker fleet.
+default:
+  tags:
+    - build
+
+# ── Tier 1: fast and gating ──────────────────────────────────────────────
+validate:blocks:
+  stage: validate
+  image: node:20-slim
+  before_script:
+    - apt-get update -o Acquire::Retries=3
+    - apt-get install -y -o Acquire::Retries=3 --no-install-recommends python3 python3-yaml git
+  script:
+    - |
+      if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+        scripts/git-hooks/commit-msg --check "$CI_MERGE_REQUEST_DIFF_BASE_SHA..HEAD"
+      fi
+    - npm ci
+    - npm run build
+    - python3 scripts/check.py           # structural
+    - node scripts/validate.mjs          # semantic, via the in-repo engine
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+# ── Tier 2: the real matrix ──────────────────────────────────────────────
+#
+# Every product x every BUILDABLE chip. The product list is derived at run time
+# from product_configurations/ and split by stride, so adding a product needs no
+# CI edit and cannot be forgotten — which is exactly how the old matrix rotted.
+#
+# 8 chips x 3 chunks = 24 jobs. ~9 builds each at 73 products. Chunk count is a
+# throughput knob: one-job-per-build (195 jobs) buried the runner in cleanup and
+# artifact upload even when the builds themselves were fine, so keep jobs few
+# and let each do several builds serially.
+#
+# allow_failure while the ESP-IDF 6 migration settles; flip to gating once a
+# full green matrix has been seen on main.
+# The MR tier. Canary chip is esp32c6: it carries Wi-Fi, BLE and 802.15.4, so
+# it is the single chip that can build the most frameworks, and it is RISC-V
+# like six of the eight. Xtensa-specific breakage is the full grid's job.
+.build-common: &build-common
+  image:
+    name: $CI_REGISTRY_IMAGE/idf-worker:latest
+    entrypoint: [""]
+  variables:
+    IDF_CCACHE_ENABLE: "1"
+    # ── The two settings that make ccache actually work here ─────────────
+    # Measured on this catalog (2026-08-31), esp32c6, ESP-IDF v6.2:
+    #
+    #   same product rebuilt        99.8% hits    221s → 110s
+    #   different product, default   0.0% hits    no speedup whatsoever
+    #   different product, below    99.2% hits
+    #
+    # ccache defaults to hash_dir=true, so the BUILD DIRECTORY is part of every
+    # hash — and each product builds in its own. Identical ESP-IDF sources
+    # therefore hashed differently per product and shared nothing, which is
+    # precisely what a FULL sweep does fourteen times in a row. Taking the
+    # directory out of the hash took a never-before-built product from 0% to
+    # 99.2% hits against entries left by a DIFFERENT product with a different
+    # sdkconfig.
+    #
+    # This needs no cache: block to pay off — a FULL sweep builds sequentially
+    # in ONE job, so products 2..14 hit what product 1 left. A cross-pipeline
+    # cache: block is a separate decision, because a multi-GB cache upload has
+    # its own cost on a shared runner.
+    CCACHE_DIR: "$CI_PROJECT_DIR/.ccache"
+    CCACHE_BASEDIR: "$CI_PROJECT_DIR"
+    CCACHE_NOHASHDIR: "1"
+    # Bounded so one sweep cannot fill the runner's disk.
+    CCACHE_MAXSIZE: "4G"
+  before_script:
+    - . $IDF_PATH/export.sh
+    # This repo's OWN deps — the worker image carries ESP-IDF (and the
+    # esp-board-manager checkout, BMGR_PATH), not these. test-product.sh runs
+    # `npm run build` to refresh engine/dist before generating anything.
+    - npm ci
+  after_script:
+    # build-product.sh writes the compiler logs under _generated/_logs; the
+    # wrapper logs are already in _logs/. Never fail the job here: this runs
+    # after a failure and must not mask it.
+    - mkdir -p _logs && cp -a _generated/_logs/. _logs/ 2>/dev/null || true
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - _logs/
+
+build:affected:
+  stage: build
+  needs: [validate:blocks]
+  <<: *build-common
+  # An engine/scaffold change runs the FULL framework sweep (~10 real IDF
+  # builds, legitimately hours on a shared runner), and a silent trace is
+  # NORMAL — ci-build-frameworks.sh writes build output to _logs/ artifacts,
+  # not the trace, so silence is not a wedge. Judge a suspected hang by the
+  # _logs artifacts, not the trace.
+  timeout: 3h
+  # Three lanes. Each builds a round-robin share of whatever the run decides to
+  # build — the FULL sweep's ~10 builds land ~3-4 per lane, a 1-3 product MR
+  # leaves the surplus lanes exiting in seconds. Wall time becomes the slowest
+  # share instead of the sum. CI_NODE_INDEX/TOTAL reach ci-build-frameworks.sh
+  # and the loop below.
+  parallel: 3
+  variables:
+    CANARY_CHIP: esp32c6
+  script:
+    - |
+      # The runner fetches the MR ref only, so the target branch has to be
+      # fetched before it can be diffed against — otherwise ci-affected.sh
+      # cannot resolve its base. Matters for any MR whose target is not main.
+      git fetch --depth 20 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || true
+      AFFECTED="$(scripts/ci-affected.sh "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME")"
+      if [ -z "$AFFECTED" ]; then
+        echo "No block or product touched — validate already covered this change."; exit 0
+      fi
+      if [ "$AFFECTED" = FULL ]; then
+        echo "Scaffold/engine/CI changed — every product is downstream. Full framework sweep on $CANARY_CHIP."
+        exec scripts/ci-build-frameworks.sh "$CANARY_CHIP"
+      fi
+      rc=0
+      i=0
+      for p in $AFFECTED; do
+        # This lane's round-robin share (parallel: 3 above); the sweep branch
+        # partitions the same way inside ci-build-frameworks.sh.
+        i=$((i + 1))
+        if [ $(( (i - 1) % ${CI_NODE_TOTAL:-1} )) -ne $(( ${CI_NODE_INDEX:-1} - 1 )) ]; then continue; fi
+        # ci_chips is the product saying which chips it is meant for. Twelve
+        # blocks live only in products that exclude the canary — the camera
+        # stacks, the Mosaico panel drivers, the P4 display — and
+        # pick_for_block falls back to exactly those when nothing portable
+        # uses the block. Building them on the canary anyway fails on the
+        # chip, not on the change: a DVP camera driver cannot build for a part
+        # with no camera peripheral. Build the first chip it does declare.
+        chip="$CANARY_CHIP"
+        chips="$(sed -n 's/^ci_chips: *\[\(.*\)\]/\1/p' "product_configurations/$p/product.yml" 2>/dev/null | tr -d ' ')"
+        if [ -n "$chips" ]; then
+          case ",$chips," in
+            *",$CANARY_CHIP,"*) ;;
+            *) chip="${chips%%,*}"; echo "note: $p does not claim $CANARY_CHIP — building $chip" ;;
+          esac
+        fi
+        echo "=== $p on $chip"
+        scripts/test-product.sh "$p" --build "$chip" || rc=1
+      done
+      exit $rc
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+build:firmware:
+  stage: build
+  needs: [validate:blocks]
+  <<: *build-common
+  script:
+    - scripts/ci-build-frameworks.sh "$BUILD_CHIP"
+  parallel:
+    matrix:
+      # Mirrors chips.txt (a GitLab matrix must be literal).
+      # esp32s31 needs no special casing: --preview rides along unconditionally
+      # in build-product.sh.
+      - BUILD_CHIP: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32p4, esp32s3, esp32s31]
+  rules:
+    # NOT on merge requests — build:affected covers those at a fraction of the
+    # cost. This tier is for main and for the nightly schedule, where the full
+    # grid is affordable and the chip-specific third gets caught.
+    - if: $CI_COMMIT_BRANCH == "main"
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      allow_failure: true
+    - when: manual
+      allow_failure: true
+
+# ── The worker image the matrix runs in ──────────────────────────────────
+#
+# Manual: it is a ~30 minute build (IDF clone + submodules + eight toolchains)
+# and only changes when IDF_REF or the chip list does. Run it once, then again
+# on an IDF bump.
+image:idf-worker:
+  stage: image
+  # dind, not build: this job builds a container rather than running in one.
+  tags:
+    - dind
+  image: docker:27
+  services: [docker:27-dind]
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - . ./pins.env
+    - docker build -f Dockerfile.ci --build-arg "IDF_REF=$IDF_REF" --build-arg "BMGR_REF=$BMGR_REF" --build-arg "CHIPS=$(grep -v '^#' chips.txt | paste -sd, -)" -t "$CI_REGISTRY_IMAGE/idf-worker:latest" .
+    - docker push "$CI_REGISTRY_IMAGE/idf-worker:latest"
+  rules:
+    - when: manual
+      allow_failure: true

@@ -1,0 +1,5 @@
+description: Shared pulse-counter (PCNT) unit. Used by encoder, energy meter, flow sensor drivers.
+
+params:
+  high_limit: { type: int, default: 32767 }
+  low_limit:  { type: int, default: -32768 }

@@ -1,0 +1,15 @@
+menu "ZeroCode AI Product Configuration"
+
+    config APP_LED_GPIO
+        int "Main LED GPIO number"
+        default 8
+        help
+            GPIO number for the main LED output.
+
+    config APP_BUTTON_GPIO
+        int "Toggle button GPIO number"
+        default 9
+        help
+            GPIO number for the toggle button input.
+
+endmenu

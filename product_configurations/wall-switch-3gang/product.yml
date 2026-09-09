@@ -1,0 +1,145 @@
+id: wall-switch-3gang
+name: Wall Switch 3-Gang
+description: Three-relay in-wall switch — three Matter Mounted On/Off Control endpoints
+keywords: [wall, switch, 3-gang, triple]
+frameworks: [matter]
+
+instances:
+  - block: drivers/relay
+    prefix: LOAD1
+    cfg: { gpio: 7, active_level: 1, param_id: APP_DRIVER_PARAM_LOAD1_POWER }
+  - block: drivers/relay
+    prefix: LOAD2
+    cfg: { gpio: 8, active_level: 1, param_id: APP_DRIVER_PARAM_LOAD2_POWER }
+  - block: drivers/relay
+    prefix: LOAD3
+    cfg: { gpio: 9, active_level: 1, param_id: APP_DRIVER_PARAM_LOAD3_POWER }
+
+  - block: drivers/button
+    prefix: BTN1
+    cfg: { gpio: 4, active_level: 0, target_param: APP_DRIVER_PARAM_LOAD1_POWER }
+  - block: drivers/button
+    prefix: BTN2
+    cfg: { gpio: 5, active_level: 0, target_param: APP_DRIVER_PARAM_LOAD2_POWER }
+  - block: drivers/button
+    prefix: BTN3
+    cfg: { gpio: 6, active_level: 0, target_param: APP_DRIVER_PARAM_LOAD3_POWER }
+
+  - block: device_types/wall_switch_module
+    prefix: SW1
+    cfg: { power_param: APP_DRIVER_PARAM_LOAD1_POWER }
+  - block: device_types/wall_switch_module
+    prefix: SW2
+    cfg: { power_param: APP_DRIVER_PARAM_LOAD2_POWER }
+  - block: device_types/wall_switch_module
+    prefix: SW3
+    cfg: { power_param: APP_DRIVER_PARAM_LOAD3_POWER }
+
+  - include: baseline-connectivity
+
+  # ── Status LED + identify + commissioning indicator ────────────
+  # Visible feedback during commissioning and for Matter Identify commands.
+  # GPIO 15 is a sensible default (free across the catalog); reassign per
+  # board as actual hardware is selected. Status-LED blocks share
+  # APP_DRIVER_PARAM_LED_PATTERN so blink_pattern arbitrates between
+  # commissioning_led and identify_blink.
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/identify_blink
+    prefix: ID_BLINK
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+      identify_pattern: 3
+      idle_pattern: 1
+
+  # ── Long-press factory reset (button hold 5 s) ─────────────────
+  - block: behaviors/factory_reset_long_press
+    prefix: FR
+    cfg:
+      gpio: 4
+      active_level: 0
+      hold_time_ms: 5000
+
+  # ── State persistence (survives reboot) ───────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_LOAD1
+    cfg:
+      target_param: APP_DRIVER_PARAM_LOAD1_POWER
+      nvs_namespace: app
+      nvs_key: load1
+
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_LOAD2
+    cfg:
+      target_param: APP_DRIVER_PARAM_LOAD2_POWER
+      nvs_namespace: app
+      nvs_key: load2
+
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_LOAD3
+    cfg:
+      target_param: APP_DRIVER_PARAM_LOAD3_POWER
+      nvs_namespace: app
+      nvs_key: load3
+
+  - include: console-diagnostics
+
+  # ── Console set/get for actuator params ───────────────────────────
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LOAD1
+    cfg:
+      command_name: load1
+      target_param: APP_DRIVER_PARAM_LOAD1_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LOAD1
+    cfg:
+      command_name: get-load1
+      target_param: APP_DRIVER_PARAM_LOAD1_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LOAD2
+    cfg:
+      command_name: load2
+      target_param: APP_DRIVER_PARAM_LOAD2_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LOAD2
+    cfg:
+      command_name: get-load2
+      target_param: APP_DRIVER_PARAM_LOAD2_POWER
+      value_kind: bool
+  - block: behaviors/console_param_cmd
+    prefix: CMD_LOAD3
+    cfg:
+      command_name: load3
+      target_param: APP_DRIVER_PARAM_LOAD3_POWER
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_LOAD3
+    cfg:
+      command_name: get-load3
+      target_param: APP_DRIVER_PARAM_LOAD3_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Wall Switch 3-Gang

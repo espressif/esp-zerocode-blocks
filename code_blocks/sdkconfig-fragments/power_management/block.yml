@@ -1,0 +1,7 @@
+description: Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
+
+# Original notes from the .defaults file:
+#   Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
+#   Reduces average power on Wi-Fi-connected idle by 50-70%. Use for
+#   battery-powered or always-on plug-in products that should be efficient.
+#   sdkconfig_fragments: [power_management]

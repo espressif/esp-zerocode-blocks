@@ -1,0 +1,16 @@
+description: HC-SR04 ultrasonic distance sensor (trigger pulse + echo timing). Useful for parking sensors, water tank levels, presence at distance.
+
+# Sends a 10 µs HIGH pulse on TRIG, then measures the duration of the resulting
+# HIGH pulse on ECHO. distance_mm = duration_us * 343 / 2000 (speed of sound = 343 m/s).
+# Polled — for a non-blocking version, use a state machine + GPIO ISR.
+
+params:
+  trig_gpio: { type: int, required: true }
+  echo_gpio: { type: int, required: true }
+  poll_interval_ms: { type: int, default: 1000 }
+
+driver_params:
+  distance_mm_param:
+    type: u16
+    required: true
+    description: u16 distance in mm (clamped to 0xFFFF)

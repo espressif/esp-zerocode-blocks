@@ -1,0 +1,70 @@
+description: >-
+  CO5300 QSPI AMOLED/LCD panel (the ESP-Mosaico's onboard 480x480 square
+  touch display, also common on round smart-watch modules) for the display
+  framework. Owns the QSPI bus + panel init and creates the LVGL display;
+  contributes nothing without frameworks: [display].
+
+# Same split as drivers/display_ili9341_spi: the display framework block
+# carries no cfg, so panel pins live here. Exactly one panel block per
+# product — display_node_init assigns the shared `s_disp`.
+#
+# QSPI differences from the plain-SPI panel: four data lines instead of
+# MOSI, no D/C pin (commands ride the QSPI protocol: 32-bit cmd phase,
+# quad_mode on the panel IO), and the CO5300 takes brightness over the
+# command channel — there is no backlight GPIO.
+#
+# Buffer strategy: partial buffer of hres x 40 px, double-buffered, DMA
+# capable, in internal RAM (~75 KB at 480 wide). Full-frame buffers are a
+# per-product PSRAM decision, not a default.
+#
+# ESP-Mosaico wiring (esp-dev-kits user guide): sclk=44 cs=50 d0=36 d1=51
+# d2=35 d3=9 rst=42 (TE on 43, unused here).
+#
+# NOT yet hardware-verified on ESP32-S31 — the component builds on IDF >= 5.0;
+# verify on a Mosaico before trusting flush timing / pixel order.
+
+cmake_priv_requires:
+  app_display: [espressif__esp_lcd_co5300, esp_lcd, esp_driver_spi, esp_driver_gpio]
+
+# esp-board-manager mapping — read ONLY by a product whose board.yaml resolves
+# to a bmgr board.
+#
+# THIS BLOCK ADDS NOTHING TO THE AMEND. A CO5300 is not a part a user solders
+# on; it arrives soldered to a board, and every pin below is that board's. So
+# the mapping is the OTHER shape (see BmgrMapping.provided_by): on a board
+# whose definition already declares a `display_lcd` device, the board owns the
+# panel and this block steps aside — the display framework binds the board's
+# panel handle to LVGL instead, so the screen is brought up once rather than
+# twice. Twice is not a cosmetic duplication: spi_bus_initialize() on a host
+# the board already claimed returns ESP_ERR_INVALID_STATE, and the
+# ESP_ERROR_CHECK around it aborts the boot.
+#
+# `provided_by` is what keeps this narrow. On a board with NO display_lcd —
+# a bare devkit with a CO5300 module wired to its header — nothing here
+# applies and the block behaves exactly as it always did, pins and all.
+bmgr:
+  init: board_manager
+  provided_by: display_lcd
+  replaces_slots: [display_node_init, display_includes, config_defines]
+
+params:
+  spi_host:
+    type: int
+    default: 1
+    description: SPI host (1 = SPI2_HOST). Must not collide with another SPI block on the product.
+  sclk_gpio: { type: int, required: true }
+  d0_gpio:   { type: int, required: true, description: QSPI data 0 }
+  d1_gpio:   { type: int, required: true, description: QSPI data 1 }
+  d2_gpio:   { type: int, required: true, description: QSPI data 2 }
+  d3_gpio:   { type: int, required: true, description: QSPI data 3 }
+  cs_gpio:   { type: int, required: true }
+  rst_gpio:
+    type: int
+    default: -1
+    description: Panel reset GPIO (-1 if tied to system reset)
+  hres: { type: int, default: 480 }
+  vres: { type: int, default: 480 }
+  pclk_hz:
+    type: int
+    default: 40000000
+    description: QSPI pixel clock. 40 MHz is the safe default; the CO5300 tolerates more on short onboard routing.

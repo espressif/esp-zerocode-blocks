@@ -1,0 +1,104 @@
+id: thermostat-touch-panel
+name: Thermostat Touch Panel
+description: >-
+  A wall thermostat that is BOTH a Matter climate device and a touchscreen —
+  set the temperature from Apple Home / Google Home / Alexa or by dragging
+  the on-wall slider; the two stay in sync automatically. Heat call on a
+  relay, room temperature from an I2C sensor.
+keywords: [thermostat, touchscreen, matter, display, combo, climate, panel, heating]
+
+# THE FIRST COMBO PRODUCT: frameworks: [matter, display]. No special wiring —
+# the same device-type instance (device_types/thermostat) renders BOTH its
+# matter_* slots (climate endpoint) and its display_* slots (setpoint slider
+# + current-temp card), and the shared param bus keeps them coherent: a Home
+# app write moves the on-screen slider, a screen drag updates the Matter
+# attribute. The bus skips the source and dedups unchanged writes, so there
+# are no update loops.
+#
+# Pins target esp32s3-class boards (the display panel needs the wide pin
+# budget — same note as touch-room-panel).
+frameworks: [matter, display]
+
+instances:
+  # ── Panel + touch (display framework hardware) ────────────────────
+  - block: drivers/display_ili9341_spi
+    prefix: PANEL
+    cfg:
+      spi_host: 1
+      sclk_gpio: 12
+      mosi_gpio: 11
+      dc_gpio: 13
+      cs_gpio: 14
+      rst_gpio: 21
+      backlight_gpio: 47
+
+  - block: drivers/display_touch_ft5x06
+    prefix: TOUCH
+    cfg:
+      i2c_port: 0
+      sda_gpio: 8
+      scl_gpio: 9
+
+  # ── Room temperature (separate I2C bus from touch) ────────────────
+  - block: drivers/i2c_temp_humidity
+    prefix: TS
+    cfg:
+      i2c_port: 1
+      sda_gpio: 1
+      scl_gpio: 2
+      freq_hz: 100000
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_LOCAL_HUM
+
+  # ── The thermostat: ONE instance, TWO framework bindings ──────────
+  - block: device_types/thermostat
+    prefix: THERMO
+    cfg:
+      label: Thermostat
+      local_temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      heat_setpoint_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      system_mode_param: APP_DRIVER_PARAM_SYSTEM_MODE
+
+  # ── Heat-call relay ───────────────────────────────────────────────
+  - block: drivers/relay
+    prefix: HEAT
+    cfg:
+      gpio: 10
+      param_id: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - include: baseline-connectivity
+
+  # ── Commissioning LED (Matter side) ───────────────────────────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 18
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 18
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  # ── Setpoint survives reboot ──────────────────────────────────────
+  - block: behaviors/nvs_persist_i16
+    prefix: PERSIST_SETPOINT
+    cfg:
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      nvs_namespace: app
+      nvs_key: setpoint
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Thermostat Touch Panel

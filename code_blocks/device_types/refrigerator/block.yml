@@ -1,0 +1,54 @@
+description: "Refrigerator (Matter: refrigerator — composed device, RefrigeratorAndTCCMode; RainMaker: esp.device.other — Mode)"
+device_types:
+  matter: refrigerator
+  rainmaker: esp.device.other
+  # Zigbee-absent: no ZCL appliance equivalent
+
+# Endpoint exists on the fabric; no attribute<->driver wiring.
+# check.py keeps this field in step with the slots.
+matter_wiring: endpoint_only
+matter_wiring_note: "optional delegate(s): Refrigerator And Temperature Controlled Cabinet Mode, Activated Carbon Filter Monitoring; composes temperature_controlled_cabinet (their delegates live on those endpoints)"
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+# Matter side is an endpoint-only stub (driver_params are wired for RainMaker
+# only). RefrigeratorMode / alarm handlers are product-specific and must be wired up
+# post-generation; the clusters are created with esp_matter config defaults.
+
+params:
+  label:
+    type: string
+    default: Refrigerator
+    description: User-visible device name (RainMaker device name; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 320
+    description: >-
+      First voice-command phrase id for this instance (audio framework).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_set_the_fridge_to_normal:
+    type: string
+    default: "set the fridge to normal"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "set the fridge to normal"'
+  say_set_the_fridge_to_energy_save:
+    type: string
+    default: "set the fridge to energy save"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "set the fridge to energy save"'
+  say_set_the_fridge_to_rapid_cool:
+    type: string
+    default: "set the fridge to rapid cool"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "set the fridge to rapid cool"'
+
+driver_params:
+  mode_param:
+    type: u8
+    default: APP_DRIVER_PARAM_FRIDGE_MODE
+    description: "Driver param ID for refrigerator mode index (uint8_t: 0 normal, 1 energy save, 2 rapid cool)"
+# The Matter binding is an endpoint-only stub; stated as data so a listing can say so.
+maturity:
+  matter: stub

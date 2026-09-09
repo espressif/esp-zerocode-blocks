@@ -1,0 +1,8 @@
+dependencies:
+  # ESP-IDF 6 REMOVED both of these from the tree. esp-mqtt moved out to a
+  # managed component (`espressif/mqtt`), and the built-in `json` component
+  # went with it — cJSON is now `espressif/cjson`. Neither is optional here:
+  # app_mqtt is mqtt_client.h plus cJSON for the Home Assistant discovery
+  # payloads. Headers and APIs are unchanged; only where they come from moved.
+  espressif/mqtt: "~1.1.0"
+  espressif/cjson: "~1.7.19"

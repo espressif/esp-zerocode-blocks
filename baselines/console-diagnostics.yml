@@ -1,0 +1,18 @@
+# Always-on console debug commands: uptime, chip info, version,
+# log level, heap stats.
+instances:
+  - block: behaviors/console_uptime
+    prefix: CON_UPTIME
+    cfg: {}
+  - block: behaviors/console_chip_info
+    prefix: CON_CHIP
+    cfg: {}
+  - block: behaviors/console_version
+    prefix: CON_VER
+    cfg: {}
+  - block: behaviors/console_log_level
+    prefix: CON_LOG
+    cfg: {}
+  - block: behaviors/console_heap_stats
+    prefix: CON_HEAP
+    cfg: {}

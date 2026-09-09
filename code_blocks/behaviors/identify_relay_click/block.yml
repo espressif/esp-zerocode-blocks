@@ -1,0 +1,14 @@
+description: Audible identify response — clicks a boolean relay/load 3 times when Matter Identify is received. For products without a buzzer or LED, the relay click is the user signal.
+
+# Toggles target_param ON-OFF-ON-OFF-ON-OFF on identify start. Restores the
+# original value at the end so the user's outlet/load isn't left in a different state.
+
+params:
+  click_count: { type: int, default: 3 }
+  click_ms: { type: int, default: 200 }
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Boolean param to click (typically the same POWER param the relay drives)

@@ -1,0 +1,11 @@
+dependencies:
+  # Exact pin, not a range: esp_matter carries the whole connectedhomeip tree,
+  # so a "compatible" bump is never a small one. 1.6.0 (release/v1.6) is the
+  # version whose README names ESP-IDF commit e9da155 for ESP32-S31 — the
+  # combination we build on. It also moves the Matter SPEC from 1.4 to 1.6.
+  #
+  # Flat, not target-conditional. A `matches:` clause pinning 1.4.2 for
+  # everything and 1.6.0 for the S31 was the right shape while the fleet was
+  # staying on IDF v5.5.4 — but the fleet moved, so there is one IDF and one
+  # esp_matter, and two pins would only mean two untested combinations.
+  espressif/esp_matter: "==1.6.0"

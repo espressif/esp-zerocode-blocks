@@ -1,0 +1,110 @@
+description: "On-device machine learning — runs a trained model on the device itself and hands the result to driver blocks, with no cloud and no network. Implemented with TensorFlow Lite Micro; Espressif's esp-nn supplies the optimized kernels. Pick this when esp-dl cannot be used: a target outside esp-dl's ESP32/S3/P4 operator support, an operator esp-dl does not implement, a model that will not export to ONNX for esp-ppq, or a .tflite you were handed and cannot retrain."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32c6, esp32p4, esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# This is a "framework" block, and a SELF-CONTAINED one: the generator copies
+# components/ into the output and renders main_includes / main_init into
+# app_main.cpp. No engine change is needed — nothing here adds a slot family.
+#
+# ARCHITECTURE — same split as frameworks/vision. The framework owns the
+# INFERENCE RUNTIME; the model, the input feed and the param-bus publishing
+# live in DRIVER blocks. Framework blocks carry no cfg, so everything
+# configurable (arena size, interval, which param to publish) belongs to an
+# instance block — drivers/ml_classifier is the reference consumer.
+#
+# The API in app_tflite.h is the examples' three-phase shape, made reusable:
+#
+#     PREPARE       zc_tflite_session_create()   GetModel + arena + resolver
+#                                                + MicroInterpreter
+#                                                + AllocateTensors
+#     INVOKE        zc_tflite_invoke()           feed input, Invoke(), time it
+#     POST-PROCESS  zc_tflite_output_value()     dequantize output[i] to float
+#
+# WHY AN OP-SET ENUM AND NOT A LIST: TFLite Micro has no AllOpsResolver — it
+# is MicroMutableOpResolver<N> with one explicit .AddXxx() per operator, all
+# resolved at COMPILE time. Slot templating has {{#if}} but no loop, so a
+# product cannot hand the block an arbitrary op list. Instead the framework
+# ships three curated sets (see zc_tflite_ops_t) and a block author who needs
+# another operator adds it to app_tflite.cpp in an MR. Registering only what a
+# model uses is also what keeps the binary small — the reason TFLM dropped
+# AllOpsResolver in the first place.
+#
+# CHIPS: no restriction. esp-tflite-micro builds anywhere on IDF >= 5.1, and
+# esp-nn picks its kernels per target — hand-written assembly on esp32s3
+# (vector) and esp32p4 (PIE/QACC), generic C optimizations on esp32 and
+# esp32c3, plain reference kernels elsewhere. Measured person-detection
+# invoke() with esp-nn: s3 54 ms, p4 73 ms, esp32 380 ms, c3 426 ms. Slow is
+# still usable at a low duty cycle, so this block gates nothing; a product
+# that needs a frame rate should say so with ci_chips.
+#
+# MODELS — the shipped one is a SMOKE TEST, not a product model.
+# components/app_tflite/model_reference.cc is the TFLM "hello world" sine
+# regressor: 2488 bytes, one FullyConnected graph, vendored so the framework
+# LINKS and runs an inference with no product-supplied model. It exists for
+# ml-inference-demo and for CI, which needs something to compile. Its output
+# is meaningless — a product that ships it is running a smoke test.
+#
+# It costs a real product nothing. IDF compiles with -fdata-sections and links
+# with --gc-sections, so once a block names a different symbol the reference
+# array is unreferenced and dropped from the binary.
+#
+# BRINGING A REAL MODEL. A driver block declares the symbol (its slot emits
+# the extern) but cannot VENDOR the bytes: only FRAMEWORK blocks get their
+# components/ subtree copied into the output, and slot code is C fragments,
+# not files. It can still pull a model in through the component manager. Three
+# routes, in the order to prefer them:
+#
+#   1. Out of a managed component this framework already depends on — the
+#      route drivers/ml_person_detect takes. The CMakeLists below compiles
+#      person_detect_model_data.cc straight out of esp-tflite-micro's
+#      examples/. Best when the model already exists upstream: the catalog
+#      carries a reference, not 1.85 MB of hex, and the licence stays with
+#      the component that owns it.
+#   2. Out of a managed component that ships and compiles the model itself —
+#      the block declares it in idf_component.yml and adds it to
+#      cmake_priv_requires.app_logic, then just names the symbol. This is how
+#      esp-dl's model zoo is packaged. Nothing here uses it yet, but it is the
+#      cleanest route for a model that is not already in a component we pull.
+#   3. Vendored into components/app_tflite/ beside model_reference.cc, added
+#      to SRCS. Last resort — it puts the bytes and the licence in this
+#      repo, and the catalog tarball carries them for every product.
+#
+# Whichever route, the model is a `alignas(8) const unsigned char[]` (the
+# flatbuffer needs 8-byte alignment) and the consuming block points its
+# model_symbol at that name. Match ops_profile to what the graph actually
+# uses, and size the arena by running it — AllocateTensors logs what it wanted.
+#
+# MEMORY: the tensor arena dominates, and it is a property of the CHIP as well
+# as the model. esp-nn's optimized kernels (esp32s3, esp32p4 — CONFIG_NN_OPTIMIZED)
+# need a scratch buffer the generic-C path does not, so one flat number is
+# wrong on half the catalogue. Upstream's person-detection example says it
+# plainly:
+#
+#     kTensorArenaSize = 100 * 1024 + scratchBufSize   // 60 KB when optimized
+#
+# The driver blocks mirror that with arena_base_kb + arena_scratch_kb, and
+# their config_defines emit the same #if CONFIG_NN_OPTIMIZED split, so one
+# product value is correct on every chip. Scratch is PER MODEL, not a library
+# constant — upstream's mobilenet_v3 declares 200 KB where person-detect
+# declares 60.
+#
+# The only way to learn a model's real figure is to run it: app_tflite.cpp
+# logs arena_used_bytes() at INFO on every successful session create, and
+# TFLM's own guidance is that the optimal size is that number + 16 (alignment).
+# Do not guess; over-provision, read the log, then shrink.
+#
+# THE ARENA IS NOT THE ONLY PER-MODEL NUMBER. The interpreter recurses through
+# the graph on the CALLING TASK's stack, so a deeper model needs a deeper task:
+# drivers/ml_person_detect runs its loop on 6144 bytes where the single
+# FullyConnected reference model is comfortable on 4096.
+#
+# PSRAM: arena_in_psram prefers it and falls back to internal RAM
+# (heap_caps_malloc_prefer), so a product without PSRAM still boots — but it
+# then spends that many KB of internal RAM instead, silently. Nothing
+# validates this today.

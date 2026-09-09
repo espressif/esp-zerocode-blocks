@@ -1,0 +1,141 @@
+id: mosaico-room-panel-board
+name: ESP-Mosaico Room Panel (board)
+description: >-
+  The ESP-Mosaico as a Matter room panel — the same product as
+  mosaico-room-panel, except that its 480x480 touch display comes from the
+  board definition instead of being hand-pinned. No panel block, no touch
+  block, no GPIO numbers: the board brings the CO5300 and the CST9220 up at
+  boot and the display framework asks it for the handles.
+keywords: [mosaico, esp32s31, display, touchscreen, matter, panel, board-manager, bmgr]
+
+# THE BOARD TWIN of mosaico-room-panel, and the measurement that phase 3 of
+# the board-manager switch-over exists to make. The two products are the same
+# composition; the difference is who owns the panel:
+#
+#   mosaico-room-panel        drivers/display_co5300_qspi (10 cfg pins)
+#                             drivers/display_touch_cst9220 (6 cfg pins)
+#   this product              board.yaml → esp_mosaico
+#
+# Keep them BOTH. The hand-pinned one is the control: it is the only way to
+# tell whether a change in binary size or behaviour came from the collapse or
+# from something else that moved underneath.
+#
+# THE BOARD IS NOT NAMED HERE — a product.yml never names a board. The
+# board.yaml beside this file says what hardware this sample runs on. This is
+# one of the catalog's SAMPLE board files (see CLAUDE.md → Boards); no other
+# product should grow one.
+frameworks: [matter, display]
+ci_chips: [esp32s31]
+
+# 8 MB table, same as the control. The board asserts 16 MB of flash and the
+# engine drops the product's own flash-size keys, so the table is the only
+# statement here about memory.
+partition_table: 8mb
+
+instances:
+  # ── NO PANEL BLOCK, NO TOUCH BLOCK ────────────────────────────────
+  #     The esp_mosaico board definition declares `display_lcd` (CO5300 over
+  #     QSPI) and `lcd_touch` (CST9220 on the shared I2C0). The generator sees
+  #     those in the board's own board_devices.yaml and has the display
+  #     framework fetch their handles instead of re-initializing the hardware.
+  #     Sixteen GPIO numbers, one SPI bus config and one I2C bus config are
+  #     gone from this file because they were never this product's to state.
+
+  # ── The light card — the board's OWN orange status LED ────────────
+  #     The same physical LED the hand-pinned twin drives on GPIO 3, reached
+  #     the way a board product should reach board hardware: by asking for it.
+  #     `status_led` is a `gpio_ctrl` device in the esp_mosaico definition, so
+  #     esp_board_manager_init() has already configured the line and left a
+  #     handle waiting — drivers/board_gpio_ctrl fetches it and drives it.
+  #
+  #     NO GPIO NUMBER HERE, and that is the difference that matters. Pointing
+  #     drivers/relay at GPIO 3 is not the same thing and does not work: the
+  #     board claims that pin for `gpio_status_led`, the relay's amend fragment
+  #     would claim it too, and the engine reports the IO conflict. Correctly —
+  #     one pin, one owner; the way to use someone else's pin is to ask them.
+  #     Until the adapter existed this product drove an EXTERNALLY WIRED relay
+  #     on GPIO 4 instead, which was the one piece of hardware its twin did not
+  #     have.
+  - block: drivers/board_gpio_ctrl
+    prefix: LAMP
+    cfg:
+      device: status_led
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: device_types/light
+    prefix: LAMP_CARD
+    cfg:
+      # "Status Light", matching the twin: it is now literally the same LED,
+      # and a label is what a controller shows a person. Two names for one
+      # piece of hardware is the kind of difference that makes a control
+      # product stop being a control.
+      label: Status Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── TWO SENSORS ON A BUS THIS PRODUCT DOES NOT OWN ────────────────
+  #     There is NO peripherals/i2c_bus instance here, and no sda/scl
+  #     anywhere in this file. The esp_mosaico board definition declares
+  #     I2C0 on GPIO 0/1 (`i2c_master` in its board_peripherals.yaml) and
+  #     esp_board_manager_init() creates it — with i2c_new_master_bus() —
+  #     before app_driver_init() runs. Each block below names the PORT,
+  #     asks ESP-IDF for that port's bus and attaches its own device.
+  #
+  #     This pair is the measurement the I2C migration exists to make.
+  #     While these blocks spoke the legacy driver/i2c.h they could not
+  #     open a port the board manager owned, and the validator REFUSED
+  #     exactly this composition. Both facts are gone; keep the product
+  #     so a regression to either one fails CI rather than a board.
+  #     See CLAUDE.md → How an I2C block gets its bus.
+  - block: drivers/imu_bmi270
+    prefix: IMU
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x69
+      motion_param: APP_DRIVER_PARAM_IMU_MOTION
+
+  - block: drivers/fuel_gauge_bq27220
+    prefix: BATT
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x55
+      soc_param: APP_DRIVER_PARAM_BATTERY_PCT
+
+  # A panel that reports "I am being moved" IS occupancy — the same
+  # binding the hand-pinned twin uses, so the two stay comparable.
+  - block: device_types/occupancy_sensor
+    prefix: MOVED
+    cfg:
+      label: Panel Moved
+      occupied_param: APP_DRIVER_PARAM_IMU_MOTION
+
+  # No Matter power-source device TYPE exists (it is a cluster on an
+  # existing endpoint), so battery is reported over the console.
+  - block: behaviors/console_param_get
+    prefix: GET_BATT
+    cfg:
+      command_name: battery
+      target_param: APP_DRIVER_PARAM_BATTERY_PCT
+      value_kind: u8
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Mosaico Room Panel

@@ -1,0 +1,26 @@
+description: 2-channel PWM driver for CCT (warm + cool white) lights with brightness + color temperature
+
+# Implements warm/cool channel mixing from a Matter color temperature in mireds.
+# Mireds map to a normalized warm fraction that's combined with brightness + on/off.
+# Cool channel is on a separate LEDC channel/timer from the warm channel.
+
+params:
+  warm_gpio:
+    type: int
+    required: true
+    description: GPIO for warm-white channel
+  cool_gpio:
+    type: int
+    required: true
+    description: GPIO for cool-white channel
+  warm_channel: { type: int, default: 0 }
+  cool_channel: { type: int, default: 1 }
+  ledc_timer:  { type: int, default: 0 }
+  freq_hz:     { type: int, default: 5000 }
+  ct_min_mireds: { type: int, default: 153 }   # ~6500K (cool)
+  ct_max_mireds: { type: int, default: 500 }   # ~2000K (warm)
+
+driver_params:
+  power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
+  brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+  color_temp_param: { type: u16, default: APP_DRIVER_PARAM_COLOR_TEMP }

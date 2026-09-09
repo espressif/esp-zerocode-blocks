@@ -1,0 +1,45 @@
+description: >-
+  ILI9341 SPI LCD panel (240x320, the ubiquitous 2.4"-3.2" TFT) for the
+  display framework. Owns the SPI bus + panel init and creates the LVGL
+  display; contributes nothing without frameworks: [display].
+
+# Why a driver and not part of the framework block: framework blocks are
+# loaded by name from product.frameworks and carry no cfg, so pins cannot
+# live there (same split as voice_mic_i2s / the audio framework). This
+# block's display_node_init runs inside app_display_init and assigns the
+# shared `s_disp` — exactly one panel block per product (a second one would
+# clobber it; the intended failure is obvious on screen).
+#
+# Buffer strategy: partial buffer of hres x 40 px, double-buffered, DMA
+# capable, in internal RAM — ~38 KB total at 240 wide, safe on every chip
+# without PSRAM. Full-frame buffers need PSRAM and are a per-product tuning
+# decision, not a default.
+#
+# Backlight is a plain GPIO (most cheap modules: LED pin, active high).
+
+cmake_priv_requires:
+  app_display: [espressif__esp_lcd_ili9341, esp_lcd, esp_driver_spi, esp_driver_gpio]
+
+params:
+  spi_host:
+    type: int
+    default: 1
+    description: SPI host (1 = SPI2_HOST). Must not collide with another SPI block on the product.
+  sclk_gpio: { type: int, required: true }
+  mosi_gpio: { type: int, required: true }
+  dc_gpio:   { type: int, required: true, description: Data/command select }
+  cs_gpio:   { type: int, required: true }
+  rst_gpio:
+    type: int
+    default: -1
+    description: Panel reset GPIO (-1 if tied to system reset)
+  backlight_gpio:
+    type: int
+    default: -1
+    description: Backlight enable GPIO, active high (-1 if always on)
+  hres: { type: int, default: 240 }
+  vres: { type: int, default: 320 }
+  pclk_hz:
+    type: int
+    default: 40000000
+    description: SPI pixel clock. 40 MHz works on short wires; drop to 20 MHz for jumper-wire rigs.

@@ -1,0 +1,31 @@
+description: "Enable over-the-air firmware updates via the product's protocol(s): Matter OTARequestor, RainMaker OTA-over-MQTT, and/or a Zigbee OTA Upgrade client cluster"
+
+# Same-block multi-framework behavior: each framework's OTA delivery is
+# contributed via that framework's slot family, so only the selected
+# frameworks' code is generated.
+#
+# - Matter: esp_matter ships an OTA Requestor auto-initialized by
+#   esp_matter::start() when CONFIG_ENABLE_OTA_REQUESTOR=y — which CHIP's
+#   Kconfig defaults to n and the Matter framework block deliberately does
+#   not set (OTA is opt-in via this block). This block's sdkconfig.defaults
+#   sets it; no code needed beyond that.
+# - RainMaker: esp_rmaker_ota_enable_default() registers OTA-over-topics
+#   with the RainMaker cloud (rendered into app_rainmaker_init after node
+#   setup, before esp_rmaker_start).
+# - Zigbee: a dedicated endpoint carries an OTA Upgrade CLIENT cluster; a
+#   hub/coordinator with an OTA server pushes images. Chunks arrive via the
+#   EZB_ZCL_CORE_OTA_UPGRADE_CLIENT_PROGRESS_CB_ID action callback and are written to
+#   the inactive esp_ota partition; on FINISH the image is validated, the
+#   boot partition switched, and the device restarts. The periodic image
+#   query is armed from the signal handler once the device is on a network
+#   (ezb_zcl_ota_upgrade_query_next_image_cmd_req() needs the started stack, and
+#   zigbee_node_init renders before ezb_af_device_desc_register()/esp_zigbee_start()).
+
+params:
+  zb_ota_endpoint:
+    type: int
+    required: false
+    default: 80
+    description: Zigbee endpoint number for the dedicated OTA Upgrade client endpoint (Zigbee products only)
+
+param_refs: {}

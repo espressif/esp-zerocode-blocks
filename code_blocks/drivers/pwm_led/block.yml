@@ -1,0 +1,29 @@
+description: LEDC PWM-driven dimmable LED (single channel, 0–254 → 0–100% duty)
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO pin connected to LED through driver/MOSFET
+  ledc_channel:
+    type: int
+    default: 0
+    description: LEDC channel (0–7)
+  ledc_timer:
+    type: int
+    default: 0
+    description: LEDC timer (0–3)
+  freq_hz:
+    type: int
+    default: 5000
+    description: PWM frequency
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID for on/off state (boolean)
+  brightness_param:
+    type: u8
+    default: APP_DRIVER_PARAM_BRIGHTNESS
+    description: Driver param ID for brightness (0–254)

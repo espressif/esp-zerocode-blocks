@@ -1,0 +1,4 @@
+# The Matter half of this block: CHIP defaults this to n, and without it
+# esp_matter_ota_requestor_init() (inside esp_matter::start()) is a no-op.
+# Ignored with a warning in non-Matter products.
+CONFIG_ENABLE_OTA_REQUESTOR="y"

@@ -1,0 +1,40 @@
+## ZeroCode AI - External Dependencies
+## Base template: minimal deps. Framework blocks add their own.
+
+dependencies:
+  # ESP-IDF 6.x. The platform pins ONE toolchain — master @ e9da155, which
+  # self-reports 6.2.0 — because ESP32-S31 exists in no released IDF (it is a
+  # PREVIEW target even on master) and e9da155 is the commit esp-matter names
+  # for it. Every chip moved together; a second IDF does not fit under the
+  # Lambda image's 10 GiB ceiling.
+  #
+  # The floor is 6.0, not 5.4: nothing here is tested against 5.x any more, and
+  # a range that admits an untested toolchain is a promise we do not keep.
+  # The <7.0 cap is the lesson of this very migration — the old `<6.0` cap is
+  # what stopped IDF 6 arriving unannounced, and it did its job.
+  idf: ">=6.0,<7.0"
+
+  # Button driver (GPIO with click/double-click/long-press events)
+  espressif/button: "~4.2.0"
+
+  # ESP32-P4 has no radio: esp_wifi_remote keeps the esp_wifi API working by
+  # forwarding it over ESP-Hosted to a companion Wi-Fi chip (a C6 on the
+  # Function EV board). Range stays loose so it still resolves against the pin
+  # esp_matter carries for the same target.
+  espressif/esp_wifi_remote:
+    version: ">=0.7,<2.0"
+    rules:
+      - if: "target in [esp32p4]"
+
+  # esp_wifi_remote would pull esp_hosted on its own; the pin holds it on the
+  # 2.x line, whose NimBLE VHCI glue binds itself to the host stack from
+  # CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE alone. 3.x reworked that into a feature
+  # the app has to start (esp_hosted_bt_host_stack_setup() before NimBLE comes
+  # up) — esp_matter calls nimble_port_init() itself and never makes that call,
+  # so BLE would silently have no controller behind it.
+  espressif/esp_hosted:
+    version: ">=2.7,<3.0"
+    rules:
+      - if: "target in [esp32p4]"
+
+  ## --- Framework-specific and product-specific deps added by templates/AI ---

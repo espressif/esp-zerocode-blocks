@@ -1,0 +1,4 @@
+description: Logs connectivity + onboarding transitions (Matter commissioning / RainMaker provisioning + MQTT). Pairs well with commissioning_led for the visible side; this gives the textual log.
+
+# Same-block multi-framework behavior: Matter side in matter_event_cases,
+# RainMaker side in rainmaker_event_cases — only selected frameworks render.

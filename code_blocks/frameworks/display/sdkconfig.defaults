@@ -1,0 +1,6 @@
+# LVGL 9 ships its own printf, which compiles %f out unless LV_USE_FLOAT (a
+# coordinate-type switch) is on. Every catalog readout formats with integers,
+# but product code written on top of this framework reaches for "%.1f" — with
+# the builtin formatter that renders as "f". Use the C library formatter so a
+# float format prints the number.
+CONFIG_LV_USE_CLIB_SPRINTF="y"

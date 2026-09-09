@@ -1,0 +1,30 @@
+description: Sets the wall clock — timezone + SNTP — so anything the product keys on time of day (schedules, daily budgets, night windows, timestamps) has a real clock. Without a time source time() sits at the 1970 epoch and every such feature silently misbehaves. Coexists with a transport that already runs SNTP (RainMaker) — it then only sets the timezone and reports the sync.
+
+# Behavior, logic slots only. Registers an SNTP client once the network is up
+# (the ESP-IDF client retries by itself until it syncs) and, optionally,
+# publishes a bool on the param bus the moment the first sync lands — so a
+# controller can gate a clock-dependent decision on "time is trustworthy"
+# instead of on a 1970 timestamp.
+#
+# Wi-Fi/Ethernet products only (SNTP needs IP). Composed by the
+# baseline-connectivity group; Zigbee / BLE Mesh products have no IP stack and
+# do not pull it.
+
+cmake_priv_requires:
+  app_logic: [esp_netif, lwip]
+
+params:
+  tz:
+    type: string
+    default: "UTC0"
+    description: "POSIX TZ string for local time, e.g. \"CET-1CEST,M3.5.0,M10.5.0/3\" or \"IST-5:30\". Default UTC."
+  ntp_server:
+    type: string
+    default: "pool.ntp.org"
+    description: NTP server hostname
+
+driver_params:
+  valid_param:
+    type: bool
+    required: false
+    description: Optional bus param set to true on the first successful sync (and never cleared) — gate clock-dependent logic on it

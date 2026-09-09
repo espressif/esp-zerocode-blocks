@@ -1,0 +1,23 @@
+description: Bistable / latching relay (2 GPIOs — set + reset). Pulses each coil briefly to change state, then releases. Survives power loss without holding current.
+
+params:
+  set_gpio:
+    type: int
+    required: true
+    description: GPIO that pulses the SET coil (latch closed)
+  reset_gpio:
+    type: int
+    required: true
+    description: GPIO that pulses the RESET coil (latch open)
+  pulse_ms:
+    type: int
+    default: 50
+    description: Coil pulse width — typical bistable relay needs 30-100 ms
+  active_level:
+    type: int
+    default: 1
+
+driver_params:
+  param_id:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER

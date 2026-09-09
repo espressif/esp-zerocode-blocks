@@ -1,0 +1,35 @@
+description: Declares the shared status-LED pattern vocabulary consumed by drivers/status_led. Pattern contributor only — never drives the pin.
+
+# SINGLE-OWNER CONTRACT
+# ---------------------
+# The status LED is owned SOLELY by drivers/status_led, which creates the one
+# led_indicator handle and is the single code path that touches the pin (via
+# {{prefix_lc}}_status_led_set_pattern). This block does NOT create a second
+# led_indicator, does NOT gpio_config / gpio_set_level the pin, and runs NO
+# blink task — doing any of those would re-introduce the "double-drive" bug
+# where a raw driver fights led_indicator over the same GPIO.
+#
+# This block exists to declare the shared LED_PATTERN param and its pattern
+# vocabulary (so commissioning_led / identify_blink and drivers/status_led all
+# agree on the numbers). Effects are produced by pushing a u8 onto the param:
+#   0 = off
+#   1 = solid on
+#   2 = slow blink (1 Hz)
+#   3 = fast blink (4 Hz)
+#   4 = breathe
+# drivers/status_led consumes the param and renders it through the one handle.
+#
+# NOTE: cfg.gpio / cfg.active_level are kept for backward-compatible product
+# composition only; they are NOT used to configure any pin here (the pin is
+# owned by drivers/status_led). Point drivers/status_led at the same GPIO.
+
+params:
+  gpio: { type: int, required: true }
+  active_level: { type: int, default: 1 }
+
+driver_params:
+  pattern_param:
+    type: u8
+    required: true
+    description: u8 — the shared LED pattern param (consumed by drivers/status_led)
+slots: {}

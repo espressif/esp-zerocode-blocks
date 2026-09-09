@@ -1,0 +1,132 @@
+id: mosaico-room-panel
+name: ESP-Mosaico Room Panel
+description: >-
+  The ESP-Mosaico as a Matter room panel — its onboard 480x480 square touch
+  display renders a light card you toggle by touch OR from any Matter
+  controller, driven entirely by onboard hardware (the CO5300 panel, the
+  CST9220 touch, the status LED as the light). Zero external wiring.
+keywords: [mosaico, esp32s31, display, touchscreen, matter, panel, co5300, qspi, touch]
+
+# First esp32s31 product. Everything here is the ESP-Mosaico CoreBoard's own
+# hardware (esp-dev-kits user guide pinout) — build with
+# `idf.py set-target esp32s31`; other chips have no CO5300 wiring to fall
+# back to, so this product is Mosaico-specific by construction.
+#
+# NOT yet hardware-verified: esp-matter builds for esp32s31 (verified
+# 2026-08-23), but the CO5300/CST9220 bring-up needs a real Mosaico.
+frameworks: [matter, display]
+# BOARD-SPECIFIC: this product pins one board's wiring, so it is not
+# chip-portable and must not stand in for its framework generally.
+# CI builds it on exactly these chips.
+ci_chips: [esp32s31]
+# 8 MB table, not the default 4 MB. Matter + LVGL on the S31 links to 0x1e3a30
+# — 14,896 bytes over a 1.875 MB OTA slot. Fifteen kilobytes, so trimming was
+# tempting, but the Mosaico has 16 MB of NOR: shrinking a product to fit a
+# table its board does not have would be the wrong repair.
+partition_table: 8mb
+
+instances:
+  # ── Panel first, touch second — touch registers against the panel's
+  #     display, so product.yml order matters ────────────────────────
+  - block: drivers/display_co5300_qspi
+    prefix: PANEL
+    cfg:
+      spi_host: 1
+      sclk_gpio: 44
+      d0_gpio: 36
+      d1_gpio: 51
+      d2_gpio: 35
+      d3_gpio: 9
+      cs_gpio: 50
+      rst_gpio: 42
+      hres: 480
+      vres: 480
+
+  - block: drivers/display_touch_cst9220
+    prefix: TOUCH
+    cfg:
+      i2c_port: 0
+      sda_gpio: 0
+      scl_gpio: 1
+      int_gpio: 6
+      x_max: 480
+      y_max: 480
+
+  # ── The light card — the board's own status LED (GPIO3, active-low) ─
+  - block: drivers/relay
+    prefix: LAMP
+    cfg:
+      gpio: 3
+      active_level: 0
+      param_id: APP_DRIVER_PARAM_POWER
+
+  - block: device_types/light
+    prefix: LAMP_CARD
+    cfg:
+      label: Status Light
+      power_param: APP_DRIVER_PARAM_POWER
+
+  # ── THE SAME TWO SENSORS AS THE BOARD TWIN, on a bus this product
+  #     owns. mosaico-room-panel-board runs the identical pair on the
+  #     esp_mosaico board's own I2C0; here the product states the bus
+  #     itself. That is the whole comparison: one composition, two
+  #     owners of the same physical bus, and the sensor blocks below
+  #     cannot tell which is which — they name a PORT and ask ESP-IDF
+  #     for its handle. Keep the pair in step.
+  - block: peripherals/i2c_bus
+    prefix: SENSOR
+    cfg:
+      port: 0
+      sda_gpio: 0
+      scl_gpio: 1
+      freq_hz: 100000
+
+  - block: drivers/imu_bmi270
+    prefix: IMU
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x69
+      motion_param: APP_DRIVER_PARAM_IMU_MOTION
+
+  - block: drivers/fuel_gauge_bq27220
+    prefix: BATT
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x55
+      soc_param: APP_DRIVER_PARAM_BATTERY_PCT
+
+  - block: device_types/occupancy_sensor
+    prefix: MOVED
+    cfg:
+      label: Panel Moved
+      occupied_param: APP_DRIVER_PARAM_IMU_MOTION
+
+  - block: behaviors/console_param_get
+    prefix: GET_BATT
+    cfg:
+      command_name: battery
+      target_param: APP_DRIVER_PARAM_BATTERY_PCT
+      value_kind: u8
+
+  # ── Light state survives reboot ───────────────────────────────────
+  - block: behaviors/nvs_persist_bool
+    prefix: PERSIST_POWER
+    cfg:
+      target_param: APP_DRIVER_PARAM_POWER
+      nvs_namespace: app
+      nvs_key: power
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_POWER
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+      value_kind: bool
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Mosaico Room Panel

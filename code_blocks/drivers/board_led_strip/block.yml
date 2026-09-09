@@ -1,0 +1,74 @@
+description: >-
+  Drive an addressable LED the BOARD already declares (a devkit's on-board
+  WS2812) through esp-board-manager: a boolean driver param switches the whole
+  strip on/off in a fixed colour. Board-only: it states no pin, because the
+  pin is the board's.
+
+# WHY THIS BLOCK EXISTS.
+#
+# A devkit's RGB LED is real hardware described in the board definition
+# (`type: led_strip` in board_devices.yaml), brought up by
+# esp_board_manager_init() with a led_strip handle waiting for anyone who
+# asks. Nothing asked. So a board product that wanted a status light had to
+# wire its own LED on a free pin and leave the one soldered to the board dark
+# — and pointing drivers/status_led (or ws2812_strip) at the LED's pin instead
+# is an IO conflict with the board's own device, correctly: one pin, one
+# owner. The way to use hardware someone else owns is to ASK THEM FOR IT.
+# Same adapter shape as drivers/board_gpio_ctrl, for a led_strip device.
+#
+# Deliberately MINIMAL: one boolean param, one colour. This is the board-LED
+# twin of a status/power indicator, not of drivers/ws2812_strip — full
+# HSV color/brightness control over a board strip is a separate block when a
+# product needs it, so this one stays a drop-in for "show the plug state on
+# the devkit's LED".
+#
+# An OBSERVER, not an owner. It registers an app_driver notify callback
+# instead of contributing a driver_apply_cases `case`, because an indicator's
+# param is usually OWNED by another driver (the relay whose state it shows) —
+# a second `case APP_DRIVER_PARAM_POWER:` in app_driver_apply_param() is a
+# duplicate-case compile error (found by the c6-devkit-plug build).
+#
+# BOARD-ONLY, AND CHECKED. `bmgr.device_param` makes generation FAIL when
+# there is no board, when the pack cannot be read, or when the board declares
+# no such device. Unchecked, this block compiles and links against a device
+# that does not exist and reports it in one log line at boot.
+#
+# NOT hardware-verified.
+
+cmake_priv_requires:
+  app_driver: [espressif__esp_board_manager]
+
+bmgr:
+  init: board_manager
+  # The board manager configures the RMT/SPI backend and owns the line; this
+  # block only asks for the handle. Nothing to replace — there is no
+  # non-board code path to drop.
+  provided_by: led_strip
+  device_param: device
+
+params:
+  device:
+    type: string
+    required: true
+    description: >-
+      The board device's NAME in its board_devices.yaml (e.g. led_strip).
+      Must be a device of type led_strip on the board this product runs on —
+      generation fails otherwise.
+  red:
+    type: int
+    default: 16
+    description: R component (0-255) shown when the param is true
+  green:
+    type: int
+    default: 16
+    description: G component (0-255) shown when the param is true
+  blue:
+    type: int
+    default: 16
+    description: B component (0-255) shown when the param is true
+
+driver_params:
+  param_id:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID this indicator reacts to (boolean)

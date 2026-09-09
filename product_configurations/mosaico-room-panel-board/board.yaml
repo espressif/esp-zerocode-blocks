@@ -1,0 +1,18 @@
+schema: zc-board/1
+
+# THE HARDWARE, NOT THE PRODUCT — see the note in
+# product_configurations/c6-devkit-board-relay/board.yaml. This is a SAMPLE
+# board file: the catalog carries one only for the products that exist to
+# exercise the board path in CI. Every other product is board-free.
+#
+# What this file buys the product beside it: the ESP-Mosaico's CO5300 panel
+# and CST9220 touch are declared by the `esp_mosaico` board definition, so the
+# product does not restate their sixteen GPIO numbers — the display framework
+# asks the board manager for the handles it already created.
+
+selected: esp-mosaico
+chip: esp32s31
+
+bmgr:
+  board: esp_mosaico
+  resolved_from: exact

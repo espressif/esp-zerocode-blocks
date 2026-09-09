@@ -1,0 +1,31 @@
+# Bluetooth LE with the NimBLE host — smaller than Bluedroid and enough for
+# mesh, which drives the controller through its own advertising/scanning path.
+CONFIG_BT_ENABLED="y"
+CONFIG_BT_NIMBLE_ENABLED="y"
+
+# BLE Mesh core. NODE lets the product be provisioned; PROVISIONER lets one
+# product in a kit provision the others (behaviors/ble_mesh_provisioner) —
+# both compiled in so the behavior is a block choice, not a rebuild.
+CONFIG_BLE_MESH="y"
+CONFIG_BLE_MESH_NODE="y"
+CONFIG_BLE_MESH_PROVISIONER="y"
+
+# Both provisioning bearers: PB-ADV for a mesh gateway, PB-GATT for a phone.
+CONFIG_BLE_MESH_PB_ADV="y"
+CONFIG_BLE_MESH_PB_GATT="y"
+CONFIG_BLE_MESH_GATT_PROXY_SERVER="y"
+
+# PERSISTENCE. Without this a node forgets its keys, bindings, subscriptions
+# and publication on reboot and silently stops working while still reporting
+# itself provisioned.
+CONFIG_BLE_MESH_SETTINGS="y"
+
+# Models the generated node always instantiates.
+CONFIG_BLE_MESH_CFG_CLI="y"
+CONFIG_BLE_MESH_GENERIC_SERVER="y"
+CONFIG_BLE_MESH_GENERIC_ONOFF_CLI="y"
+CONFIG_BLE_MESH_GENERIC_LEVEL_CLI="y"
+
+# Room for the segmented Config Client exchanges a provisioner runs.
+CONFIG_BLE_MESH_TX_SEG_MSG_COUNT="10"
+CONFIG_BLE_MESH_RX_SEG_MSG_COUNT="10"

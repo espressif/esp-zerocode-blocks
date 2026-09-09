@@ -1,0 +1,26 @@
+description: "Contact Sensor device type (door/window reed switch) (Matter: contact_sensor; RainMaker: esp.device.other; Zigbee: IAS Zone / Contact Switch)"
+device_types:
+  matter: contact_sensor
+  rainmaker: esp.device.other
+  zigbee: EZB_ZHA_IAS_ZONE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Contact Sensor
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 27
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+driver_params:
+  state_param:
+    type: bool
+    required: true
+    description: Driver param ID for contact state (boolean — true if contact closed)
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

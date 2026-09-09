@@ -1,0 +1,13 @@
+description: "Doorbell device type (button press reported over Matter; Switch cluster with the Momentary Switch feature). Mirrors generic_switch: a position param change updates CurrentPosition."
+# Matter-only today. RainMaker/Zigbee: no direct equivalent.
+device_types:
+  matter: doorbell
+
+# Framework SDK deps come from the framework blocks (frameworks/matter) —
+# this block contributes only bindings.
+
+driver_params:
+  press_param:
+    type: bool
+    required: true
+    description: Driver param ID toggled on button press; true -> Switch CurrentPosition 1 (pressed), false -> 0 (released). Pair with drivers/button (momentary_button publishes nothing).

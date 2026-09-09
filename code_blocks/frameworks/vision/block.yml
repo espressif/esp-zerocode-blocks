@@ -1,0 +1,37 @@
+description: "Vision framework — the device perceives through a camera and drives the param bus from what it sees. v1 ships frame-difference motion detection; richer detectors (person/face via esp-who) layer on as additional driver blocks."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+chips: [esp32, esp32s3, esp32s31]
+# Needs a radio? false — entirely on-device, nothing off the board. On the
+# ESP32-P4 the radio is a companion chip over ESP-Hosted; a product with no
+# radio framework gets no hosted stack at all (the generator drops it).
+radio: false
+
+# This is a "framework" block. The generator processes product.frameworks:
+# [vision] by loading it, copying its components/ subtree into the output,
+# and rendering its main_includes / main_init slots into app_main.cpp.
+#
+# ARCHITECTURE — detectors live in DRIVER blocks, the framework is the event
+# spine. Framework blocks carry no cfg, so camera pins (a DVP camera needs
+# ~16 of them) live in an instance block (drivers/camera_motion_dvp). That
+# block owns esp_camera_init + its detection task, and reports through the
+# fixed generated hook:
+#
+#     void zc_vision_emit(int event_id, int value);   // app_vision.h
+#
+# which dispatches device-type / behavior slots (vision_event_cases — both
+# `event_id` and `value` are in scope). Event vocabulary so far:
+#     0 = motion      (value: 0/1)
+# Future detector blocks extend it (1 = person count, 2 = face id, …) without
+# touching the framework — the same extension story as new wake phrases.
+#
+# WHY FRAME-DIFF FIRST, NOT esp-who: motion needs no model files, no model
+# partition (the audio framework's srmodels-vs-partition lesson), no
+# S3-only gating — it runs on the classic ESP32-CAM board people already
+# own. esp-who person/face detection is a later detector block with its own
+# partition + chip story.
+#
+# Chips: esp32 + esp32s3 only — the DVP camera interface. c3/c5/c6/h2 have no
+# camera peripheral. esp32p4 has one (plus MIPI-CSI) but a different driver
+# story, so it is out of scope for this block until someone builds it.

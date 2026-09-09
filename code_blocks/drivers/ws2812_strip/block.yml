@@ -1,0 +1,25 @@
+description: Addressable RGB LED strip driver (WS2812 / SK6812) via espressif/led_strip 2.5.x
+
+# Treats the whole strip as one logical RGB element (all LEDs the same color).
+# To address segments differently, replace the apply function post-generation.
+# IMPORTANT: led_strip MUST be ~2.5.0 (NOT ^3.0.0 — led_indicator 1.x uses 2.x APIs).
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: Data-line GPIO connected to the strip
+  num_leds:
+    type: int
+    required: true
+    description: Number of LEDs in the strip
+  rmt_resolution_hz:
+    type: int
+    default: 10000000
+    description: RMT base clock for WS2812 timing
+
+driver_params:
+  power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
+  brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+  hue_param:        { type: u8, default: APP_DRIVER_PARAM_HUE }
+  saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }

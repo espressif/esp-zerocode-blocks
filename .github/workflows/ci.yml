@@ -1,0 +1,166 @@
+# Same three tiers as .gitlab-ci.yml (which documents the sizing):
+#   validate        every push and PR, gates — all products, no compiler
+#   build-affected  every PR — one product per changed block, one chip
+#   build-firmware  main + nightly — the full framework x chip grid
+#
+# The build tiers start from Espressif's public ESP-IDF image (Docker Hub
+# espressif/idf) and check it out to the exact commits in pins.env — the ones
+# the ZeroCode AI backend builds with — plus an esp-board-manager checkout for
+# the board products (scripts/ci-pin-idf.sh). Nothing is built or published
+# for CI itself.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: commit messages carry no AI-assistant attribution
+        if: github.event_name == 'pull_request'
+        run: scripts/git-hooks/commit-msg --check "${{ github.event.pull_request.base.sha }}..HEAD"
+      - uses: actions/setup-node@v5
+        with: { node-version: 20 }
+      - run: sudo apt-get install -y --no-install-recommends python3-yaml
+      - run: npm ci
+      - run: npm run build
+      - run: python3 scripts/check.py
+      - run: node scripts/test-loader.mjs
+      - run: node scripts/validate.mjs
+      - run: npm test
+
+  build-affected:
+    if: github.event_name == 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: espressif/idf:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [1, 2, 3]
+    env:
+      CANARY_CHIP: esp32c6
+      CI_NODE_INDEX: ${{ matrix.lane }}
+      CI_NODE_TOTAL: 3
+      BMGR_PATH: /opt/esp/esp-board-manager
+      IDF_CCACHE_ENABLE: '1'
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: '1'
+      CCACHE_MAXSIZE: 4G
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 20 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 20 }
+      - name: pin ESP-IDF + esp-board-manager (pins.env), repo deps
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci-pin-idf.sh "$CANARY_CHIP"
+          # pip lives in the IDF python env, which export.sh puts on PATH.
+          . "$IDF_PATH/export.sh"
+          python -m pip install -q pyyaml
+          npm ci
+      - name: build the products this change can affect
+        shell: bash
+        run: |
+          git fetch --depth 20 origin "${{ github.base_ref }}" || true
+          AFFECTED="$(scripts/ci-affected.sh "origin/${{ github.base_ref }}")"
+          if [ -z "$AFFECTED" ]; then echo "No block or product touched — validate already covered this change."; exit 0; fi
+          . "$IDF_PATH/export.sh"
+          if [ "$AFFECTED" = FULL ]; then
+            echo "Scaffold/engine/CI changed — full framework sweep on $CANARY_CHIP."
+            exec scripts/ci-build-frameworks.sh "$CANARY_CHIP"
+          fi
+          rc=0; i=0
+          for p in $AFFECTED; do
+            i=$((i + 1))
+            if [ $(( (i - 1) % CI_NODE_TOTAL )) -ne $(( CI_NODE_INDEX - 1 )) ]; then continue; fi
+            # A product that excludes the canary (ci_chips) builds on the first chip it declares.
+            chip="$CANARY_CHIP"
+            chips="$(sed -n 's/^ci_chips: *\[\(.*\)\]/\1/p' "product_configurations/$p/product.yml" 2>/dev/null | tr -d ' ')"
+            if [ -n "$chips" ]; then case ",$chips," in *",$CANARY_CHIP,"*) ;; *) chip="${chips%%,*}"; echo "note: $p does not claim $CANARY_CHIP — building $chip";; esac; fi
+            echo "=== $p on $chip"
+            scripts/test-product.sh "$p" --build "$chip" || rc=1
+          done
+          exit $rc
+      - if: always()
+        run: mkdir -p _logs && cp -a _generated/_logs/. _logs/ 2>/dev/null || true
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-logs-lane-${{ matrix.lane }}
+          path: _logs/
+          if-no-files-found: ignore
+
+  chips:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.read.outputs.list }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: read
+        run: echo "list=$(grep -v '^#' chips.txt | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  build-firmware:
+    if: github.event_name != 'pull_request'
+    needs: chips
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: espressif/idf:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chip: ${{ fromJson(needs.chips.outputs.list) }}
+        # Three lanes per chip: a chip's sweep is ~10 cold builds and a cold
+        # Matter build is 45 minutes on a 2-core hosted runner, so one job per
+        # chip ran for hours. ci-build-frameworks.sh round-robins the builds
+        # over CI_NODE_INDEX/CI_NODE_TOTAL; every lane prints its own rows.
+        lane: [1, 2, 3]
+    env:
+      CI_NODE_INDEX: ${{ matrix.lane }}
+      CI_NODE_TOTAL: 3
+      BMGR_PATH: /opt/esp/esp-board-manager
+      IDF_CCACHE_ENABLE: '1'
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: '1'
+      CCACHE_MAXSIZE: 4G
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 20 }
+      - name: pin ESP-IDF + esp-board-manager (pins.env), repo deps
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci-pin-idf.sh "${{ matrix.chip }}"
+          # pip lives in the IDF python env, which export.sh puts on PATH.
+          . "$IDF_PATH/export.sh"
+          python -m pip install -q pyyaml
+          npm ci
+      - shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          scripts/ci-build-frameworks.sh "${{ matrix.chip }}"
+      - if: always()
+        run: mkdir -p _logs && cp -a _generated/_logs/. _logs/ 2>/dev/null || true
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-logs-${{ matrix.chip }}-lane-${{ matrix.lane }}
+          path: _logs/
+          if-no-files-found: ignore

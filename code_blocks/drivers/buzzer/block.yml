@@ -1,0 +1,12 @@
+description: Passive buzzer / piezo on a GPIO via LEDC. Frequency_param controls tone (0 = silent).
+
+params:
+  gpio: { type: int, required: true }
+  ledc_channel: { type: int, default: 3 }
+  ledc_timer:   { type: int, default: 2 }
+
+driver_params:
+  frequency_param:
+    type: u32
+    required: true
+    description: Tone frequency in Hz (uint32, 0 = silent)

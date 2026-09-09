@@ -1,0 +1,7 @@
+description: Hold two buttons together for N seconds → erase NVS + reboot
+
+params:
+  gpio_a: { type: int, required: true }
+  gpio_b: { type: int, required: true }
+  active_level: { type: int, default: 0 }
+  hold_time_ms: { type: int, default: 5000 }

@@ -1,0 +1,9 @@
+description: Shared UART bus init for external modules (GPS, BLE/Wi-Fi modems, RFID readers, RS-485 transceivers, etc.)
+
+params:
+  port:        { type: int, default: 1, description: "UART port (0/1/2 — 0 is usually console)" }
+  tx_gpio:     { type: int, required: true }
+  rx_gpio:     { type: int, required: true }
+  baud:        { type: int, default: 115200 }
+  rx_buf_size: { type: int, default: 1024 }
+  tx_buf_size: { type: int, default: 0 }

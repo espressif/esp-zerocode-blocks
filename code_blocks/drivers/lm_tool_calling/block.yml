@@ -1,0 +1,41 @@
+description: "Acts on one device+location from an on-device language command. 'turn on the kitchen light' becomes a param-bus write, offline. Needs frameworks: [lm]. One instance per thing the product owns — a kitchen light and a bedroom AC are two instances, each with its own params."
+
+# ONE INSTANCE PER DEVICE+LOCATION, deliberately. The model emits
+# {device, location, action[, value]}; this block registers for one such pair
+# and publishes what it hears. That is the same shape as three relays in a
+# 3-gang switch: composition in product.yml, not configuration inside a block.
+#
+# STATE, NOT EVENTS: "turn on the light" twice is still on. Both params are
+# written with app_driver_set_param and are change-detected. A command that
+# must count each utterance — a doorbell, a dispenser — wants
+# app_driver_fire_event and is a different block.
+#
+# THE VOCABULARY IS FIXED BY THE MODEL. device and location must be spellings
+# the trained schema can emit; anything else registers fine and simply never
+# fires. The enum below is the schema's own list, so a typo is a validation
+# error rather than a device that mysteriously ignores you.
+#
+# WHERE COMMANDS COME FROM: this block only ACTS. Something must call
+# app_lm_submit() — behaviors/lm_console_cmd for a typed command, or a future
+# microphone block. Kept separate so the parser is not tied to one input.
+
+params:
+  device:
+    type: string
+    required: true
+    enum: [light, fan, ac, tv, speaker, heater, purifier, humidifier, blind, lock]
+    description: Which device class this instance owns, in the schema's own spelling.
+  location:
+    type: string
+    required: true
+    enum: [living_room, bedroom, kitchen, bathroom, hallway, office]
+    description: Which room this instance owns, in the schema's own spelling.
+
+driver_params:
+  power_param:
+    type: bool
+    required: true
+    description: Driver param ID set true on "on" and false on "off".
+  value_param:
+    type: u8
+    description: Optional driver param ID for the "set" action's value — a temperature, a brightness, a speed. Omit for a device that only switches.

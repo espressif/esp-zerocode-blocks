@@ -1,0 +1,50 @@
+description: "Switchable light, no dimming (Matter: on_off_light; RainMaker: esp.device.lightbulb)"
+device_types:
+  matter: on_off_light
+  rainmaker: esp.device.lightbulb
+  zigbee: EZB_ZHA_ON_OFF_LIGHT_DEVICE_ID
+
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker) — this block contributes only bindings.
+
+params:
+  label:
+    type: string
+    default: Light
+    description: User-visible device name (RainMaker device name; must be unique per node)
+  zb_endpoint:
+    type: int
+    default: 10
+    description: Zigbee endpoint number (1-240; must be unique per node)
+
+  audio_cmd_base:
+    type: int
+    default: 100
+    description: >-
+      First voice-command phrase id for this instance (frameworks: [audio]).
+      Phrase ids must be unique across the whole node, so give each device
+      instance its own base with room for its phrases — same discipline as
+      zb_endpoint. Ignored by every other framework.
+
+  say_turn_on_the_light:
+    type: string
+    default: "turn on the light"
+    description: 'Voice phrase (customizable) for command slot 0 — default: "turn on the light"'
+  say_turn_off_the_light:
+    type: string
+    default: "turn off the light"
+    description: 'Voice phrase (customizable) for command slot 1 — default: "turn off the light"'
+  say_switch_on_the_light:
+    type: string
+    default: "switch on the light"
+    description: 'Voice phrase (customizable) for command slot 2 — default: "switch on the light"'
+  say_switch_off_the_light:
+    type: string
+    default: "switch off the light"
+    description: 'Voice phrase (customizable) for command slot 3 — default: "switch off the light"'
+
+driver_params:
+  power_param:
+    type: bool
+    default: APP_DRIVER_PARAM_POWER
+    description: Driver param ID this device maps to (boolean)

@@ -1,0 +1,26 @@
+description: RC servo (50 Hz PWM, 1-2 ms pulse) for valves, simple locks, mechanical actuators
+
+# Maps a u8 position param (0-180 degrees) to a 50 Hz PWM pulse width:
+#   - 0   degrees → 1.0 ms pulse (819 / 16384 ticks at 14-bit)
+#   - 90  degrees → 1.5 ms pulse
+#   - 180 degrees → 2.0 ms pulse
+
+# rest_deg is the position the servo is ENERGIZED AT on boot, before any
+# param arrives. It defaults to 0 (one end of travel) because a servo on this
+# platform is usually a gate, valve, lock or dispenser, where one end is
+# "closed/off" and the middle is not safe. A cat feeder shipped with this
+# channel hardcoded at the 90° centre and dispensed a portion on every power
+# event — silently, since nothing had asked it to. Set rest_deg to whatever
+# "closed" means for YOUR mechanism; a pan/tilt servo that really does rest
+# centred should say 90 explicitly.
+params:
+  gpio: { type: int, required: true }
+  ledc_channel: { type: int, default: 4 }
+  ledc_timer:   { type: int, default: 3 }
+  rest_deg:     { type: int, default: 0 }
+
+driver_params:
+  position_param:
+    type: u8
+    required: true
+    description: Servo position 0-180 (uint8)

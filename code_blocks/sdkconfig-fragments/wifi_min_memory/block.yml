@@ -1,0 +1,8 @@
+description: Reduce Wi-Fi stack memory footprint. Use on memory-constrained chips
+
+# Original notes from the .defaults file:
+#   Reduce Wi-Fi stack memory footprint. Use on memory-constrained chips
+#   (esp32c3, esp32c2) or products that can tolerate slightly slower
+#   Wi-Fi throughput in exchange for ~10-15 KB freed RAM.
+#   sdkconfig_fragments: [wifi_min_memory]
+#   Smaller buffer pools — fine for IoT command/control traffic.
