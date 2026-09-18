@@ -1,0 +1,44 @@
+id: aws-iot-conn-demo
+name: AWS IoT Connectivity Demo
+description: Connects to your own AWS IoT Core account over mutual-TLS MQTT, publishes a heartbeat and echoes anything sent to its command topic
+keywords: [aws, aws iot, mqtt, cloud, connectivity, tls]
+frameworks: [aws_iot]
+
+# The aws_iot framework's CI representative. NO ci_chips: on purpose — a product
+# that sets it is skipped when ci-build-frameworks.sh picks a framework
+# representative, and this is the only product that would stand for aws_iot.
+#
+# NO DEVICE TYPES. aws_iot is connectivity: it moves bytes to and from the
+# owner's AWS account and has no opinion about what they mean. A product that
+# wired a light into it would be demonstrating a device model this framework
+# deliberately does not have. lm-storyteller-demo is the precedent for a
+# device-type-free product.
+#
+# What it exists to prove, beyond "the framework links": that the public API is
+# usable from an ordinary behaviour slot. behaviors/aws_iot_heartbeat publishes
+# from the esp_timer task and subscribes declaratively at init, which exercises
+# the app_logic_PRIV_REQUIRES wiring, both directions of the session, and the
+# claim that any task may publish.
+#
+# Onboarding is the serial console — an AWS thing has no commissioning protocol:
+#     aws-wifi <ssid> <password>
+#     aws-endpoint <host>            e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com
+#     aws-thing <name>
+#     aws-cert           ... then paste the certificate PEM verbatim
+#     aws-key            ... then paste the private key PEM verbatim
+# The thing's IoT policy must grant iot:Connect, iot:Publish on
+# zerocode/<thing>/heartbeat and iot:Subscribe/iot:Receive on zerocode/<thing>/cmd.
+
+instances:
+  - block: behaviors/aws_iot_heartbeat
+    prefix: HEARTBEAT
+    cfg:
+      topic_prefix: zerocode
+      period_s: 30
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode AWS IoT Connectivity Demo

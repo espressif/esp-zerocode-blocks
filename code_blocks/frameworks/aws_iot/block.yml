@@ -1,0 +1,79 @@
+description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. Connectivity only: what gets published is the application's business."
+# Chips this framework has been BUILT for (a real ESP-IDF build of a product
+# using it). CI skips the framework on any other chip; the platform's
+# registry must agree — see CLAUDE.md § Chips.
+#
+# Every Wi-Fi chip in chips.txt, each proven by a real link of aws-iot-conn-demo
+# on ESP-IDF 6.x.
+#
+# NOT esp32h2: no Wi-Fi. NOT esp32p4: esp-aws-iot does not list it, and the
+# P4's radio is a companion chip over ESP-Hosted.
+chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
+# Needs a radio? true — an internet connection is the entire point.
+radio: true
+
+# THIS BLOCK IS A PIPE, NOT A DEVICE MODEL.
+#
+# It owns the network and one MQTT session, and exposes publish/subscribe plus
+# the coreMQTT-Agent handle (app_aws_iot.h). It knows nothing about device
+# types, params, shadows or JSON. How a device is REPRESENTED in a cloud is not
+# connectivity, and is deliberately somebody else's block.
+#
+# Because of that it needs NO codegen: like frameworks/ml and frameworks/lm it
+# is a pure copy-in framework — components/ plus requires.cmake plus the two
+# main_* slots, and not one line in engine/src/generator.ts.
+#
+# WHY coreMQTT AND NOT esp-mqtt. For a bare pipe esp-mqtt would do; it speaks
+# mutual TLS too. The difference is what ATTACHES to the session: Device Shadow,
+# Jobs, OTA over MQTT file streams, Fleet Provisioning and Device Defender are
+# all written against coreMQTT and expect to join an existing session. That is
+# why app_aws_iot_agent() is public.
+#
+# WHY coreMQTT-Agent. MQTTContext_t is not thread-safe and one task must own it.
+# The agent is the queue in front of that task, so any task may publish without
+# knowing it. Measured on esp32c6: 7,136 B flash, 529 B bss, one task.
+#
+# SUBSCRIPTIONS ARE DECLARATIVE. app_aws_iot_subscribe() records the filter and
+# the block replays every registration whenever the broker reports no session.
+# An imperative subscribe would work until the first network blip and then go
+# silently deaf — a failure generated code cannot see and will never debug.
+#
+# THE SDK IS FETCHED, NOT VENDORED. components/coreMQTT/CMakeLists.txt clones
+# espressif/esp-aws-iot at a pinned commit into ../third_party and registers the
+# sources itself; coreMQTT-Agent, backoffAlgorithm and posix_compat come from
+# the component manager (see idf_component.yml). Set ZC_AWS_IOT_SRC in the
+# ENVIRONMENT to build against a pre-cloned tree — see the block README for why
+# it must be the environment and not -D.
+#
+# ONBOARDING IS THE CONSOLE, like mqtt and unlike RainMaker/Matter: an AWS IoT
+# thing has no commissioning protocol, so v1 configures over the serial console
+# and persists to NVS (namespace "zc_aws"):
+#     aws-wifi <ssid> <password>
+#     aws-endpoint <host> [port]     e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com
+#     aws-thing <name>
+#     aws-cert                       then paste the PEM, BEGIN/END lines included
+#     aws-key                        then paste the PEM
+#     aws-status / aws-creds-clear
+# CREDENTIALS ARE PASTED VERBATIM — no base64, no chunking, no newline stripping.
+# The command takes no argument; it reads the console directly until the
+# -----END line, then parses the result with mbedTLS before storing it.
+#
+# A PEM cannot be a command ARGUMENT, because the REPL ends a command at the
+# newline and a certificate is twenty lines. It is however ideal as a paste: its
+# own 64-character line wrapping sits far below the ~246 characters at which
+# USB-Serial-JTAG silently truncates a line, so the truncation that corrupted
+# chunked base64 cannot arise. An earlier revision took chunked base64 and could
+# store a 1220-byte certificate as 539 bytes of nonsense without noticing.
+#
+# THE SENDER MUST PACE ITSELF. The console's receive buffer is small and it is
+# not flow-controlled: blasting 1220 bytes in one write loses roughly half of
+# them. Verified working line-by-line with 20 ms between lines; the device
+# rejects anything that does not parse, so a too-fast sender fails loudly.
+# Boot without config MUST still reach "ZeroCode AI firmware started" (the
+# framework logs "not configured" and idles — never blocks app_main), which is
+# also what lets CI build a product for this framework with no AWS account.
+#
+# Amazon Root CA 1 is compiled in; `aws-rootca` overrides it from NVS for a
+# private endpoint. mbedTLS's outbound record buffer is cut to 4 KB in the
+# sidecar sdkconfig.defaults — AWS never needs 16 KB in that direction, and it
+# is ~12 KB of heap back.

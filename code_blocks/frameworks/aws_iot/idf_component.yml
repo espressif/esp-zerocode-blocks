@@ -1,0 +1,30 @@
+## esp-aws-iot is NOT on the component registry (espressif/esp-aws-iot -> 404)
+## and has no top-level CMakeLists.txt, so each library is git-pinned
+## individually — same shape as frameworks/agents.  The repo carries no tags on
+## the branch we track, so the pin is a COMMIT, not a version.
+##
+## coreMQTT is deliberately absent: its own CMakeLists adds `../common/logging`
+## as an include directory, which escapes its component directory. Fetched by
+## the component manager that resolves to managed_components/common, which must
+## then itself be a registered component — and upstream's libraries/common has
+## no CMakeLists.txt, so the build dies at configure time. `require: no` does
+## not help; the manager registers the dependency either way. It is fetched by
+## components/coreMQTT/CMakeLists.txt instead, which sidesteps the whole problem
+## by not using upstream's CMakeLists at all.
+##
+## coreJSON and Device-Shadow are NOT here either, for a different reason: they
+## are payload concerns, and payloads are not this block's business. Each is one
+## entry away for whatever block needs it.
+dependencies:
+  coreMQTT-Agent:
+    git: https://github.com/espressif/esp-aws-iot.git
+    path: libraries/coreMQTT-Agent
+    version: 9c879feedb699611e7c220b93aed84c84322ff84
+  backoffAlgorithm:
+    git: https://github.com/espressif/esp-aws-iot.git
+    path: libraries/backoffAlgorithm
+    version: 9c879feedb699611e7c220b93aed84c84322ff84
+  posix_compat:
+    git: https://github.com/espressif/esp-aws-iot.git
+    path: libraries/common/posix_compat
+    version: 9c879feedb699611e7c220b93aed84c84322ff84

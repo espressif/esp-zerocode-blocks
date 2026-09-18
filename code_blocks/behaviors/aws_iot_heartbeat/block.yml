@@ -1,0 +1,22 @@
+description: Publishes a periodic heartbeat to AWS IoT and subscribes to a command topic, logging what arrives. A worked example of the aws_iot connectivity API — and the smallest thing that exercises both directions of the session.
+
+# Behavior, logic slots only. Requires frameworks/aws_iot in the same product:
+# the block system has no way to DECLARE that (no block.yml key expresses a
+# dependency on another block), so the coupling is the slot code including
+# app_aws_iot.h. In a product without aws_iot this fails to compile rather than
+# failing silently, which for a dependency that cannot be declared is the
+# better of the two.
+#
+# app_logic can see app_aws_iot.h because frameworks/aws_iot's requires.cmake
+# adds it to app_logic_PRIV_REQUIRES — the same mechanism frameworks/lm uses to
+# let behaviours call app_lm.
+
+params:
+  topic_prefix:
+    type: string
+    default: "zerocode"
+    description: "First segment of both topics — <prefix>/<thing>/heartbeat and <prefix>/<thing>/cmd"
+  period_s:
+    type: int
+    default: 30
+    description: "Seconds between heartbeats. AWS IoT Core bills per message, so keep this coarse."
