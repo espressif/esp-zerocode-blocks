@@ -29,15 +29,15 @@ Catalog of all code_blocks and product_configurations under
 |---|---|---|
 | `driver` | 63 | Hardware peripherals — relay, PWM LED, fan, button, I2C sensors, encoder, I2S mic/speaker, etc. |
 | `device_type` | 60 | Cross-framework device types — light, dimmable_light, fan, thermostat, occupancy_sensor, … (per-framework bindings via matter_* slots; rainmaker_* planned) |
-| `behavior` | 36 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
+| `behavior` | 37 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
 | `peripheral` | 7 | Shared bus/unit init — I2C, SPI, OneWire, UART, ADC, GPIO ISR service, PCNT |
-| `framework` | 15 | matter / rainmaker / zigbee / ble_mesh / audio / mqtt / display / vision / ble_hid / espnow / webui / agents / sound / ml / lm — each owns its `app_<framework>/` component |
+| `framework` | 16 | matter / rainmaker / zigbee / ble_mesh / audio / mqtt / aws_iot / display / vision / ble_hid / espnow / webui / agents / sound / ml / lm — each owns its `app_<framework>/` component |
 | `partition_table` | 5 | 2mb / 4mb / 8mb / 8mb-voice / 16mb-voice partition CSVs |
 | `sdkconfig_fragment` | 13 | Named sdkconfig modes (production, secure_boot, coredump, power_management, matter_thread, …) |
 
 ---
 
-## Product configurations (91)
+## Product configurations (92)
 
 Catalog grouped by category. All product_configurations are **chip-agnostic**
 — there's no `chips:` field in product.yml. Compatibility surfaces at build
@@ -380,6 +380,49 @@ cmd phase, brightness over the command channel so no backlight GPIO) and
 `display_touch_cst9220` (Hynitron CST92xx via waveshare/esp_lcd_touch_cst9217,
 16-bit register addressing, addr 0x5A on the board's shared I2C bus 0/1).
 Same field-by-field C++ macro discipline as the FT5x06 block.
+
+### AWS IoT (1)
+`aws-iot-conn-demo` — first `frameworks: [aws_iot]` product, and deliberately
+the thinnest one in the catalog: **no device types at all**. `aws_iot` is
+connectivity, not a device model — it holds one mutual-TLS MQTT session to the
+owner's own AWS account and lets any task publish and subscribe on it. What
+gets published is the application's business, so binding a light into it would
+be demonstrating a representation this framework does not have.
+
+The product pairs it with `behaviors/aws_iot_heartbeat`, which publishes a
+heartbeat from the `esp_timer` task and subscribes to a command topic at init.
+That exercises the parts most likely to break: the `app_logic_PRIV_REQUIRES`
+wiring that lets a behaviour slot include `app_aws_iot.h`, both directions of
+the session, and the claim that any task may publish.
+
+Transport is **coreMQTT + coreMQTT-Agent**, not esp-mqtt. The pipe alone would
+not justify that — esp-mqtt does mutual TLS too — but Device Shadow, Jobs, OTA
+over MQTT file streams, Fleet Provisioning and Device Defender are all written
+against coreMQTT and expect to join an existing session, which is why
+`app_aws_iot_agent()` is public. The agent is what makes publishing from any
+task safe: `MQTTContext_t` is not thread-safe, one task owns it, and everyone
+else goes through the command queue (7,136 B flash, 529 B bss, one task).
+
+**Subscriptions are declarative** — registered once, replayed on every reconnect
+where the broker reports no surviving session. An imperative subscribe works
+until the first network blip and then goes silently deaf, which generated code
+cannot observe and will never debug.
+
+**The SDK is fetched, not vendored.** `components/coreMQTT/CMakeLists.txt`
+clones `espressif/esp-aws-iot` at a pinned commit into `../third_party` and
+registers the sources itself — upstream's own CMakeLists reaches outside its
+component directory (`../common/logging`), which no component-manager layout can
+satisfy. coreMQTT-Agent, backoffAlgorithm and posix_compat are ordinary git
+dependencies. Export `ZC_AWS_IOT_SRC` (the environment variable, not `-D`) to
+build against a pre-cloned tree. The block carries **no third-party source**.
+
+Like `ml` and `lm` it is a **pure copy-in framework**: not one line in
+`engine/src/generator.ts`. Onboarding is the serial console (`aws-wifi`,
+`aws-endpoint`, `aws-thing`, `aws-cert`/`aws-key` as chunked base64, since the
+REPL caps a line at 1024 B and a client cert is ~1.8 KB); unconfigured boot idles
+and logs, never blocks app_main, which is what lets CI build it with no AWS
+account. Every Wi-Fi chip (not esp32h2; not esp32p4 — esp-aws-iot does not list
+it).
 
 ### MQTT (1)
 `mqtt-room-node` — first `frameworks: [mqtt]` product: light + DHT22

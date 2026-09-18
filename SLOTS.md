@@ -35,7 +35,7 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `ble_mesh_prov_cases` | components/app_ble_mesh (only with ble_mesh) | 1× behaviors |
 | `ble_mesh_statics` | components/app_ble_mesh (only with ble_mesh) | 1× behaviors · 1× device_types |
 | `cmake_logic_requires` | see the generator (firmware/services/src/templates/generator.ts) | 1× drivers |
-| `config_defines` | components/app_config (generated header) | 59× drivers · 17× behaviors · 5× peripherals |
+| `config_defines` | components/app_config (generated header) | 59× drivers · 20× behaviors · 5× peripherals |
 | `display_driver_cb_cases` | components/app_display (only with display) | 44× device_types |
 | `display_includes` | components/app_display (only with display) | 5× drivers |
 | `display_node_init` | components/app_display (only with display) | 5× drivers |
@@ -47,11 +47,11 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `driver_statics` | components/app_driver | 22× drivers · 3× peripherals |
 | `espnow_driver_cb_cases` | components/app_espnow (only with espnow) | 2× device_types |
 | `espnow_recv_cases` | components/app_espnow (only with espnow) | 3× device_types |
-| `logic_includes` | components/app_logic | 29× drivers · 23× behaviors |
-| `logic_init` | components/app_logic | 29× behaviors · 29× drivers |
-| `logic_statics` | components/app_logic | 29× drivers · 24× behaviors |
-| `main_includes` | main/app_main.cpp | 15× frameworks |
-| `main_init` | main/app_main.cpp | 15× frameworks |
+| `logic_includes` | components/app_logic | 29× drivers · 26× behaviors |
+| `logic_init` | components/app_logic | 32× behaviors · 29× drivers |
+| `logic_statics` | components/app_logic | 29× drivers · 27× behaviors |
+| `main_includes` | main/app_main.cpp | 16× frameworks |
+| `main_init` | main/app_main.cpp | 16× frameworks |
 | `matter_attr_cb_cases` | components/app_matter (rendered only when frameworks includes matter) | 30× device_types |
 | `matter_driver_cb_cases` | components/app_matter (rendered only when frameworks includes matter) | 34× device_types |
 | `matter_endpoint_create` | components/app_matter (rendered only when frameworks includes matter) | 60× device_types |

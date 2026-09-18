@@ -333,6 +333,31 @@ if not build_chips:
 for bid, tgt in sorted(block_targets.items()):
     if tgt not in build_chips:
         err(bid, f'target "{tgt}" is not a supported chip (chips.txt)')
+# FETCH SOURCES: a block may only fetch from the origins the platform's clone
+# allowlist names (esp-zerocode-ai shared/src/security/idf-manifest.ts). The
+# host enforces that on idf_component.yml `git:` entries and on the agent's
+# git_clone tool; a `git ...` inside a block's CMakeLists.txt is the one path
+# neither sees, so it is checked here. Prefer a baked checkout over a fetch at
+# all (esp-zerocode-ai infra/preload-repos.json) — a cloud build should open no
+# socket — but a fallback fetch for local builds must still stay on the list.
+FETCH_ALLOWLIST = (
+    'https://github.com/espressif/',
+    'https://github.com/espressif-components/',
+    'https://gitlab.espressif.cn:6688/',
+    'https://components.espressif.com/',
+)
+_URL = re.compile(r'https?://[^\s"\'<>)]+')
+for cm in sorted(ROOT.glob('code_blocks/*/*/**/CMakeLists.txt')):
+    text = cm.read_text()
+    if 'git' not in text:
+        continue
+    where = cm.relative_to(ROOT).as_posix()
+    for url in _URL.findall(text):
+        if url.startswith(FETCH_ALLOWLIST):
+            continue
+        err(where, f'fetches from "{url}", which is outside the platform clone allowlist '
+                   f'({", ".join(FETCH_ALLOWLIST)})')
+
 # FRAMEWORK CHIPS: every framework says which chips it builds for, and only
 # with names from chips.txt — CI reads this to decide what to compile.
 for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
