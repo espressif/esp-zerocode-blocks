@@ -23,8 +23,9 @@ description: >-
 #
 # ESP-Mosaico wiring (esp-dev-kits user guide "MCU and Pin Assignment"):
 #   I2S_MCLK 54 · I2S_BCK 37 · I2S_WS 49 · I2S_DOUT 40 · I2S_DIN 52
-#   PA_CTRL 45 (amp enable) · CODEC_PW 56 (codec 3V3 power)
-#   ES8311 sits at 0x19 on the shared I2C0 bus (SDA 0 / SCL 1) alongside the
+#   PA_CTRL 45 (amp enable) · codec 3V3 always on (codec_pw_gpio -1; v1.0
+#   gated it on GPIO 56, which is I2C SDA on the v1.2 hardware that shipped)
+#   ES8311 sits at 0x19 on the shared I2C0 bus (SDA 56 / SCL 3) alongside the
 #   touch controller, BMI270, BMM150 and the fuel gauge.
 # NOT yet hardware-verified.
 

@@ -41,31 +41,34 @@ instances:
   #     Sixteen GPIO numbers, one SPI bus config and one I2C bus config are
   #     gone from this file because they were never this product's to state.
 
-  # ── The light card — the board's OWN orange status LED ────────────
-  #     The same physical LED the hand-pinned twin drives on GPIO 3, reached
+  # ── The light card — the board's OWN vibration motor as the switchable
+  #     load. The same GPIO the hand-pinned twin drives on GPIO 8, reached
   #     the way a board product should reach board hardware: by asking for it.
-  #     `status_led` is a `gpio_ctrl` device in the esp_mosaico definition, so
-  #     esp_board_manager_init() has already configured the line and left a
+  #     `vibration_motor` is a `gpio_ctrl` device in the esp_mosaico definition,
+  #     so esp_board_manager_init() has already configured the line and left a
   #     handle waiting — drivers/board_gpio_ctrl fetches it and drives it.
+  #     (It WAS `status_led`: the v1.0 board had an orange LED on GPIO 3, the
+  #     v1.2 hardware that shipped has no LED and GPIO 3 is I2C SCL. The motor
+  #     is the one gpio_ctrl device both definitions declare.)
   #
   #     NO GPIO NUMBER HERE, and that is the difference that matters. Pointing
-  #     drivers/relay at GPIO 3 is not the same thing and does not work: the
-  #     board claims that pin for `gpio_status_led`, the relay's amend fragment
-  #     would claim it too, and the engine reports the IO conflict. Correctly —
-  #     one pin, one owner; the way to use someone else's pin is to ask them.
-  #     Until the adapter existed this product drove an EXTERNALLY WIRED relay
-  #     on GPIO 4 instead, which was the one piece of hardware its twin did not
-  #     have.
+  #     drivers/relay at GPIO 8 is not the same thing and does not work: the
+  #     board claims that pin for `gpio_vibration_motor`, the relay's amend
+  #     fragment would claim it too, and the engine reports the IO conflict.
+  #     Correctly — one pin, one owner; the way to use someone else's pin is to
+  #     ask them. Until the adapter existed this product drove an EXTERNALLY
+  #     WIRED relay on GPIO 4 instead, which was the one piece of hardware its
+  #     twin did not have.
   - block: drivers/board_gpio_ctrl
     prefix: LAMP
     cfg:
-      device: status_led
+      device: vibration_motor
       param_id: APP_DRIVER_PARAM_POWER
 
   - block: device_types/light
     prefix: LAMP_CARD
     cfg:
-      # "Status Light", matching the twin: it is now literally the same LED,
+      # "Status Light", matching the twin: it is literally the same load,
       # and a label is what a controller shows a person. Two names for one
       # piece of hardware is the kind of difference that makes a control
       # product stop being a control.
@@ -75,7 +78,7 @@ instances:
   # ── TWO SENSORS ON A BUS THIS PRODUCT DOES NOT OWN ────────────────
   #     There is NO peripherals/i2c_bus instance here, and no sda/scl
   #     anywhere in this file. The esp_mosaico board definition declares
-  #     I2C0 on GPIO 0/1 (`i2c_master` in its board_peripherals.yaml) and
+  #     I2C0 on GPIO 56/3 (`i2c_master` in its board_peripherals.yaml) and
   #     esp_board_manager_init() creates it — with i2c_new_master_bus() —
   #     before app_driver_init() runs. Each block below names the PORT,
   #     asks ESP-IDF for that port's bus and attaches its own device.

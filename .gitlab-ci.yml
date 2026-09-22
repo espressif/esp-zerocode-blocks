@@ -176,6 +176,14 @@ build:affected:
             *) chip="${chips%%,*}"; echo "note: $p does not claim $CANARY_CHIP — building $chip" ;;
           esac
         fi
+        # A board product resolves its board from the worker's esp-board-manager
+        # checkout (BMGR_PATH, baked by Dockerfile.ci). A worker image built
+        # before that clone existed has none — the same SKIP the nightly sweep
+        # reports (ci-build-frameworks.sh), naming what is missing, rather than
+        # a FAIL no MR can fix. Rebuild image:idf-worker to lift it.
+        if [ -f "product_configurations/$p/board.yaml" ] && [ ! -d "${ZC_BOARDS_DIR:-${BMGR_PATH:-/nonexistent}}/esp_boards" ]; then
+          echo "SKIP $p: board product, no board packs on this worker (rebuild image:idf-worker)"; continue
+        fi
         echo "=== $p on $chip"
         scripts/test-product.sh "$p" --build "$chip" || rc=1
       done

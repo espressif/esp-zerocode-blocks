@@ -4,11 +4,13 @@ description: >-
   The ESP-Mosaico as a Matter room panel — its onboard 480x480 square touch
   display renders a light card you toggle by touch OR from any Matter
   controller, driven entirely by onboard hardware (the CO5300 panel, the
-  CST9220 touch, the status LED as the light). Zero external wiring.
+  CST9220 touch, the vibration motor as the switchable load). Zero external
+  wiring.
 keywords: [mosaico, esp32s31, display, touchscreen, matter, panel, co5300, qspi, touch]
 
 # First esp32s31 product. Everything here is the ESP-Mosaico CoreBoard's own
-# hardware (esp-dev-kits user guide pinout) — build with
+# hardware, v1.2 — the revision that shipped (v1.0 was never released): I2C0
+# on GPIO 56/3, LCD SCLK 42 / RST 44, no status LED. Build with
 # `idf.py set-target esp32s31`; other chips have no CO5300 wiring to fall
 # back to, so this product is Mosaico-specific by construction.
 #
@@ -32,13 +34,13 @@ instances:
     prefix: PANEL
     cfg:
       spi_host: 1
-      sclk_gpio: 44
+      sclk_gpio: 42
       d0_gpio: 36
       d1_gpio: 51
       d2_gpio: 35
       d3_gpio: 9
       cs_gpio: 50
-      rst_gpio: 42
+      rst_gpio: 44
       hres: 480
       vres: 480
 
@@ -46,18 +48,19 @@ instances:
     prefix: TOUCH
     cfg:
       i2c_port: 0
-      sda_gpio: 0
-      scl_gpio: 1
+      sda_gpio: 56
+      scl_gpio: 3
       int_gpio: 6
       x_max: 480
       y_max: 480
 
-  # ── The light card — the board's own status LED (GPIO3, active-low) ─
+  # ── The light card — the board's own vibration motor (GPIO8, active-
+  #     high) as the switchable load. v1.2 has no status LED; GPIO 3 is SCL.
   - block: drivers/relay
     prefix: LAMP
     cfg:
-      gpio: 3
-      active_level: 0
+      gpio: 8
+      active_level: 1
       param_id: APP_DRIVER_PARAM_POWER
 
   - block: device_types/light
@@ -77,8 +80,8 @@ instances:
     prefix: SENSOR
     cfg:
       port: 0
-      sda_gpio: 0
-      scl_gpio: 1
+      sda_gpio: 56
+      scl_gpio: 3
       freq_hz: 100000
 
   - block: drivers/imu_bmi270

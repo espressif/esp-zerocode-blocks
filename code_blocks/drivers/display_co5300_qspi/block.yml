@@ -17,8 +17,9 @@ description: >-
 # capable, in internal RAM (~75 KB at 480 wide). Full-frame buffers are a
 # per-product PSRAM decision, not a default.
 #
-# ESP-Mosaico wiring (esp-dev-kits user guide): sclk=44 cs=50 d0=36 d1=51
-# d2=35 d3=9 rst=42 (TE on 43, unused here).
+# ESP-Mosaico wiring (hardware v1.2, the revision that shipped): sclk=42 cs=50
+# d0=36 d1=51 d2=35 d3=9 rst=44 (TE on 43, unused here). v1.0 had SCLK and RST
+# swapped (44/42); it was never released.
 #
 # NOT yet hardware-verified on ESP32-S31 — the component builds on IDF >= 5.0;
 # verify on a Mosaico before trusting flush timing / pixel order.

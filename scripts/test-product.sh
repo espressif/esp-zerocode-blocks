@@ -16,6 +16,14 @@
 # esp-board-manager checkout (BMGR_PATH) — see scripts/build-product.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# A product with a board.yaml is validated and generated against its board
+# pack, which the engine reads from ZC_BOARDS_DIR. The CI worker (and a laptop
+# that set only BMGR_PATH) has the esp-board-manager checkout, whose root IS a
+# directory of packs — so hand it over rather than reporting every board
+# device as "could not be checked" and failing the build on the first one.
+if [ -z "${ZC_BOARDS_DIR:-}" ] && [ -d "${BMGR_PATH:-/nonexistent}/esp_boards" ]; then
+  export ZC_BOARDS_DIR="$BMGR_PATH"
+fi
 
 id="${1:-}"
 mode="${2:-}"
