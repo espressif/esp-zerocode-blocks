@@ -37,13 +37,13 @@ instances:
     prefix: PANEL
     cfg:
       spi_host: 1
-      sclk_gpio: 44
+      sclk_gpio: 42
       d0_gpio: 36
       d1_gpio: 51
       d2_gpio: 35
       d3_gpio: 9
       cs_gpio: 50
-      rst_gpio: 42
+      rst_gpio: 44
       hres: 480
       vres: 480
 
@@ -51,19 +51,20 @@ instances:
     prefix: TOUCH
     cfg:
       i2c_port: 0
-      sda_gpio: 0
-      scl_gpio: 1
+      sda_gpio: 56
+      scl_gpio: 3
       int_gpio: 6
       x_max: 480
       y_max: 480
 
-  # ── The light — the board's own status LED, by ADAPTER not by pin.
-  #     (drivers/relay on GPIO 3 would collide with the board's
-  #     `gpio_status_led`, and the validator now names this block as the fix.)
+  # ── The light — the board's own vibration motor, by ADAPTER not by pin.
+  #     (drivers/relay on GPIO 8 would collide with the board's
+  #     `gpio_vibration_motor`, and the validator now names this block as the
+  #     fix. The v1.0 definition's `status_led` is gone: v1.2 has no LED.)
   - block: drivers/board_gpio_ctrl
     prefix: LAMP
     cfg:
-      device: status_led
+      device: vibration_motor
       param_id: APP_DRIVER_PARAM_POWER
 
   # Drive it from the console, so the product is testable without a transport.

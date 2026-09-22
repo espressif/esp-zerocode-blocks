@@ -18,7 +18,7 @@ description: >-
 # so the blob buys nothing this block reports. If gyro rates are ever needed,
 # that is the moment to pull in Bosch's driver as a managed component.
 #
-# ESP-Mosaico: 0x69 on the shared I2C0 bus (SDA 0 / SCL 1), SENSOR_INT on
+# ESP-Mosaico (v1.2): 0x69 on the shared I2C0 bus (SDA 56 / SCL 3), SENSOR_INT on
 # GPIO2. The interrupt line is not used here — polling at 10 Hz costs almost
 # nothing and avoids owning an ISR for a feature this coarse.
 # NOT yet hardware-verified.

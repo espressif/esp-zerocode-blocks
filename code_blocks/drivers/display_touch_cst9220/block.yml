@@ -11,7 +11,7 @@ description: >-
 # Same esp_lcd_touch pattern as display_touch_ft5x06: the driver owns its
 # I2C bus handle.
 #
-# ESP-Mosaico wiring: sda=0 scl=1 (the board's shared sensor bus) int=6,
+# ESP-Mosaico wiring (v1.2): sda=56 scl=3 (the board's shared sensor bus) int=6,
 # no reset line exposed. NOT yet hardware-verified on a Mosaico.
 
 cmake_priv_requires:
