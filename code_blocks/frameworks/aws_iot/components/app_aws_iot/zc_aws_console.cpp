@@ -116,7 +116,11 @@ static int cred_paste(const char *tag)
             TickType_t now = xTaskGetTickCount();
             if ((now - start) * portTICK_PERIOD_MS > ZC_PASTE_TOTAL_MS) break;
             if (len > 0 && (now - last) * portTICK_PERIOD_MS > ZC_PASTE_IDLE_MS) break;
-            vTaskDelay(pdMS_TO_TICKS(5));
+            /* 10 ms, not less: pdMS_TO_TICKS() rounds DOWN, so anything under one
+             * tick (10 ms at the default 100 Hz) is vTaskDelay(0), which never
+             * blocks. This task then spins, IDLE never runs, and the task
+             * watchdog aborts the board mid-paste. */
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         last = xTaskGetTickCount();
