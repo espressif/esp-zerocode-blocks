@@ -10,7 +10,10 @@
            bit0 of the power register is set. Probing first would report every
            working sensor as absent, so power up, wait, THEN identify. */
         {{prefix_lc}}_wr({{prefix}}_MAG_REG_POWER, 0x01);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        /* 10 ms, not 5: pdMS_TO_TICKS() rounds DOWN, and under one tick (10 ms
+           at the default 100 Hz) it is 0 — CHIP_ID would be read before the
+           ~3 ms start-up is over and a working sensor reported absent. */
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         uint8_t {{prefix_lc}}_id = 0;
         if ({{prefix_lc}}_rd({{prefix}}_MAG_REG_CHIP_ID, &{{prefix_lc}}_id, 1) != ESP_OK ||
@@ -21,7 +24,7 @@
             /* Normal mode, 10 Hz. The sensor samples faster than we poll on
                purpose — it averages internally, we just take the latest. */
             {{prefix_lc}}_wr({{prefix}}_MAG_REG_OPMODE, 0x00);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(10));
             s_{{prefix_lc}}_present_dev = true;
 
             const esp_timer_create_args_t {{prefix_lc}}_args = {

@@ -20,12 +20,14 @@
                it. Leaving it off also saves the power an always-on panel cares
                about. */
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_CTRL, 0x04);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            /* 10 ms, not 5: pdMS_TO_TICKS() rounds DOWN, and under one tick
+               (10 ms at the default 100 Hz) it is 0 — no wait at all. */
+            vTaskDelay(pdMS_TO_TICKS(10));
             /* 100 Hz ODR, normal filter. Polling is slower than this on purpose —
                the sensor averages, we sample. */
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_CONF, 0xA8);
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_RANGE, 0x00);  /* +/-2 g */
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(10));
             s_{{prefix_lc}}_present = true;
 
             const esp_timer_create_args_t {{prefix_lc}}_args = {
