@@ -57,6 +57,14 @@ if(EXISTS "${_zc_third_party}")
   endforeach()
 endif()
 
+# The app version (esp_app_desc_t.version: what the `version` console command
+# prints) is fixed. Unset, IDF takes `git describe` of the repo this tree lives
+# in — the PRODUCT's repo, whose HEAD moves on every report and spec save — so
+# an unchanged firmware would get a new version, a recompiled app descriptor and
+# a new ELF SHA-256 on every commit. The board prints that SHA at boot, and the
+# host's crash decoder refuses to decode a board whose SHA is not the build's.
+set(PROJECT_VER "1.0.0")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(zerocode_ai_firmware)
 
