@@ -159,6 +159,30 @@ test('a partition table larger than the board\'s flash fails generation', async 
   )
 })
 
+test('no table named and the default does not fit: the largest bundled table that fits is used', async (t) => {
+  const { paths, outDir } = scaffold(t)
+  // the default (base_firmware) table is 8 MB; the board has 4 MB
+  writeFileSync(join(paths.baseFirmwareDir, 'partitions.csv'), TABLE_8MB)
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32c3', outDir })
+  assert.equal(readFileSync(join(outDir, 'partitions.csv'), 'utf-8'), TABLE_4MB)
+})
+
+test('a table named by its path is the bundled table of that name', async (t) => {
+  const { paths, outDir } = scaffold(t)
+  for (const name of ['partition-tables/t4mb', 'code_blocks/partition-tables/t4mb/partitions.csv', 't4mb/']) {
+    await generate(paths, { product: product({ partition_table: name }), board: boardFile('demo_board'), chip: 'esp32c3', outDir })
+    assert.equal(readFileSync(join(outDir, 'partitions.csv'), 'utf-8'), TABLE_4MB, name)
+  }
+})
+
+test('an unknown table names the bundled ones', async (t) => {
+  const { paths, outDir } = scaffold(t)
+  await assert.rejects(
+    generate(paths, { product: product({ partition_table: 'nope' }), board: null, chip: 'esp32c3', outDir }),
+    (e) => { assert.match(e.message, /use one of: t4mb, t8mb/); return true },
+  )
+})
+
 test('a partition table that fits the board generates', async (t) => {
   const { paths, outDir } = scaffold(t)
   await generate(paths, { product: product({ partition_table: 't4mb' }), board: boardFile('demo_board'), chip: 'esp32c3', outDir })

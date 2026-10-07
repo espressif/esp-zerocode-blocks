@@ -103,7 +103,14 @@ function targetMatches(block: { target?: string }, chip: string): boolean {
 /** Public entry point: compose `product`'s blocks and write a firmware tree
  *  to `outDir`. Overwrites whatever is at `outDir`. */
 export async function generate(paths: GeneratorPaths, input: GenerateInput): Promise<GenerateResult> {
-  const { product, outDir } = input
+  const { outDir } = input
+  // A table named by its path (`partition-tables/2mb`, `.../2mb/partitions.csv`)
+  // means the bundled table of that name: writers reach for the path they see
+  // in the tree, and resolving it a second time under partition-tables/ made
+  // every such product fail on a table that exists.
+  const product = input.product.partition_table
+    ? { ...input.product, partition_table: normalizePartitionTableName(input.product.partition_table) }
+    : { ...input.product }
 
   // The board the user picked, and the bmgr board definition it resolves to.
   // `bmgrBoard` — not the board file — is what every step below keys off: a
@@ -554,7 +561,15 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     let csv = ''
     try { csv = await fs.readFile(csvPath, 'utf-8') } catch { /* copy below reports a missing table */ }
     const needed = csv ? partitionTableEnd(csv) : 0
-    if (needed > boardFacts.flashBytes) {
+    // No table named and the default one does not fit: the board's flash decides,
+    // so take the largest bundled table that fits rather than refusing a choice
+    // the product never made. A table the product NAMED is still refused below.
+    const named = Boolean(product.partition_table)
+    if (needed > boardFacts.flashBytes && !named) {
+      const fit = await largestFittingTable(paths, boardFacts.flashBytes)
+      if (fit) product.partition_table = fit
+    }
+    if (needed > boardFacts.flashBytes && (named || !product.partition_table)) {
       throw new Error(
         `product '${product.id}' sets partition_table '${product.partition_table ?? '(default)'}', ` +
         `which needs ${mib(needed)} of flash, but board '${bmgrBoard}' has ` +
@@ -582,7 +597,11 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     try {
       await fs.copyFile(ptSrc, ptDst)
     } catch (e) {
-      throw new Error(`partition_table '${product.partition_table}' not found at ${ptSrc}: ${(e as Error).message}`)
+      const known = await bundledPartitionTables(paths)
+      throw new Error(
+        `partition_table '${product.partition_table}' is not a bundled table` +
+        (known.length ? ` — use one of: ${known.join(', ')}` : '') + ` (looked for ${ptSrc}: ${(e as Error).message})`,
+      )
     }
     try {
       const ptBlock = await loadBlock(paths, `partition-tables/${product.partition_table}`)
@@ -4080,6 +4099,40 @@ export function partitionTableEnd(csv: string): number {
     if (cursor > end) end = cursor
   }
   return end
+}
+
+/** `partition-tables/2mb`, `code_blocks/partition-tables/2mb/partitions.csv`
+ *  and `2mb` all name the bundled table `2mb`. */
+export function normalizePartitionTableName(name: string): string {
+  return name.trim()
+    .replace(/^(\.\/)+/, '')
+    .replace(/^(code_blocks\/)?partition-tables\//, '')
+    .replace(/\/partitions\.csv$/, '')
+    .replace(/\/+$/, '')
+}
+
+/** The bundled partition tables (directories holding a partitions.csv), sorted. */
+async function bundledPartitionTables(paths: GeneratorPaths): Promise<string[]> {
+  const dir = path.join(paths.templatesDir, 'code_blocks', 'partition-tables')
+  let names: string[] = []
+  try { names = await fs.readdir(dir) } catch { return [] }
+  const out: string[] = []
+  for (const n of names.sort()) {
+    try { await fs.access(path.join(dir, n, 'partitions.csv')); out.push(n) } catch { /* not a table */ }
+  }
+  return out
+}
+
+/** The bundled table with the most flash that still fits `flashBytes`, or null. */
+async function largestFittingTable(paths: GeneratorPaths, flashBytes: number): Promise<string | null> {
+  let best: { name: string; end: number } | null = null
+  for (const name of await bundledPartitionTables(paths)) {
+    let csv = ''
+    try { csv = await fs.readFile(path.join(paths.templatesDir, 'code_blocks', 'partition-tables', name, 'partitions.csv'), 'utf-8') } catch { continue }
+    const end = partitionTableEnd(csv)
+    if (end > 0 && end <= flashBytes && (!best || end > best.end)) best = { name, end }
+  }
+  return best?.name ?? null
 }
 
 function mib(bytes: number): string {
