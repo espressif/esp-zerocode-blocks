@@ -7,7 +7,8 @@
 # must be public: app_logic includes this header from a behaviour slot (see the
 # block's requires.cmake) and would not otherwise see their include paths.
 idf_component_register(
-    SRCS "app_aws_iot.cpp" "zc_aws_agent.cpp" "zc_aws_subs.cpp" "zc_aws_console.cpp"
+    SRCS "app_aws_iot.cpp" "zc_aws_agent.cpp" "zc_aws_subs.cpp" "zc_aws_config.cpp"
+         "zc_aws_console.cpp"
     INCLUDE_DIRS "include"
     REQUIRES coreMQTT coreMQTT-Agent esp_event
     PRIV_REQUIRES backoffAlgorithm posix_compat esp-tls mbedtls

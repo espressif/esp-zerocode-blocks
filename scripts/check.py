@@ -377,6 +377,42 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
     if not isinstance(fw.get('radio'), bool):
         err(fid, 'framework block must declare `radio: true|false` (needs a radio?)')
 
+# ONBOARDING: what a framework says its firmware already ships for first-run
+# onboarding is copied into every product's seed by the platform, so the spec
+# and the writer take it as fact. A command listed there that nothing registers
+# is a spec the firmware cannot meet — so each listed command name must appear
+# as a registered string literal in the block's own sources or in the engine
+# (frameworks like mqtt and agents are generated there).
+_ENGINE_SRC = (ROOT / 'engine' / 'src' / 'generator.ts').read_text()
+for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
+    by = bd / 'block.yml'
+    if not by.is_file():
+        continue
+    fw = yaml.safe_load(by.read_text()) or {}
+    onb = fw.get('onboarding')
+    if onb is None:
+        continue
+    fid = f'frameworks/{bd.name}'
+    con = onb.get('console') if isinstance(onb, dict) else None
+    if not isinstance(onb, dict) or (con is not None and not isinstance(con, dict)):
+        err(fid, 'onboarding: must be a mapping (e.g. `onboarding: { console: {...} }`)')
+        continue
+    if con is None:
+        continue
+    cmds = con.get('commands')
+    if not isinstance(cmds, list) or not cmds or not all(isinstance(c, str) and c.strip() for c in cmds):
+        err(fid, 'onboarding.console.commands must be a non-empty list of strings')
+        continue
+    for key in ('setup', 'api', 'note'):
+        if key in con and not isinstance(con[key], str):
+            err(fid, f'onboarding.console.{key} must be a string')
+    sources = '\n'.join(f.read_text(errors='replace') for f in bd.rglob('*')
+                        if f.is_file() and f.suffix in ('.c', '.cc', '.cpp', '.h', '.hpp'))
+    names = [c.split()[0] for c in cmds] + ([con['setup'].split()[0]] if isinstance(con.get('setup'), str) else [])
+    for name in names:
+        if f'"{name}"' not in sources and f'"{name}"' not in _ENGINE_SRC:
+            err(fid, f'onboarding lists console command "{name}", but neither the block nor the engine registers it')
+
 # assembly must succeed (proves the authoring→consumption transform is valid)
 r = subprocess.run([sys.executable, str(ROOT / 'scripts/assemble_blocks.py'), '--check'],
                    capture_output=True, text=True)

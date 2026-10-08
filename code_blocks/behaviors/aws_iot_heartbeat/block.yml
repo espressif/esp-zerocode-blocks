@@ -1,4 +1,4 @@
-description: Publishes a periodic heartbeat to AWS IoT and subscribes to a command topic, logging what arrives. A worked example of the aws_iot connectivity API — and the smallest thing that exercises both directions of the session.
+description: Publishes a periodic heartbeat to AWS IoT, subscribes to a command topic (logging what arrives), and with `presence` set keeps a retained presence topic — "online" on connect, "offline" from the broker via the MQTT last will (app_aws_iot_set_will). A worked example of the aws_iot connectivity API — and the smallest thing that exercises both directions of the session.
 
 # Behavior, logic slots only. Requires frameworks/aws_iot in the same product:
 # the block system has no way to DECLARE that (no block.yml key expresses a
@@ -15,8 +15,19 @@ params:
   topic_prefix:
     type: string
     default: "zerocode"
-    description: "First segment of both topics — <prefix>/<thing>/heartbeat and <prefix>/<thing>/cmd"
+    description: "First segment of every topic — <prefix>/<thing>/heartbeat, <prefix>/<thing>/cmd and the presence topic <prefix>/<thing>/status"
   period_s:
     type: int
     default: 30
     description: "Seconds between heartbeats. AWS IoT Core bills per message, so keep this coarse."
+  presence:
+    type: int
+    default: 0
+    description: >-
+      1 keeps a retained presence topic, <prefix>/<thing>/status: the broker
+      publishes "offline" through the MQTT last will when the device vanishes,
+      and the device publishes "online" on every connect. Off by default because
+      it needs MORE of the thing's IoT policy than the heartbeat does —
+      iot:Publish AND iot:RetainPublish on the status topic. AWS IoT disconnects
+      a client for a publish its policy does not allow, so turning this on
+      against a heartbeat-only policy drops every session right after connect.

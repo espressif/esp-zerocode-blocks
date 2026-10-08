@@ -30,3 +30,16 @@ radio: true
 # DEPENDENCY: the `agent` component is NOT on the component registry — it is
 # consumed as an idf_component.yml GIT dependency pinned to a commit (the repo
 # has no tags), carried by app_agents' own manifest sidecar.
+
+# WHAT THE FIRMWARE ALREADY SHIPS FOR FIRST-RUN ONBOARDING — see the same
+# section in frameworks/aws_iot/block.yml. Engine-generated commands.
+onboarding:
+  console:
+    commands:
+      - "agent-wifi <ssid> <password>"
+      - "agent-id <agent id>"
+      - "agent-token <refresh token>"
+      - "agent-say <message>"
+      - "agent-new"
+      - "agent-status"
+    note: "The refresh token comes from the Agents platform UI. Beside Matter, RainMaker or mqtt, Wi-Fi is theirs: agent-wifi does not exist."

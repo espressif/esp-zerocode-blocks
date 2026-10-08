@@ -44,6 +44,17 @@ static void {{prefix_lc}}_on_connected(void *arg, esp_event_base_t base,
                  s_{{prefix_lc}}_cmd_topic, esp_err_to_name(err));
     }
     ESP_LOGI(TAG, "{{prefix_lc}}: heartbeats to %s", s_{{prefix_lc}}_hb_topic);
+{{#if cfg.presence}}
+    /* The other half of the last will: retained "online" on every connect, so
+     * the status topic always says the truth — "offline" from the broker when
+     * the device vanished, "online" from the device once it is back. */
+    char status[128];
+    snprintf(status, sizeof(status), "%s/%s/status", {{prefix}}_TOPIC_PREFIX, thing);
+    esp_err_t err = app_aws_iot_publish_retained(status, "online", 6, 1, pdMS_TO_TICKS(1000));
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "{{prefix_lc}}: online status not sent: %s", esp_err_to_name(err));
+    }
+{{/if}}
 }
 
 static void {{prefix_lc}}_beat(void *arg)

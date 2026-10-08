@@ -24,6 +24,8 @@
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <mbedtls/platform_util.h>
 #include <nvs.h>
 
 const char *ZC_AWS_TAG = "app_aws_iot";
@@ -42,6 +44,7 @@ char    *g_zc_aws_rootca = NULL; size_t g_zc_aws_rootca_len = 0;
 volatile bool g_zc_aws_net_up     = false;
 volatile bool g_zc_aws_connected  = false;
 volatile bool g_zc_aws_wifi_owned = false;
+volatile bool g_zc_aws_wifi_decided = false;
 
 /* Amazon Root CA 1, compiled in. Not the IDF certificate bundle: that is ~64 KB
  * of flash for a trust store this device needs exactly one entry of, and AWS
@@ -122,6 +125,7 @@ void zc_aws_load_config(void)
     n = sizeof(g_zc_aws_thing);    nvs_get_str(h, "thing", g_zc_aws_thing, &n);
     nvs_get_i32(h, "port", &g_zc_aws_port);
     free(g_zc_aws_cert);   g_zc_aws_cert   = nvs_load_pem(h, "cert", &g_zc_aws_cert_len);
+    if (g_zc_aws_key != NULL) mbedtls_platform_zeroize(g_zc_aws_key, g_zc_aws_key_len);
     free(g_zc_aws_key);    g_zc_aws_key    = nvs_load_pem(h, "key", &g_zc_aws_key_len);
     free(g_zc_aws_rootca); g_zc_aws_rootca = nvs_load_pem(h, "rootca", &g_zc_aws_rootca_len);
     nvs_close(h);
@@ -179,6 +183,7 @@ static void wifi_claim_or_defer(void)
     wifi_mode_t mode;
     if (esp_wifi_get_mode(&mode) != ESP_ERR_WIFI_NOT_INIT) {
         g_zc_aws_wifi_owned = false;
+        g_zc_aws_wifi_decided = true;
         ESP_LOGI(ZC_AWS_TAG, "another framework owns Wi-Fi — waiting for an address");
         esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
         esp_netif_ip_info_t ip = {};
@@ -196,9 +201,11 @@ static void wifi_claim_or_defer(void)
     wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
     if (esp_wifi_init(&wcfg) != ESP_OK) {
         ESP_LOGE(ZC_AWS_TAG, "esp_wifi_init failed");
+        g_zc_aws_wifi_decided = true;   /* decided: nobody here owns it */
         return;
     }
     g_zc_aws_wifi_owned = true;
+    g_zc_aws_wifi_decided = true;
 
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, net_event_handler, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, net_event_handler, NULL);
@@ -210,7 +217,7 @@ static void wifi_claim_or_defer(void)
         strlcpy((char *)wc.sta.password, g_zc_aws_pass, sizeof(wc.sta.password));
         esp_wifi_set_config(WIFI_IF_STA, &wc);
     } else {
-        ESP_LOGW(ZC_AWS_TAG, "no Wi-Fi credentials — run: aws-wifi <ssid> <password>");
+        ESP_LOGW(ZC_AWS_TAG, "no Wi-Fi credentials — run: aws-setup (guided), or aws-wifi <ssid> <password>");
     }
     esp_wifi_start();
     if (g_zc_aws_ssid[0] != '\0') esp_wifi_connect();
@@ -222,6 +229,14 @@ extern "C" void zc_aws_net_start(void)
 {
     wifi_claim_or_defer();
 }
+
+/* ── the live config lock (zc_aws_internal.h) ────────────────────────── */
+
+static SemaphoreHandle_t s_cfg_lock = NULL;   /* created by app_aws_iot_init */
+
+/* Before init there is no session task to race, so no lock is needed. */
+void zc_aws_cfg_lock(void)   { if (s_cfg_lock != NULL) xSemaphoreTake(s_cfg_lock, portMAX_DELAY); }
+void zc_aws_cfg_unlock(void) { if (s_cfg_lock != NULL) xSemaphoreGive(s_cfg_lock); }
 
 /* ── init ────────────────────────────────────────────────────────────── */
 
@@ -247,6 +262,12 @@ esp_err_t app_aws_iot_init(void)
         return err;
     }
 
+    if (s_cfg_lock == NULL) s_cfg_lock = xSemaphoreCreateMutex();
+    if (s_cfg_lock == NULL) {
+        ESP_LOGE(ZC_AWS_TAG, "could not create the config lock");
+        return ESP_ERR_NO_MEM;
+    }
+
     zc_aws_subs_init();
     zc_aws_console_register();
     zc_aws_load_config();
@@ -267,8 +288,8 @@ esp_err_t app_aws_iot_init(void)
         /* Unconfigured is a valid state — never block boot. This is also what
          * lets CI build a product for this framework with no AWS account. */
         ESP_LOGW(ZC_AWS_TAG,
-                 "not configured — run: aws-endpoint <host>, aws-thing <name>,"
-                 " then aws-cert / aws-key and paste each PEM");
+                 "not configured — run: aws-setup (guided), or aws-endpoint <host>,"
+                 " aws-thing <name>, then aws-cert / aws-key and paste each PEM");
     }
 
     err = zc_aws_agent_start();

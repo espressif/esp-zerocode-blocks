@@ -1,4 +1,4 @@
-description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. Connectivity only: what gets published is the application's business."
+description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. Onboarding is included: a guided `aws-setup` console command asks for Wi-Fi, endpoint, thing name, certificate and key (plus the individual aws-* commands, and public setters app_aws_iot_set_* for a custom flow). A presence topic is app_aws_iot_set_will (an MQTT last will whose topic may contain {thing}) plus app_aws_iot_publish_retained for its \"online\". Connectivity only: what gets published is the application's business."
 # Chips this framework has been BUILT for (a real ESP-IDF build of a product
 # using it). CI skips the framework on any other chip; the platform's
 # registry must agree — see CLAUDE.md § Chips.
@@ -48,6 +48,7 @@ radio: true
 # ONBOARDING IS THE CONSOLE, like mqtt and unlike RainMaker/Matter: an AWS IoT
 # thing has no commissioning protocol, so v1 configures over the serial console
 # and persists to NVS (namespace "zc_aws"):
+#     aws-setup                      GUIDED: asks for each value below in turn
 #     aws-wifi <ssid> <password>
 #     aws-endpoint <host> [port]     e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com
 #     aws-thing <name>
@@ -73,7 +74,47 @@ radio: true
 # framework logs "not configured" and idles — never blocks app_main), which is
 # also what lets CI build a product for this framework with no AWS account.
 #
+# THE STORAGE IS PUBLIC API, the commands are wrappers (2026-10-07). Every
+# value above has a setter in app_aws_iot.h — app_aws_iot_set_wifi / _endpoint /
+# _thing / _cert / _key / _root_ca, _clear_credentials, _configured,
+# _owns_wifi — and the console's line and paste readers are
+# app_console_read_line / app_console_read_text. Before this, the setters were
+# static, so every product whose spec said "the device asks for its
+# credentials" wrote a 430-500 line wizard: one copied the NVS layout and the
+# mbedTLS parse, one drove these commands through esp_console_run, one edited
+# this component. Each re-learned non-blocking stdin under the REPL from IDF's
+# source (124 lookups across six runs) and shipped the bugs this file's
+# comments warn about. aws-setup is that wizard, once.
+#
+# THE LAST WILL is public too: app_aws_iot_set_will(topic, payload, qos, retain),
+# where "{thing}" in the topic is substituted at EVERY connect (the thing name is
+# not final until onboarding), plus app_aws_iot_publish_retained for the
+# retained "online" that a retained will needs. Every writer that reached a
+# presence topic (three of three, 2026-10) edited this component to add a will
+# before this existed. Verified against a TLS listener: the CONNECT carries the
+# substituted will, and "online" arrives retained.
+#
 # Amazon Root CA 1 is compiled in; `aws-rootca` overrides it from NVS for a
 # private endpoint. mbedTLS's outbound record buffer is cut to 4 KB in the
 # sidecar sdkconfig.defaults — AWS never needs 16 KB in that direction, and it
 # is ~12 KB of heap back.
+
+# WHAT THE FIRMWARE ALREADY SHIPS FOR FIRST-RUN ONBOARDING — data, read by the
+# platform: it copies `onboarding` into every product's details seed, so the
+# spec names this setup instead of describing a flow the firmware would then
+# have to be built to match. scripts/check.py fails a command listed here that
+# the block (or the engine) does not register.
+onboarding:
+  console:
+    setup: "aws-setup — guided: asks for Wi-Fi, the endpoint and thing name, then the certificate and private key (pasted)"
+    commands:
+      - "aws-wifi <ssid> <password>"
+      - "aws-endpoint <host> [8883|443]"
+      - "aws-thing <name>"
+      - "aws-cert (then paste the PEM)"
+      - "aws-key (then paste the PEM)"
+      - "aws-rootca (then paste the PEM)"
+      - "aws-status"
+      - "aws-creds-clear"
+    api: "app_aws_iot_set_wifi, app_aws_iot_set_endpoint, app_aws_iot_set_thing, app_aws_iot_set_cert, app_aws_iot_set_key, app_aws_iot_configured (app_aws_iot.h); app_console_read_line, app_console_read_text (app_console.h)"
+    note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: aws-wifi and the setup's Wi-Fi step do not apply."

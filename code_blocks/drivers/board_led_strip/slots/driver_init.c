@@ -24,6 +24,19 @@
         /* Observe, don't own: notified on every {{cfg.param_id}} change from
            any other source (button, console, a transport). */
         app_driver_register_solution("{{prefix_lc}}_board_led", {{prefix_lc}}_board_strip_notify, NULL);
+        /* A colour already on the bus (restored from NVS, or set before this
+           init ran) is not re-announced: read it, or the first power-on shows
+           the defaults (full-brightness red) instead. Only values that were
+           really set — an unset param reads as zero. */
+        app_driver_param_val_t {{prefix_lc}}_v;
+{{#if cfg.hue_param}}#ifdef {{prefix}}_COLOUR_MODE
+        if (app_driver_param_seen({{cfg.hue_param}}) && app_driver_get_param({{cfg.hue_param}}, &{{prefix_lc}}_v) == ESP_OK) s_{{prefix_lc}}_hue = {{prefix_lc}}_scale254({{prefix_lc}}_v.u8);
+#endif
+{{/if}}{{#if cfg.saturation_param}}#ifdef {{prefix}}_COLOUR_MODE
+        if (app_driver_param_seen({{cfg.saturation_param}}) && app_driver_get_param({{cfg.saturation_param}}, &{{prefix_lc}}_v) == ESP_OK) s_{{prefix_lc}}_sat = {{prefix_lc}}_scale254({{prefix_lc}}_v.u8);
+#endif
+{{/if}}{{#if cfg.brightness_param}}        if (app_driver_param_seen({{cfg.brightness_param}}) && app_driver_get_param({{cfg.brightness_param}}, &{{prefix_lc}}_v) == ESP_OK) s_{{prefix_lc}}_bri = {{prefix_lc}}_scale254({{prefix_lc}}_v.u8);
+{{/if}}        (void){{prefix_lc}}_v;
         ESP_LOGI(TAG, "{{prefix_lc}}: board led_strip '{{cfg.device}}' bound (%u LED(s), shows {{cfg.param_id}})",
                  (unsigned)s_{{prefix_lc}}_leds);
     }

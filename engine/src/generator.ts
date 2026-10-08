@@ -3237,21 +3237,28 @@ ${sharedNet ? '' : `    n = sizeof(s_ssid);      nvs_get_str(h, "ssid", s_ssid, 
     nvs_close(h);
 }
 
-${sharedNet ? '' : `static int mqtt_wifi_cmd(int argc, char **argv)
+/* Public setters (app_mqtt.h): validate, persist, apply. The console
+ * commands below are thin wrappers, and mqtt-setup asks for the same values
+ * one at a time — so a product never needs to know the NVS layout, and "the
+ * device asks for its settings" is a command it already has. */
+esp_err_t app_mqtt_set_wifi(const char *ssid, const char *password)
 {
-    if (argc < 3) {
-        printf("usage: mqtt-wifi <ssid> <password>\\n");
-        return 1;
-    }
+${sharedNet ? `    /* Shared-network mode: the transport (Matter/RainMaker) owns Wi-Fi and
+     * onboards it — there is nothing for this block to store. */
+    (void)ssid; (void)password;
+    return ESP_ERR_NOT_SUPPORTED;` : `    if (ssid == NULL || ssid[0] == 0) return ESP_ERR_INVALID_ARG;
+    if (password == NULL) password = "";
+    if (strlen(ssid) >= sizeof(s_ssid) || strlen(password) >= sizeof(s_pass)) return ESP_ERR_INVALID_SIZE;
     nvs_handle_t h;
-    if (nvs_open("zc_mqtt", NVS_READWRITE, &h) != ESP_OK) return 1;
-    nvs_set_str(h, "ssid", argv[1]);
-    nvs_set_str(h, "pass", argv[2]);
-    nvs_commit(h);
+    esp_err_t err = nvs_open("zc_mqtt", NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(h, "ssid", ssid);
+    if (err == ESP_OK) err = nvs_set_str(h, "pass", password);
+    if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
-    strlcpy(s_ssid, argv[1], sizeof(s_ssid));
-    strlcpy(s_pass, argv[2], sizeof(s_pass));
-    printf("wifi config saved — connecting\\n");
+    if (err != ESP_OK) return err;
+    strlcpy(s_ssid, ssid, sizeof(s_ssid));
+    strlcpy(s_pass, password, sizeof(s_pass));
     if (s_wifi_started) {
         wifi_config_t wc = {};
         strlcpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));
@@ -3262,25 +3269,30 @@ ${sharedNet ? '' : `static int mqtt_wifi_cmd(int argc, char **argv)
     } else {
         mqtt_wifi_start();
     }
-    return 0;
+    return ESP_OK;`}
 }
-`}static int mqtt_broker_cmd(int argc, char **argv)
+
+esp_err_t app_mqtt_set_broker(const char *uri, const char *username, const char *password)
 {
-    if (argc < 2) {
-        printf("usage: mqtt-broker <uri> [username] [password]  (e.g. mqtt://192.168.1.10)\\n");
-        return 1;
+    if (uri == NULL || uri[0] == 0) return ESP_ERR_INVALID_ARG;
+    if (username == NULL) username = "";
+    if (password == NULL) password = "";
+    if (strlen(uri) >= sizeof(s_uri) || strlen(username) >= sizeof(s_user) ||
+        strlen(password) >= sizeof(s_mqtt_pass)) {
+        return ESP_ERR_INVALID_SIZE;
     }
     nvs_handle_t h;
-    if (nvs_open("zc_mqtt", NVS_READWRITE, &h) != ESP_OK) return 1;
-    nvs_set_str(h, "uri", argv[1]);
-    nvs_set_str(h, "user", argc > 2 ? argv[2] : "");
-    nvs_set_str(h, "mpass", argc > 3 ? argv[3] : "");
-    nvs_commit(h);
+    esp_err_t err = nvs_open("zc_mqtt", NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    err = nvs_set_str(h, "uri", uri);
+    if (err == ESP_OK) err = nvs_set_str(h, "user", username);
+    if (err == ESP_OK) err = nvs_set_str(h, "mpass", password);
+    if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
-    strlcpy(s_uri, argv[1], sizeof(s_uri));
-    strlcpy(s_user, argc > 2 ? argv[2] : "", sizeof(s_user));
-    strlcpy(s_mqtt_pass, argc > 3 ? argv[3] : "", sizeof(s_mqtt_pass));
-    printf("broker config saved\\n");
+    if (err != ESP_OK) return err;
+    strlcpy(s_uri, uri, sizeof(s_uri));
+    strlcpy(s_user, username, sizeof(s_user));
+    strlcpy(s_mqtt_pass, password, sizeof(s_mqtt_pass));
     if (s_client != NULL) {
         /* URI changed under a live client: restart it clean. */
         esp_mqtt_client_stop(s_client);
@@ -3289,6 +3301,117 @@ ${sharedNet ? '' : `static int mqtt_wifi_cmd(int argc, char **argv)
         s_connected = false;
     }
     mqtt_start_client();
+    return ESP_OK;
+}
+
+bool app_mqtt_configured(void)
+{
+    return ${sharedNet ? '' : 's_ssid[0] != 0 && '}s_uri[0] != 0;
+}
+
+bool app_mqtt_owns_wifi(void)
+{
+    return ${sharedNet ? 'false' : 'true'};
+}
+
+${sharedNet ? '' : `static int mqtt_wifi_cmd(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: mqtt-wifi <ssid> <password>\\n");
+        return 1;
+    }
+    esp_err_t err = app_mqtt_set_wifi(argv[1], argv[2]);
+    if (err != ESP_OK) {
+        printf("wifi config not saved: %s\\n", esp_err_to_name(err));
+        return 1;
+    }
+    printf("wifi config saved — connecting\\n");
+    return 0;
+}
+`}static int mqtt_broker_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("usage: mqtt-broker <uri> [username] [password]  (e.g. mqtt://192.168.1.10)\\n");
+        return 1;
+    }
+    esp_err_t err = app_mqtt_set_broker(argv[1], argc > 2 ? argv[2] : "", argc > 3 ? argv[3] : "");
+    if (err != ESP_OK) {
+        printf("broker config not saved: %s\\n", esp_err_to_name(err));
+        return 1;
+    }
+    printf("broker config saved\\n");
+    return 0;
+}
+
+/* mqtt-setup: the guided version of the commands above. */
+#define MQTT_SETUP_ANSWER_MS 120000   /* per question: a person may go and find a value */
+
+static bool mqtt_setup_ask(const char *prompt, char *buf, size_t len, bool secret)
+{
+    for (;;) {
+        esp_err_t err = app_console_read_line(prompt, buf, len, secret, MQTT_SETUP_ANSWER_MS);
+        if (err == ESP_OK) return true;
+        if (err == ESP_ERR_INVALID_SIZE) {
+            printf("  too long — at most %u characters\\n", (unsigned)(len - 1));
+            continue;
+        }
+        printf("mqtt-setup: no answer — stopped. Values already saved are kept; run mqtt-setup again to finish.\\n");
+        return false;
+    }
+}
+
+static int mqtt_setup_cmd(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    char a[129], b[66], c[66], prompt[200];
+
+    printf("mqtt-setup — answer each question; Enter keeps the value in [brackets].\\n");
+${sharedNet ? `    printf("Wi-Fi: owned by the smart-home transport here — onboard it through that one.\\n");
+` : `    snprintf(prompt, sizeof(prompt), "Wi-Fi network (SSID) [%s]: ", s_ssid);
+    if (!mqtt_setup_ask(prompt, a, sizeof(s_ssid), false)) return 1;
+    bool keep_ssid = a[0] == 0;
+    if (keep_ssid && s_ssid[0] == 0) {
+        printf("  skipped — no network set yet\\n");
+    } else {
+        if (!mqtt_setup_ask(keep_ssid ? "Wi-Fi password [keep]: " : "Wi-Fi password: ", b, sizeof(s_pass), true)) return 1;
+        if (!(keep_ssid && b[0] == 0)) {
+            /* The setter copies into the live config: never pass it the live
+             * config itself as the source. */
+            if (keep_ssid) strlcpy(a, s_ssid, sizeof(a));
+            esp_err_t err = app_mqtt_set_wifi(a, b);
+            if (err != ESP_OK) printf("  not saved: %s\\n", esp_err_to_name(err));
+            else printf("  wifi config saved — connecting\\n");
+        }
+    }
+`}
+    snprintf(prompt, sizeof(prompt), "Broker URI, e.g. mqtt://192.168.1.10 [%s]: ", s_uri);
+    if (!mqtt_setup_ask(prompt, a, sizeof(s_uri), false)) return 1;
+    if (a[0] == 0 && s_uri[0] == 0) {
+        printf("  skipped — no broker set yet\\n");
+    } else {
+        /* Enter keeps the stored value, "-" clears it: a blank answer cannot
+         * mean both, and moving to an anonymous broker has to be possible. */
+        snprintf(prompt, sizeof(prompt), "Broker username (Enter keeps, - for none) [%s]: ", s_user);
+        if (!mqtt_setup_ask(prompt, b, sizeof(s_user), false)) return 1;
+        if (!mqtt_setup_ask("Broker password (Enter keeps, - for none): ", c, sizeof(s_mqtt_pass), true)) return 1;
+        if (a[0] || b[0] || c[0]) {
+            if (!a[0]) strlcpy(a, s_uri, sizeof(a));
+            if (strcmp(b, "-") == 0) b[0] = 0;
+            else if (!b[0]) strlcpy(b, s_user, sizeof(b));
+            if (strcmp(c, "-") == 0) c[0] = 0;
+            else if (!c[0]) strlcpy(c, s_mqtt_pass, sizeof(c));
+            esp_err_t err = app_mqtt_set_broker(a, b, c);
+            if (err != ESP_OK) printf("  not saved: %s\\n", esp_err_to_name(err));
+            else printf("  broker config saved\\n");
+        }
+    }
+
+    if (app_mqtt_configured()) {
+        printf("mqtt-setup: done — connecting to %s.\\n", s_uri);
+    } else {
+        printf("mqtt-setup: saved, but still missing:%s%s — run mqtt-setup again to finish.\\n",
+               ${sharedNet ? '""' : 's_ssid[0] ? "" : " Wi-Fi"'}, s_uri[0] ? "" : " broker");
+    }
     return 0;
 }
 
@@ -3337,12 +3460,20 @@ ${sharedNet ? '' : `    static const esp_console_cmd_t wifi_cmd = {
         .argtable = NULL,
     };
     app_console_register_cmd(&broker_cmd);
+    static const esp_console_cmd_t setup_cmd = {
+        .command = "mqtt-setup",
+        .help = "Guided setup: asks for ${sharedNet ? '' : 'Wi-Fi, then '}the broker URI and its credentials",
+        .hint = NULL,
+        .func = &mqtt_setup_cmd,
+        .argtable = NULL,
+    };
+    app_console_register_cmd(&setup_cmd);
 
     mqtt_load_config();
 ${sharedNet ? `    if (s_uri[0] == 0) {
         /* Unconfigured is a valid state — never block boot. Wi-Fi comes from
          * the transport's own onboarding (commissioning / provisioning). */
-        ESP_LOGW(TAG, "MQTT broker not configured — run: mqtt-broker <uri>");
+        ESP_LOGW(TAG, "MQTT broker not configured — run: mqtt-setup (guided), or mqtt-broker <uri>");
     }
     /* Reboot-while-provisioned: the transport may already have an IP before
      * we registered the handler. The v4 check is compiled out on IPv6-only
@@ -3358,7 +3489,7 @@ ${sharedNet ? `    if (s_uri[0] == 0) {
     }
 #endif` : `    if (s_ssid[0] == 0 || s_uri[0] == 0) {
         /* Unconfigured is a valid state — never block boot. */
-        ESP_LOGW(TAG, "MQTT not configured — run: mqtt-wifi <ssid> <pass>, then mqtt-broker <uri>");
+        ESP_LOGW(TAG, "MQTT not configured — run: mqtt-setup (guided), or mqtt-wifi <ssid> <pass>, then mqtt-broker <uri>");
     }
     mqtt_wifi_start();`}
 

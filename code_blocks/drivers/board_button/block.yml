@@ -1,7 +1,11 @@
 description: >-
   Use a button the BOARD already declares — its BOOT button, an AI button —
-  through esp-board-manager: single click toggles a boolean driver param.
-  Board-only: it states no pin, because the pin is the board's.
+  through esp-board-manager, with gestures: single click, double click
+  (double press), long press and an optional hold-to-factory-reset. A single
+  click can toggle a boolean driver param; every gesture also calls a hook the
+  product overrides (`<prefix>_on_single_click`, `_on_double_click`,
+  `_on_long_press`). Board-only: it states no pin, because the pin is the
+  board's.
 
 # WHY THIS BLOCK EXISTS.
 #
@@ -54,9 +58,60 @@ params:
       The board device's NAME in its board_devices.yaml (e.g. boot_button,
       ai_button). Must be a device of type button on the board this product
       runs on — generation fails otherwise.
+  double_click_ms:
+    type: int
+    default: 0
+    description: >-
+      The gap allowed between the two presses of a double click. 0 keeps the
+      BOARD's own timing — its board_devices.yaml short_press_time, 100 ms on
+      the ESP32-C3-DevKitM-1, or the button component's 180 ms default. Both
+      are too short for most people to double press, so a product that uses
+      double click should say 300-400. It is also how long a single click
+      waits before it is reported (the button cannot know a click was single
+      until the window closes), and it applies to the whole button.
+  long_press_ms:
+    type: int
+    default: 2000
+    description: Hold time that fires the long-press hook.
+  factory_reset_ms:
+    type: int
+    default: 0
+    description: >-
+      0 = off. Otherwise holding the button this long erases NVS and reboots
+      (the behaviors/factory_reset_long_press action, on the board's own
+      button — that block takes a gpio and so cannot be pointed at a board
+      device). Make it longer than long_press_ms when both are used: the
+      long-press hook fires first, on the way.
 
 driver_params:
   target_param:
     type: bool
-    required: true
-    description: Driver param ID a single click toggles (must be boolean)
+    required: false
+    description: >-
+      Optional. A boolean driver param a single click toggles. Leave it out
+      when the product decides what every gesture does itself (in the hooks).
+
+# GESTURE HOOKS — weak C++ functions defined in the generated control.cpp; the
+# product overrides any of them with a C++ definition of the same signature in
+# a .cpp file of components/app_logic/: app_logic.cpp, or a file of its own
+# that is listed in app_logic's CMakeLists.txt SRCS (app_logic links
+# whole-archive, so a file holding only the override is linked). Not from a .c
+# file: the hooks have C++ names, which C code cannot define. E.g. for prefix BTN:
+#
+#     void btn_on_single_click(void) { ... }   // after target_param's toggle
+#     void btn_on_double_click(void) { ... }
+#     void btn_on_long_press(void)   { ... }
+#
+# They run on the button component's timer task: keep them short and never
+# block — set a param, fire an event, notify a task. Without an override the
+# default logs "<prefix>: <gesture> (no handler)", which is how a missing or
+# misspelled override shows up in a device log instead of not at all.
+#
+# WHY HOOKS RATHER THAN MORE PARAMS. Before 2026-10, this block offered a
+# single click that toggles one bool and nothing else, and every gpio button
+# block (multi_event_button, factory_reset_long_press) is — correctly — an IO
+# conflict on a board's own pin. So a product wanting "double press cycles the
+# pattern, hold to reset" on a devkit's BOOT button had no block at all, and
+# its writer learned iot_button from source instead (108 lookups across six
+# runs of one product). What a gesture DOES is the product's; how to detect it
+# on the board's device is this block's.

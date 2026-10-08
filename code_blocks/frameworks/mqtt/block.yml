@@ -1,4 +1,4 @@
-description: "MQTT framework — connects to any MQTT broker over Wi-Fi and announces every device via Home Assistant discovery. Works with Home Assistant, Mosquitto, or any MQTT 3.1.1 broker; no hub protocol, no cloud."
+description: "MQTT framework — connects to any MQTT broker over Wi-Fi and announces every device via Home Assistant discovery. Works with Home Assistant, Mosquitto, or any MQTT 3.1.1 broker; no hub protocol, no cloud. Onboarding is included: a guided `mqtt-setup` console command asks for Wi-Fi and the broker (plus mqtt-wifi / mqtt-broker, and public setters app_mqtt_set_* for a custom flow)."
 # Chips this framework has been BUILT for (a real ESP-IDF build of a product
 # using it). CI skips the framework on any other chip; the platform's
 # registry must agree — see CLAUDE.md § Chips.
@@ -25,6 +25,7 @@ radio: true
 # ONBOARDING IS THE CONSOLE, deliberately. Unlike RainMaker (phone app) or
 # Matter (QR commissioning), a bare MQTT node has no companion app, so v1
 # configures over the serial console and persists to NVS:
+#     mqtt-setup                                  GUIDED: asks for both below
 #     mqtt-wifi <ssid> <password>
 #     mqtt-broker <uri> [username] [password]     e.g. mqtt://192.168.1.10
 # Boot without config MUST still reach "ZeroCode AI firmware started" (the
@@ -43,3 +44,15 @@ radio: true
 # esp-mqtt + esp_wifi ship with ESP-IDF — no managed components, no extra
 # sdkconfig, and it runs on every Wi-Fi chip. Also the first framework the
 # EMULATOR can verify end-to-end (esp-emu --net user reaches a real broker).
+
+# WHAT THE FIRMWARE ALREADY SHIPS FOR FIRST-RUN ONBOARDING — see the same
+# section in frameworks/aws_iot/block.yml. The commands are engine-generated
+# (genAppMqttCpp); scripts/check.py looks for them there.
+onboarding:
+  console:
+    setup: "mqtt-setup — guided: asks for Wi-Fi, then the broker URI and its credentials"
+    commands:
+      - "mqtt-wifi <ssid> <password>"
+      - "mqtt-broker <uri> [username] [password]"
+    api: "app_mqtt_set_wifi, app_mqtt_set_broker, app_mqtt_configured (app_mqtt.h); app_console_read_line (app_console.h)"
+    note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: mqtt-wifi does not exist and mqtt-setup asks for the broker only."

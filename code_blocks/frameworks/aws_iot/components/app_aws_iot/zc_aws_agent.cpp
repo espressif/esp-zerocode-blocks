@@ -28,6 +28,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <mbedtls/platform_util.h>
 #include <freertos/task.h>
 
 #include <backoff_algorithm.h>
@@ -181,8 +182,8 @@ esp_err_t app_aws_iot_subscribe(const char *topic_filter, uint8_t qos,
     return ESP_OK;
 }
 
-esp_err_t app_aws_iot_publish(const char *topic, const void *payload, size_t len,
-                              uint8_t qos, TickType_t block)
+static esp_err_t publish(const char *topic, const void *payload, size_t len,
+                         uint8_t qos, bool retain, TickType_t block)
 {
     if (topic == NULL || topic[0] == '\0') return ESP_ERR_INVALID_ARG;
     if (qos > 1) return ESP_ERR_INVALID_ARG;          /* AWS has no QoS 2 */
@@ -203,6 +204,7 @@ esp_err_t app_aws_iot_publish(const char *topic, const void *payload, size_t len
 
     cmd->hdr.kind = ZC_CMD_PUBLISH;
     cmd->info.qos = (qos == 0) ? MQTTQoS0 : MQTTQoS1;
+    cmd->info.retain = retain;
     cmd->info.pTopicName = topic_copy;
     cmd->info.topicNameLength = (uint16_t)topic_len;
     cmd->info.pPayload = (len > 0) ? payload_copy : NULL;
@@ -223,33 +225,89 @@ esp_err_t app_aws_iot_publish(const char *topic, const void *payload, size_t len
     return ESP_OK;
 }
 
+esp_err_t app_aws_iot_publish(const char *topic, const void *payload, size_t len,
+                              uint8_t qos, TickType_t block)
+{
+    return publish(topic, payload, len, qos, false, block);
+}
+
+esp_err_t app_aws_iot_publish_retained(const char *topic, const void *payload, size_t len,
+                                       uint8_t qos, TickType_t block)
+{
+    return publish(topic, payload, len, qos, true, block);
+}
+
 /* ── connect ─────────────────────────────────────────────────────────── */
 
-static bool session_connect(bool clean_session)
+/* One connect's own copy of the config. Taken under the config lock in a
+ * moment, so a setter never waits for a TLS handshake (a wrong endpoint retries
+ * for 15-25 s — exactly while somebody is fixing it), and can never free a
+ * buffer the handshake is reading. Kept until the session ends: s_net holds
+ * the hostname pointer for the life of the connection. */
+struct conn_cfg_t {
+    char endpoint[sizeof(g_zc_aws_endpoint)];
+    char thing[sizeof(g_zc_aws_thing)];
+    int32_t port;
+    char *cert;   size_t cert_len;
+    char *key;    size_t key_len;
+    char *rootca; size_t rootca_len;
+};
+
+static char *dup_bytes(const char *p, size_t n)
+{
+    if (p == NULL || n == 0) return NULL;
+    char *d = (char *)malloc(n);
+    if (d != NULL) memcpy(d, p, n);
+    return d;
+}
+
+static void release_config(conn_cfg_t *c)
+{
+    if (c->key != NULL) mbedtls_platform_zeroize(c->key, c->key_len);
+    free(c->cert); free(c->key); free(c->rootca);
+    *c = conn_cfg_t{};
+}
+
+/* False when out of memory, or when the credentials were cleared meanwhile. */
+static bool snapshot_config(conn_cfg_t *c)
+{
+    *c = conn_cfg_t{};
+    zc_aws_cfg_lock();
+    strlcpy(c->endpoint, g_zc_aws_endpoint, sizeof(c->endpoint));
+    strlcpy(c->thing, g_zc_aws_thing, sizeof(c->thing));
+    c->port = g_zc_aws_port;
+    c->cert = dup_bytes(g_zc_aws_cert, g_zc_aws_cert_len);     c->cert_len = c->cert ? g_zc_aws_cert_len : 0;
+    c->key = dup_bytes(g_zc_aws_key, g_zc_aws_key_len);        c->key_len = c->key ? g_zc_aws_key_len : 0;
+    c->rootca = dup_bytes(g_zc_aws_rootca, g_zc_aws_rootca_len); c->rootca_len = c->rootca ? g_zc_aws_rootca_len : 0;
+    bool ok = c->cert != NULL && c->key != NULL && (g_zc_aws_rootca == NULL || c->rootca != NULL);
+    zc_aws_cfg_unlock();
+    if (!ok) release_config(c);
+    return ok;
+}
+
+static bool session_connect(bool clean_session, const conn_cfg_t *c)
 {
     memset(&s_net, 0, sizeof(s_net));
     s_net.xTlsContextSemaphore = s_tls_mutex;
     s_net.pxTls = NULL;
-    s_net.pcHostname = g_zc_aws_endpoint;
-    s_net.xPort = (int)g_zc_aws_port;
+    s_net.pcHostname = c->endpoint;
+    s_net.xPort = (int)c->port;
     /* SNI is MANDATORY for AWS IoT — the endpoint is multi-tenant. The field
      * name is inverted: 0 KEEPS server name indication on. */
     s_net.disableSni = 0;
-    s_net.pcServerRootCA = (g_zc_aws_rootca != NULL) ? g_zc_aws_rootca : ZC_AWS_ROOT_CA;
-    s_net.pcServerRootCASize = (uint32_t)((g_zc_aws_rootca != NULL) ? g_zc_aws_rootca_len
-                                                                   : zc_aws_root_ca_size());
-    s_net.pcClientCert = g_zc_aws_cert;
-    s_net.pcClientCertSize = (uint32_t)g_zc_aws_cert_len;
-    s_net.pcClientKey = g_zc_aws_key;
-    s_net.pcClientKeySize = (uint32_t)g_zc_aws_key_len;
+    s_net.pcServerRootCA = (c->rootca != NULL) ? c->rootca : ZC_AWS_ROOT_CA;
+    s_net.pcServerRootCASize = (uint32_t)((c->rootca != NULL) ? c->rootca_len : zc_aws_root_ca_size());
+    s_net.pcClientCert = c->cert;
+    s_net.pcClientCertSize = (uint32_t)c->cert_len;
+    s_net.pcClientKey = c->key;
+    s_net.pcClientKeySize = (uint32_t)c->key_len;
     /* ALPN only on 443. On 8883 the protocol is implied, and offering
      * x-amzn-mqtt-ca there makes AWS drop the handshake. */
     static const char *alpn[] = { "x-amzn-mqtt-ca", NULL };
-    s_net.pAlpnProtos = (g_zc_aws_port == 443) ? alpn : NULL;
+    s_net.pAlpnProtos = (c->port == 443) ? alpn : NULL;
 
     if (xTlsConnect(&s_net) != TLS_TRANSPORT_SUCCESS) {
-        ESP_LOGW(ZC_AWS_TAG, "TLS connect to %s:%d failed",
-                 g_zc_aws_endpoint, (int)g_zc_aws_port);
+        ESP_LOGW(ZC_AWS_TAG, "TLS connect to %s:%d failed", c->endpoint, (int)c->port);
         return false;
     }
 
@@ -290,12 +348,21 @@ static bool session_connect(bool clean_session)
 
     MQTTConnectInfo_t ci = {};
     ci.cleanSession = clean_session;
-    ci.pClientIdentifier = g_zc_aws_thing;
-    ci.clientIdentifierLength = (uint16_t)strlen(g_zc_aws_thing);
+    ci.pClientIdentifier = c->thing;
+    ci.clientIdentifierLength = (uint16_t)strlen(c->thing);
     ci.keepAliveSeconds = ZC_AWS_KEEPALIVE_S;
 
+    /* The last will, if the product set one (app_aws_iot_set_will). MQTT_Connect
+     * serializes it into the network buffer before returning, so stack copies of
+     * the substituted topic and the payload are enough. */
+    MQTTPublishInfo_t will;
+    char will_topic[256];
+    char will_payload[256];
+    const MQTTPublishInfo_t *p_will = zc_aws_will_for_connect(&will, c->thing, will_topic, sizeof(will_topic),
+                                                              will_payload, sizeof(will_payload)) ? &will : NULL;
+
     bool session_present = false;
-    st = MQTT_Connect(&s_agent.mqttContext, &ci, NULL, ZC_AWS_CONNACK_MS, &session_present);
+    st = MQTT_Connect(&s_agent.mqttContext, &ci, p_will, ZC_AWS_CONNACK_MS, &session_present);
     if (st != MQTTSuccess) {
         ESP_LOGW(ZC_AWS_TAG, "MQTT_Connect: %s", MQTT_Status_strerror(st));
         xTlsDisconnect(&s_net);
@@ -310,7 +377,7 @@ static bool session_connect(bool clean_session)
     }
 
     ESP_LOGI(ZC_AWS_TAG, "connected — thing \"%s\" at %s:%d (session %s)",
-             g_zc_aws_thing, g_zc_aws_endpoint, (int)g_zc_aws_port,
+             c->thing, c->endpoint, (int)c->port,
              session_present ? "resumed" : "new");
 
     g_zc_aws_connected = true;
@@ -332,6 +399,15 @@ static void session_task(void *arg)
     (void)arg;
     bool clean_session = true;   /* only the very first connect */
 
+    /* ONE backoff context for the whole run of failed connects, reset after a
+     * session that HELD (ZC_AWS_STABLE_SESSION_MS). Re-initialising it inside the loop (as this did until
+     * 2026-10) restarts the sequence every time, so the delay never grows past
+     * its first step and a fleet hammers an unreachable endpoint once a second. */
+    BackoffAlgorithmContext_t backoff;
+    BackoffAlgorithm_InitializeParams(&backoff, ZC_AWS_BACKOFF_BASE_MS,
+                                      ZC_AWS_BACKOFF_MAX_MS,
+                                      BACKOFF_ALGORITHM_RETRY_FOREVER);
+
     /* Blocks for a grace period, then decides whether this block owns Wi-Fi. */
     zc_aws_net_start();
 
@@ -341,8 +417,18 @@ static void session_task(void *arg)
             continue;
         }
 
-        if (session_connect(clean_session)) {
+        /* The connect runs on its own copy of the config (snapshot_config), so
+         * a setter never waits for it and never frees what it reads. */
+        conn_cfg_t cfg;
+        if (!snapshot_config(&cfg)) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        bool connected = session_connect(clean_session, &cfg);
+
+        if (connected) {
             clean_session = false;
+            TickType_t started = xTaskGetTickCount();
 
             /* Blocks until the session drops or MQTTAgent_Terminate is called. */
             MQTTStatus_t st = MQTTAgent_CommandLoop(&s_agent);
@@ -353,26 +439,50 @@ static void session_task(void *arg)
 
             (void)MQTT_Disconnect(&s_agent.mqttContext);
             (void)xTlsDisconnect(&s_net);
+            release_config(&cfg);
 
-            /* Straight back round: a drop after a working session is usually
-             * transient, and backing off from the first retry delays recovery
-             * for no reason. */
-            continue;
+            /* A session that held: straight back round — a drop after a working
+             * session is usually transient, and backing off from the first
+             * retry delays recovery for no reason. */
+            if ((xTaskGetTickCount() - started) >= pdMS_TO_TICKS(ZC_AWS_STABLE_SESSION_MS)) {
+                BackoffAlgorithm_InitializeParams(&backoff, ZC_AWS_BACKOFF_BASE_MS,
+                                                  ZC_AWS_BACKOFF_MAX_MS,
+                                                  BACKOFF_ALGORITHM_RETRY_FOREVER);
+                continue;
+            }
+            /* One that did not: the broker accepted the CONNECT and dropped the
+             * client (a policy refusing a publish or the will, a duplicate client
+             * id). Retrying at once would loop as fast as TLS allows — back off
+             * like a failed connect, and keep backing off while it repeats. */
+            ESP_LOGW(ZC_AWS_TAG, "session lasted under %d s — check the thing's IoT policy "
+                     "allows every topic this product publishes (and iot:RetainPublish for "
+                     "retained ones)", ZC_AWS_STABLE_SESSION_MS / 1000);
         }
 
         /* Connect failed. Back off with jitter from the hardware RNG — the
          * reference example seeds rand() from tv_nsec, which on a device with
          * no RTC is near-constant across boots, so a whole fleet retries in
          * lockstep after a regional outage. */
-        BackoffAlgorithmContext_t backoff;
-        BackoffAlgorithm_InitializeParams(&backoff, ZC_AWS_BACKOFF_BASE_MS,
-                                          ZC_AWS_BACKOFF_MAX_MS,
-                                          BACKOFF_ALGORITHM_RETRY_FOREVER);
-        uint16_t delay_ms = ZC_AWS_BACKOFF_BASE_MS;
+        if (!connected) release_config(&cfg);
+        uint16_t delay_ms = ZC_AWS_BACKOFF_MAX_MS;
         (void)BackoffAlgorithm_GetNextBackoff(&backoff, esp_random(), &delay_ms);
         ESP_LOGI(ZC_AWS_TAG, "retrying in %u ms", (unsigned)delay_ms);
-        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        /* A setter changing the config (zc_aws_config_changed) ends the wait:
+         * the backoff is for an unreachable or refusing broker, and a fixed
+         * endpoint or a new certificate deserves an immediate try — not one
+         * up to 32 s later. */
+        if (xTaskNotifyWait(0, UINT32_MAX, NULL, pdMS_TO_TICKS(delay_ms)) == pdTRUE) {
+            BackoffAlgorithm_InitializeParams(&backoff, ZC_AWS_BACKOFF_BASE_MS,
+                                              ZC_AWS_BACKOFF_MAX_MS,
+                                              BACKOFF_ALGORITHM_RETRY_FOREVER);
+            ESP_LOGI(ZC_AWS_TAG, "configuration changed — retrying now");
+        }
     }
+}
+
+void zc_aws_config_changed(void)
+{
+    if (s_task != NULL) xTaskNotify(s_task, 1, eSetBits);
 }
 
 esp_err_t zc_aws_agent_start(void)

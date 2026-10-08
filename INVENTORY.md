@@ -37,7 +37,7 @@ Catalog of all code_blocks and product_configurations under
 
 ---
 
-## Product configurations (92)
+## Product configurations (93)
 
 Catalog grouped by category. All product_configurations are **chip-agnostic**
 — there's no `chips:` field in product.yml. Compatibility surfaces at build
@@ -381,7 +381,7 @@ cmd phase, brightness over the command channel so no backlight GPIO) and
 16-bit register addressing, addr 0x5A on the board's shared I2C bus 0/1).
 Same field-by-field C++ macro discipline as the FT5x06 block.
 
-### AWS IoT (1)
+### AWS IoT (2)
 `aws-iot-conn-demo` — first `frameworks: [aws_iot]` product, and deliberately
 the thinnest one in the catalog: **no device types at all**. `aws_iot` is
 connectivity, not a device model — it holds one mutual-TLS MQTT session to the
@@ -417,17 +417,26 @@ dependencies. Export `ZC_AWS_IOT_SRC` (the environment variable, not `-D`) to
 build against a pre-cloned tree. The block carries **no third-party source**.
 
 Like `ml` and `lm` it is a **pure copy-in framework**: not one line in
-`engine/src/generator.ts`. Onboarding is the serial console (`aws-wifi`,
-`aws-endpoint`, `aws-thing`, `aws-cert`/`aws-key` as chunked base64, since the
-REPL caps a line at 1024 B and a client cert is ~1.8 KB); unconfigured boot idles
-and logs, never blocks app_main, which is what lets CI build it with no AWS
-account. Every Wi-Fi chip (not esp32h2; not esp32p4 — esp-aws-iot does not list
+`engine/src/generator.ts`. Onboarding is the serial console: a guided
+`aws-setup` that asks for every value in turn, plus the individual `aws-wifi`,
+`aws-endpoint`, `aws-thing` and `aws-cert`/`aws-key` (each reads the PEM pasted
+verbatim after the command). All of them are thin wrappers over PUBLIC setters
+(`app_aws_iot_set_*`, `_configured`, `_owns_wifi`) and the base console's
+`app_console_read_line` / `app_console_read_text`, so a product with its own
+onboarding flow writes one command over those — never a copy of the storage.
+A presence topic is `app_aws_iot_set_will` (a `{thing}` template substituted at
+each connect) plus `app_aws_iot_publish_retained` for its "online" — which
+`behaviors/aws_iot_heartbeat` now demonstrates on `<prefix>/<thing>/status`.
+Unconfigured boot idles and logs, never blocks app_main, which is what lets CI
+build it with no AWS account. `aws-iot-board-light` is the second product: a
+colour light on a C3 devkit's own LED and BOOT button. Every Wi-Fi chip (not esp32h2; not esp32p4 — esp-aws-iot does not list
 it).
 
 ### MQTT (1)
 `mqtt-room-node` — first `frameworks: [mqtt]` product: light + DHT22
 temperature over Home Assistant MQTT discovery. Wi-Fi + broker configured on
-the serial console (`mqtt-wifi`, `mqtt-broker`), persisted in NVS;
+the serial console (guided `mqtt-setup`, or `mqtt-wifi` / `mqtt-broker`, all
+over the public `app_mqtt_set_*` setters), persisted in NVS;
 unconfigured boot idles and logs, never blocks app_main. esp-mqtt + esp_wifi
 ship with IDF — no managed components. Every Wi-Fi chip (not esp32h2); on
 esp32p4 the Wi-Fi is the companion radio's, reached over esp_wifi_remote.
@@ -456,7 +465,7 @@ brought up on a physical panel (that board's reset + backlight sit behind a
 TCA9554 expander, and its GT911 touch controller has no block yet).
 Product: `p4-mipi-panel`.
 
-### Board samples (5 — the only products carrying `board.yaml`)
+### Board samples (6 — the only products carrying `board.yaml`)
 The CI exercisers of the esp-board-manager path (CLAUDE.md → Boards):
 - `mosaico-bmgr-probe` — board path with NO external parts.
 - `c6-devkit-board-relay` — the AMEND path: one externally wired relay.
@@ -466,6 +475,11 @@ The CI exercisers of the esp-board-manager path (CLAUDE.md → Boards):
   (`drivers/board_button`) and WS2812 (`drivers/board_led_strip`, an
   observer-style indicator) plus an external relay via the amend. It is the
   fix the validator names when smart-plug's GPIO 8/9 collide with this board.
+- `aws-iot-board-light` — the GESTURE + COLOUR sample: the C3 DevKitM-1's BOOT
+  button through `drivers/board_button` with double click (350 ms window),
+  long press and a 6 s hold-to-factory-reset, and its RGB LED through
+  `drivers/board_led_strip` in colour mode (power / hue / saturation /
+  brightness). Also the AWS IoT section's second product.
 - `mosaico-pinned-panel-board` — the STEP-ASIDE sample: hand-pinned CO5300 +
   CST9220 blocks on the board that already carries both; the blocks step
   aside, and the validator (sharing the generator's `boardTakesOver`
