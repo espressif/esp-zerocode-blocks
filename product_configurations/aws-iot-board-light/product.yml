@@ -1,0 +1,61 @@
+id: aws-iot-board-light
+name: AWS IoT Board Light
+description: >-
+  A colour light on an ESP32-C3-DevKitM-1's own hardware, on the owner's AWS
+  IoT Core account. The on-board RGB LED is a full colour light
+  (drivers/board_led_strip in colour mode: power, hue, saturation,
+  brightness) and the BOOT button carries gestures (drivers/board_button:
+  single click toggles the light, double click and long press call product
+  hooks, a 6 s hold factory-resets). Onboarding is the framework's own guided
+  aws-setup command. The reference composition for "board button gestures +
+  coloured board LED + console onboarding" — no gpio appears anywhere.
+keywords: [aws, aws iot, mqtt, devkit, board-manager, rgb, colour, light, boot-button, double-click, long-press, factory-reset, aws-setup]
+
+frameworks: [aws_iot]
+
+ci_chips: [esp32c3]
+
+instances:
+  - block: drivers/board_led_strip
+    prefix: LED
+    cfg:
+      device: led_strip
+      param_id: APP_DRIVER_PARAM_POWER
+      hue_param: APP_DRIVER_PARAM_HUE
+      saturation_param: APP_DRIVER_PARAM_SATURATION
+      brightness_param: APP_DRIVER_PARAM_BRIGHTNESS
+
+  - block: drivers/board_button
+    prefix: BTN
+    cfg:
+      device: boot_button
+      target_param: APP_DRIVER_PARAM_POWER
+      double_click_ms: 350
+      long_press_ms: 2000
+      factory_reset_ms: 6000
+
+  - block: behaviors/console_param_cmd
+    prefix: PWRCMD
+    cfg:
+      command_name: power
+      target_param: APP_DRIVER_PARAM_POWER
+
+  - block: behaviors/console_param_cmd
+    prefix: HUECMD
+    cfg:
+      command_name: hue
+      target_param: APP_DRIVER_PARAM_HUE
+      value_kind: u8
+
+  - block: behaviors/console_param_cmd
+    prefix: BRICMD
+    cfg:
+      command_name: brightness
+      target_param: APP_DRIVER_PARAM_BRIGHTNESS
+      value_kind: u8
+
+  - include: console-diagnostics
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode AWS IoT Board Light

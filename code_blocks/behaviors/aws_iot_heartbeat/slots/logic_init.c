@@ -1,4 +1,14 @@
 {
+{{#if cfg.presence}}    /* Presence: the broker publishes "offline" to <prefix>/<thing>/status if the
+     * device drops without disconnecting; each connect publishes "online" there.
+     * The will is set HERE, before the first connect (it rides in the CONNECT
+     * packet), with "{thing}" substituted by the framework at every connect. */
+    esp_err_t {{prefix_lc}}_will = app_aws_iot_set_will({{prefix}}_TOPIC_PREFIX "/{thing}/status",
+                                                        "offline", 1, true);
+    if ({{prefix_lc}}_will != ESP_OK) {
+        ESP_LOGW(TAG, "{{prefix_lc}}: last will not set: %s", esp_err_to_name({{prefix_lc}}_will));
+    }
+{{/if}}
     /* Subscribing and topic-building happen on ZC_AWS_EVENT_CONNECTED, not
      * here: the thing name is not final until the device has been onboarded. */
     esp_err_t {{prefix_lc}}_err = esp_event_handler_register(

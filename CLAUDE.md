@@ -183,6 +183,7 @@ Beyond slots, a block can also contribute:
 | `params` | Schema for `cfg` (with `type`, `required`, `default`, `enum`, `description`) |
 | `provides_bus` / `requires_bus` | Which shared bus this block configures, or only talks on — see **Shared buses** |
 | `bmgr` | esp-board-manager mapping, read only when a board file is supplied — see **Boards** |
+| `onboarding` | Framework blocks only: what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. The platform copies it verbatim into every product's details seed, so the spec names it instead of inventing a flow (before it existed, specs asked for "the device asks for…" and writers built 430-500 line wizards the framework already had). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is DATA the platform reads, so a framework's onboarding changes here, with no platform release. |
 
 ## Shared buses (`provides_bus:` / `requires_bus:`)
 
@@ -556,6 +557,17 @@ would make a second iot_button device on a pin the board's device owns), and
 `app_driver_register_solution`, never a `driver_apply_cases` owner, because an
 indicator's param is usually owned by the relay whose state it shows and a
 second `case` on one param is a duplicate-case compile error).
+
+Both input and LED adapters carry the surface a product actually needs, so
+nobody reaches past them for the raw handle (2026-10). `board_button` does
+single click (optionally toggling a bool), double click, long press — each
+calling a weak `<prefix>_on_*` hook the product overrides — and an optional
+`factory_reset_ms` hold, all on the board's own handle; `double_click_ms` sets
+the window, because boards ship 100-180 ms, which people cannot double press
+in. `board_led_strip` renders full colour (HSV, Matter's 0-254 scales) when a
+`hue_param` is bound, and is the fixed-colour on/off indicator otherwise.
+Before this, a gesture or a coloured board LED meant learning iot_button,
+dev_button and led_strip from source — 143 of one product's lookups.
 
 ```yaml
 bmgr:

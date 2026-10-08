@@ -1,8 +1,9 @@
 description: >-
   Drive an addressable LED the BOARD already declares (a devkit's on-board
-  WS2812) through esp-board-manager: a boolean driver param switches the whole
-  strip on/off in a fixed colour. Board-only: it states no pin, because the
-  pin is the board's.
+  WS2812 / RGB LED) through esp-board-manager. A boolean driver param switches
+  it on/off; optionally hue, saturation and brightness params make it a full
+  colour light (HSV, Matter's 0-254 scales). Board-only: it states no pin,
+  because the pin is the board's.
 
 # WHY THIS BLOCK EXISTS.
 #
@@ -16,11 +17,19 @@ description: >-
 # owner. The way to use hardware someone else owns is to ASK THEM FOR IT.
 # Same adapter shape as drivers/board_gpio_ctrl, for a led_strip device.
 #
-# Deliberately MINIMAL: one boolean param, one colour. This is the board-LED
-# twin of a status/power indicator, not of drivers/ws2812_strip — full
-# HSV color/brightness control over a board strip is a separate block when a
-# product needs it, so this one stays a drop-in for "show the plug state on
-# the devkit's LED".
+# TWO MODES, one block (2026-10). With only param_id it is the drop-in it
+# always was: on/off in the fixed red/green/blue colour — "show the plug state
+# on the devkit's LED". Bind hue_param (and optionally saturation_param /
+# brightness_param) and it renders HSV from the param bus like
+# drivers/ws2812_strip — which takes a gpio and so cannot drive a board's own
+# LED. brightness_param alone dims the fixed colour. Before the colour mode, a
+# product wanting a coloured board LED drove the led_strip handle itself and
+# learned dev_led_strip + led_strip from source on the way.
+#
+# ANIMATION (breathing, colour cycles) is the product's: write the params from
+# a timer. Every write notifies every observer of that param, so keep an
+# animated param out of nvs_persist_* (or persist a separate "mode" param
+# instead) — persisting a 30 Hz brightness ramp is a flash-wear bug.
 #
 # An OBSERVER, not an owner. It registers an app_driver notify callback
 # instead of contributing a driver_apply_cases `case`, because an indicator's
@@ -71,4 +80,16 @@ driver_params:
   param_id:
     type: bool
     default: APP_DRIVER_PARAM_POWER
-    description: Driver param ID this indicator reacts to (boolean)
+    description: Driver param ID this indicator reacts to (boolean on/off)
+  hue_param:
+    type: u8
+    required: false
+    description: Optional. Hue 0-254 (full colour circle, Matter's scale). Binding it switches the LED to colour mode.
+  saturation_param:
+    type: u8
+    required: false
+    description: Optional, colour mode. Saturation 0-254 (0 = white). Unbound = 254.
+  brightness_param:
+    type: u8
+    required: false
+    description: Optional. Brightness 0-254. Unbound = 254. Without hue_param it dims the fixed red/green/blue colour.

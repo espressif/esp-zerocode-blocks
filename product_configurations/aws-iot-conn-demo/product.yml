@@ -27,7 +27,11 @@ frameworks: [aws_iot]
 #     aws-cert           ... then paste the certificate PEM verbatim
 #     aws-key            ... then paste the private key PEM verbatim
 # The thing's IoT policy must grant iot:Connect, iot:Publish on
-# zerocode/<thing>/heartbeat and iot:Subscribe/iot:Receive on zerocode/<thing>/cmd.
+# zerocode/<thing>/heartbeat, iot:Subscribe/iot:Receive on zerocode/<thing>/cmd,
+# and nothing more. behaviors/aws_iot_heartbeat can also keep a retained
+# presence topic (cfg presence: 1). It is off here on purpose: it needs
+# iot:Publish AND iot:RetainPublish on zerocode/<thing>/status as well, and AWS
+# drops a session that publishes outside its policy.
 
 instances:
   - block: behaviors/aws_iot_heartbeat

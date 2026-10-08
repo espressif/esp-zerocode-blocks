@@ -35,6 +35,11 @@ extern "C" {
 #define ZC_AWS_CONNACK_MS       5000
 #define ZC_AWS_BACKOFF_BASE_MS  1000
 #define ZC_AWS_BACKOFF_MAX_MS   32000
+/* A session shorter than this did not "work": the broker accepted the CONNECT
+ * and then dropped the client (a policy refusing a publish or the will, a
+ * duplicate client id). Treated as a failed connect — backed off, not retried
+ * at once — or such a device reconnects as fast as TLS allows, forever. */
+#define ZC_AWS_STABLE_SESSION_MS 10000
 #define ZC_AWS_MAX_SUBS         8
 #define ZC_AWS_CMD_QUEUE_LEN    16
 
@@ -55,9 +60,21 @@ extern size_t   zc_aws_root_ca_size(void);
 extern volatile bool g_zc_aws_net_up;
 extern volatile bool g_zc_aws_connected;
 extern volatile bool g_zc_aws_wifi_owned;   /* true when THIS block started Wi-Fi */
+extern volatile bool g_zc_aws_wifi_decided; /* the ownership decision above has been made */
 
 bool zc_aws_configured(void);
 void zc_aws_load_config(void);
+/* The live config lock. Held by the session task across a connect — the TLS
+ * The live config lock. Taken BRIEFLY: by every setter while it changes the live
+ * config, and by the session task while it copies that config for one connect
+ * (the connect then runs on its own copy, so a setter never waits for a TLS
+ * handshake, and never frees a buffer the handshake is reading). Not
+ * recursive: zc_aws_load_config() must be called with it held, never take it. */
+void zc_aws_cfg_lock(void);
+void zc_aws_cfg_unlock(void);
+/* A setter changed the config: wake the session task out of a reconnect
+ * backoff so the fix is tried at once (zc_aws_agent.cpp). */
+void zc_aws_config_changed(void);
 void zc_aws_wifi_reconnect(void);           /* apply g_zc_aws_ssid/pass now */
 /* Claim or defer Wi-Fi ownership. Called ONCE from the session task, not from
  * init() — see the comment on wifi_claim_or_defer() for why the timing matters. */
@@ -81,6 +98,15 @@ void      zc_aws_agent_send_subscribe(size_t index);
 
 /* ── console, zc_aws_console.cpp ─────────────────────────────────────── */
 void zc_aws_console_register(void);
+/* Does NUL-terminated PEM text parse as a certificate ("cert"/"rootca") or a
+ * private key ("key")? Logs the mbedTLS code when not. zc_aws_config.cpp. */
+bool zc_aws_pem_parses(const char *tag, const char *pem);
+/* The will for THIS connect (app_aws_iot_set_will, "{thing}" substituted with
+ * `thing`), or false for none. Topic and payload are COPIED into the caller's
+ * buffers under the will's lock, so a concurrent set_will cannot tear them.
+ * zc_aws_config.cpp; called by the session task right before MQTT_Connect. */
+bool zc_aws_will_for_connect(MQTTPublishInfo_t *out, const char *thing,
+                             char *topic_buf, size_t topic_cap, char *payload_buf, size_t payload_cap);
 
 #ifdef __cplusplus
 }
