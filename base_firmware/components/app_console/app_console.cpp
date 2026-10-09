@@ -97,10 +97,67 @@ static esp_err_t register_builtin_cmds(void)
     return ESP_OK;
 }
 
+#if defined(CONFIG_ESP_CONSOLE_NONE) && defined(CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT)
+/* The board's usb_hs_console binds a TinyUSB CDC to stdin/stdout before
+ * app_main, but IDF cannot build a REPL on it: esp_console_new_repl_stdio()
+ * fails under CONSOLE_NONE (esp_stdio_install_io_driver() has no driver to
+ * install), and vfs_tinyusb reads never block and have no select(), which
+ * linenoise needs. So the REPL is this task, reading through
+ * app_console_read_line() — no line editing or history. */
+#define STDIO_REPL_LINE_MAX 256
+
+static void stdio_repl_task(void *arg)
+{
+    const char *prompt = (const char *)arg;
+    static char line[STDIO_REPL_LINE_MAX];
+
+    for (;;) {
+        esp_err_t err = app_console_read_line(prompt, line, sizeof(line), false, 0);
+        if (err == ESP_ERR_INVALID_SIZE) {
+            printf("Line longer than %d characters, ignored\n", STDIO_REPL_LINE_MAX - 1);
+            continue;
+        }
+        if (err != ESP_OK || line[0] == '\0') {
+            continue;
+        }
+
+        int ret = 0;
+        err = esp_console_run(line, &ret);
+        if (err == ESP_ERR_NOT_FOUND) {
+            printf("Unrecognized command\n");
+        } else if (err == ESP_OK && ret != ESP_OK) {
+            printf("Command returned non-zero error code: 0x%x (%s)\n", ret, esp_err_to_name(ret));
+        } else if (err != ESP_OK && err != ESP_ERR_INVALID_ARG) {
+            printf("Internal error: %s\n", esp_err_to_name(err));
+        }
+    }
+}
+
+static esp_err_t start_stdio_repl(const esp_console_repl_config_t *repl_config)
+{
+    esp_console_config_t console_config = ESP_CONSOLE_CONFIG_DEFAULT();
+    console_config.max_cmdline_length = STDIO_REPL_LINE_MAX;
+    esp_err_t err = esp_console_init(&console_config);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = esp_console_register_help_command();
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (xTaskCreatePinnedToCore(stdio_repl_task, "console_repl", repl_config->task_stack_size,
+                                (void *)repl_config->prompt, repl_config->task_priority,
+                                NULL, repl_config->task_core_id) != pdPASS) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+#endif
+
 esp_err_t app_console_init(void)
 {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    repl_config.prompt = APP_PRODUCT_NAME ">";
+    repl_config.prompt = APP_PRODUCT_NAME "> ";
 
     /* Register commands into the global registry before the transport starts. */
     esp_err_t err = register_builtin_cmds();
@@ -117,6 +174,14 @@ esp_err_t app_console_init(void)
 #elif defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t hw_config = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
     err = esp_console_new_repl_usb_serial_jtag(&hw_config, &repl_config, &repl);
+#elif defined(CONFIG_ESP_CONSOLE_NONE) && defined(CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT)
+    err = start_stdio_repl(&repl_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start USB CDC console REPL: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Console ready. Type 'help' for commands.");
+    return ESP_OK;
 #elif defined(CONFIG_ESP_CONSOLE_NONE)
     /* Console deliberately OFF (a product may free the UART pins for its own
      * hardware). No REPL to start; the command registry stays populated so a
@@ -166,7 +231,7 @@ static bool s_skip_lf = false;
 
 static bool console_present(void)
 {
-#if defined(CONFIG_ESP_CONSOLE_NONE)
+#if defined(CONFIG_ESP_CONSOLE_NONE) && !defined(CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT)
     return false;
 #else
     return true;

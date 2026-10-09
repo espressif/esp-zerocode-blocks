@@ -12,7 +12,9 @@
  * API for product-specific commands added by the AI.
  *
  * Uses ESP-IDF's esp_console component (UART or USB-Serial-JTAG REPL,
- * whichever is the primary console).
+ * whichever is the primary console). On a board whose usb_hs_console owns
+ * stdio (CONFIG_ESP_CONSOLE_NONE + CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT),
+ * the REPL runs on that TinyUSB CDC, without line editing or history.
  */
 
 #pragma once
@@ -51,8 +53,9 @@ esp_err_t app_console_register_cmd(const esp_console_cmd_t *cmd);
  * byte — there is no safe way to do that, and no need: register a command.
  *
  * Both work on a UART and a USB-Serial-JTAG primary console alike (the REPL
- * installs the VFS driver they read through). With CONFIG_ESP_CONSOLE_NONE
- * there is no console and both return ESP_ERR_NOT_SUPPORTED.
+ * installs the VFS driver they read through), and on a usb_hs_console CDC.
+ * With CONFIG_ESP_CONSOLE_NONE and no usb_hs_console there is no console and
+ * both return ESP_ERR_NOT_SUPPORTED.
  */
 
 /**

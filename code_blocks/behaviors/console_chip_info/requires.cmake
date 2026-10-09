@@ -1,2 +1,2 @@
 # Extra PRIV_REQUIRES this block adds to generated components.
-list(APPEND app_logic_PRIV_REQUIRES console esp_hw_support)
+list(APPEND app_logic_PRIV_REQUIRES console esp_hw_support spi_flash esp_psram)
