@@ -27,6 +27,7 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # Stack sizes
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 
-# No build date/time in the app descriptor. Source paths are hidden by the
-# prefix maps in CMakeLists.txt.
+# No build date/time in the app or bootloader descriptor. Source paths are
+# hidden by the prefix maps in cmake/prefix_maps.cmake.
 # CONFIG_APP_COMPILE_TIME_DATE is not set
+# CONFIG_BOOTLOADER_COMPILE_TIME_DATE is not set
