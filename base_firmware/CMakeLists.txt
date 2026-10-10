@@ -68,6 +68,10 @@ set(PROJECT_VER "1.0.0")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+# Configure-time timestamps (CMake's string(TIMESTAMP), e.g. OpenThread's build
+# date define) read this, so a reconfigure no longer changes compile flags.
+set(ENV{SOURCE_DATE_EPOCH} 0)
+
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/prefix_maps.cmake")
 zc_add_prefix_maps("${CMAKE_CURRENT_LIST_DIR}")
 
