@@ -121,6 +121,12 @@ dedup prevent update loops):
   Driving a board's OWN device) instead of an externally-wired relay on
   GPIO 4, so the only remaining difference is who owns the panel, the touch
   and the I2C bus.
+- `mosaico-board-sound` — [sound]: bench product for `drivers/board_audio_codec`,
+  the board's OWN codec asked for by name (`audio_dac`) — no pin, I2S port or
+  I2C address, the MCLK ratio read from the board's I2S peripheral — driven by
+  the sound framework's sequencer and by `tone` / `volume` / `mute` on the
+  console. Builds on the S31 board path; not yet hardware-verified as a block
+  (the open sequence was verified audible on a Mosaico bench).
 - `mosaico-touch-hub` — [matter, mqtt, display, webui, sound]: the ESP-Mosaico
   with EVERY onboard peripheral in the user guide's pin table — panel, touch,
   AI button (GPIO7), haptic motor (GPIO8), ES8311 codec + NS4150B amp, BMI270

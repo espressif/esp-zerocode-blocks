@@ -569,6 +569,24 @@ in. `board_led_strip` renders full colour (HSV, Matter's 0-254 scales) when a
 Before this, a gesture or a coloured board LED meant learning iot_button,
 dev_button and led_strip from source — 143 of one product's lookups.
 
+`drivers/board_audio_codec` (an `audio_codec` device, 2026-10) is the fourth:
+it takes the codec handle the board manager already opened, reads the MCLK
+ratio from the codec's own I2S peripheral config (esp_codec_dev 2.x needs it
+at open; a mismatch is silence with no error), and keeps speaker_es8311's
+tone/volume/mute contract so the sound framework drives it unchanged. It
+declares `esp_codec_dev` in its own idf_component.yml — the board manager pulls
+it in only behind a Kconfig gate, and that gate dropped it from two products'
+builds. The sound framework's sequencer drives whichever instance declares a
+`tone_param` (it used to match `drivers/speaker_i2s` by id, which left
+speaker_es8311 silent under `sound`).
+
+A board's `custom` devices (`type: custom` + `chip:` — the Mosaico's bmi270,
+bmm150, bq27220) have no generic handle shape, so there is no adapter for them.
+The bus-sensor block for the part (`imu_bmi270` …) drives one through the
+board's own I2C bus with no pin, and declares `board_part: <chip>` so a host
+can name it for that device (the platform's get_board does). Discovery only —
+generation ignores the field.
+
 ```yaml
 bmgr:
   init: board_manager

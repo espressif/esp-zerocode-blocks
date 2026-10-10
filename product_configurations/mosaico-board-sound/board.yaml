@@ -1,0 +1,18 @@
+schema: zc-board/1
+
+# THE HARDWARE, NOT THE PRODUCT — see the note in
+# product_configurations/c6-devkit-board-relay/board.yaml. This is a SAMPLE
+# board file: the catalog carries one only for the products that exist to
+# exercise the board path in CI. Every other product is board-free.
+#
+# What this file buys the product beside it: the ESP-Mosaico's ES8311 codec,
+# its I2S/I2C lines and the amplifier are declared by the `esp_mosaico` board
+# definition, so the product names the codec device (`audio_dac`) and states
+# no pin, I2S port or I2C address.
+
+selected: esp-mosaico
+chip: esp32s31
+
+bmgr:
+  board: esp_mosaico
+  resolved_from: exact

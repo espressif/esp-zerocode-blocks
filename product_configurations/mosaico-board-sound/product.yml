@@ -1,0 +1,47 @@
+id: mosaico-board-sound
+name: ESP-Mosaico Board Sound (bench)
+description: >-
+  Exercises drivers/board_audio_codec on a real board definition: the
+  ESP-Mosaico's ES8311 + amplifier come from the board, so this product names
+  the codec device and states no pin, I2S port or I2C address. The sound
+  framework's sequencer drives it through its tone param; `tone <hz>`,
+  `volume <0-100>` and `mute <0|1>` drive it from the console.
+keywords: [mosaico, esp32s31, sound, speaker, codec, board-manager, bmgr]
+internal: true
+
+frameworks: [sound]
+ci_chips: [esp32s31]
+
+partition_table: 8mb
+
+instances:
+  - block: drivers/board_audio_codec
+    prefix: SPK
+    cfg:
+      device: audio_dac
+      tone_param: APP_DRIVER_PARAM_TONE_HZ
+      volume_param: APP_DRIVER_PARAM_VOLUME
+      mute_param: APP_DRIVER_PARAM_MUTE
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_TONE
+    cfg:
+      command_name: tone
+      target_param: APP_DRIVER_PARAM_TONE_HZ
+      value_kind: u32
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_VOLUME
+    cfg:
+      command_name: volume
+      target_param: APP_DRIVER_PARAM_VOLUME
+      value_kind: u8
+
+  - block: behaviors/console_param_cmd
+    prefix: CMD_MUTE
+    cfg:
+      command_name: mute
+      target_param: APP_DRIVER_PARAM_MUTE
+      value_kind: bool
