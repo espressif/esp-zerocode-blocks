@@ -223,6 +223,9 @@ export interface Block {
    *  speaker, a microphone). The generator drops the ESP32-P4's hosted radio
    *  stack from a tree whose frameworks all say false. */
   radio?: boolean
+  /** FRAMEWORK blocks only: what a product's first build needs before its own
+   *  blocks exist (see earlyBuildComposition). */
+  early_build?: EarlyBuildDecl
   slots?: Record<string, string>
 }
 
@@ -230,6 +233,17 @@ export interface Instance {
   block: string
   prefix: string
   cfg: Record<string, unknown>
+}
+
+/** A framework's early-build needs. */
+export interface EarlyBuildDecl {
+  /** Instances to add; one with `unless_board_has` is left out when the board
+   *  declares a device of that type. */
+  instances?: Array<Instance & { unless_board_has?: string }>
+  /** Partition table the framework needs. */
+  partition_table?: string
+  /** Smallest board flash, in MB; a smaller board gets no early build. */
+  min_flash_mb?: number
 }
 
 export interface Product {

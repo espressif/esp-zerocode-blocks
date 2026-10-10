@@ -4108,7 +4108,7 @@ export interface BoardDevice {
 }
 
 /** What the engine reads out of a board pack at GENERATION time. */
-interface BoardFacts {
+export interface BoardFacts {
   /** The board's directory inside the pack. */
   dir: string
   /** Flash size in bytes, from CONFIG_ESPTOOLPY_FLASHSIZE_<n>MB. */
@@ -4150,7 +4150,7 @@ const BOARD_CHOICE_PREFIXES = [
  *  `ZC_BOARDS_DIR`. A board pack is host content like ESP-IDF: not reachable
  *  means the gates below are SKIPPED, not failed, so a machine (or a Lambda)
  *  with no packs checked out generates exactly what it generated before. */
-async function loadBoardFacts(paths: GeneratorPaths, board: string): Promise<BoardFacts | null> {
+export async function loadBoardFacts(paths: GeneratorPaths, board: string): Promise<BoardFacts | null> {
   const dir = findBoardDir(boardsRoot({ boardsDir: paths.boardsDir }), board)
   if (!dir) return null
   let text = ''

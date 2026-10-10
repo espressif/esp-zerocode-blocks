@@ -376,6 +376,23 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
     # the ESP32-P4's hosted stack from an all-local tree on the strength of it.
     if not isinstance(fw.get('radio'), bool):
         err(fid, 'framework block must declare `radio: true|false` (needs a radio?)')
+    # EARLY BUILD: what a product's first build adds for this framework.
+    eb = fw.get('early_build')
+    if eb is not None:
+        if not isinstance(eb, dict) or set(eb) - {'instances', 'partition_table', 'min_flash_mb'}:
+            err(fid, 'early_build: must be a mapping of instances / partition_table / min_flash_mb')
+        else:
+            for i, inst in enumerate(eb.get('instances') or []):
+                if not isinstance(inst, dict) or inst.get('block') not in block_ids or not isinstance(inst.get('prefix'), str):
+                    err(fid, f'early_build.instances[{i}]: needs a known block and a prefix')
+                elif set(inst) - {'block', 'prefix', 'cfg', 'unless_board_has'}:
+                    err(fid, f'early_build.instances[{i}]: unknown key')
+            pt = eb.get('partition_table')
+            if pt is not None and f'partition-tables/{pt}' not in block_ids:
+                err(fid, f'early_build.partition_table: "{pt}" is not a partition table')
+            mf = eb.get('min_flash_mb')
+            if mf is not None and not (isinstance(mf, int) and mf > 0):
+                err(fid, 'early_build.min_flash_mb must be a positive integer')
 
 # ONBOARDING: what a framework says its firmware already ships for first-run
 # onboarding is copied into every product's seed by the platform, so the spec

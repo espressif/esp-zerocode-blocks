@@ -40,3 +40,12 @@ radio: false
 # Versions pinned to the locally verified set: lvgl 9.4 + esp_lvgl_port 2.7
 # (the port's cfg structs are LVGL-9-conditional; a major bump of either is
 # an API review, not a routine bump).
+
+# A product's first build, before its own blocks exist; never flashed. The
+# stand-in panel uses pins every buildable chip has.
+early_build:
+  instances:
+    - block: drivers/display_ili9341_spi
+      prefix: EARLY_LCD
+      unless_board_has: display_lcd
+      cfg: { sclk_gpio: 4, mosi_gpio: 5, dc_gpio: 2, cs_gpio: 0 }

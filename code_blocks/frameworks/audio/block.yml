@@ -42,3 +42,8 @@ radio: false
 # deliberately separate from drivers/mic_i2s: AFE needs the raw PCM stream at
 # its own chunk size, and the driver param bus carries scalars only, so a
 # loudness reading cannot be reused as an audio source.
+
+# A product's first build, before its own blocks exist.
+early_build:
+  partition_table: 8mb-voice
+  min_flash_mb: 8
