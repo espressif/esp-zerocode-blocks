@@ -37,21 +37,19 @@
 }
 #else /* !SOC_PCNT_SUPPORTED — GPIO-ISR quadrature fallback */
 {
-    gpio_config_t {{prefix_lc}}_a_cfg = {
-        .pin_bit_mask = 1ULL << {{prefix}}_ENC_A_GPIO,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_POSEDGE,
-    };
+    gpio_config_t {{prefix_lc}}_a_cfg = {};
+    {{prefix_lc}}_a_cfg.pin_bit_mask = 1ULL << {{prefix}}_ENC_A_GPIO;
+    {{prefix_lc}}_a_cfg.mode = GPIO_MODE_INPUT;
+    {{prefix_lc}}_a_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+    {{prefix_lc}}_a_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_a_cfg.intr_type = GPIO_INTR_POSEDGE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_a_cfg));
-    gpio_config_t {{prefix_lc}}_b_cfg = {
-        .pin_bit_mask = 1ULL << {{prefix}}_ENC_B_GPIO,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
+    gpio_config_t {{prefix_lc}}_b_cfg = {};
+    {{prefix_lc}}_b_cfg.pin_bit_mask = 1ULL << {{prefix}}_ENC_B_GPIO;
+    {{prefix_lc}}_b_cfg.mode = GPIO_MODE_INPUT;
+    {{prefix_lc}}_b_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+    {{prefix_lc}}_b_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_b_cfg.intr_type = GPIO_INTR_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_b_cfg));
 
     /* Another block (buttons etc.) may already have installed the shared GPIO
