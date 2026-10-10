@@ -702,9 +702,8 @@ chip (a C6 on the Function EV board) reached over ESP-Hosted:
 `base_firmware/main/idf_component.yml`, keeps the esp_wifi API working, and the
 companion's slave firmware must be flashed separately (see the header of the
 `sdkconfig-fragments/esp32p4` chip block). The `target in [esp32p4]` component
-rules are NOT sdkconfig, so they stay in `base_firmware/main/idf_component.yml`,
-and the `BLEManagerImpl.cpp` patch lives in the matter framework's
-`cmake/post_project.cmake` — only the P4 sdkconfig keys live in the chip block. Three consequences:
+rules are NOT sdkconfig, so they stay in `base_firmware/main/idf_component.yml`
+— only the P4 sdkconfig keys live in the chip block. Three consequences:
 
 - `CONFIG_SOC_WIFI_SUPPORTED` is **false** on P4, so Wi-Fi-conditional slot
   code needs
@@ -718,17 +717,14 @@ and the `BLEManagerImpl.cpp` patch lives in the matter framework's
   `matter_thread` fragment, which is meaningless on P4 anyway) or eppp_link
   fails to compile.
 
-**BLE on P4 costs two extra pieces**, both already in place — worth knowing
+**BLE on P4 needs one extra piece**, already in place — worth knowing
 about before touching either. `CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE=y` builds
 esp_hosted's VHCI glue, which implements NimBLE's `ble_transport_*` entry
 points against the companion's controller; esp_matter then drives
 `nimble_port_init()` as it does anywhere else. That glue only self-binds on
 esp_hosted's **2.x** line, which is why `main/idf_component.yml` pins it there
 for P4 — 3.x turned it into a feature the app has to start explicitly, and
-esp_matter never makes that call. And the matter framework's
-`cmake/post_project.cmake` patches one line of esp_matter's `BLEManagerImpl.cpp`: it hardcodes a
-`ble_transport_ll_deinit` stub for P4 that current esp_hosted also defines, so
-the guard is narrowed to keep the stub only when the glue is absent.
+esp_matter never makes that call.
 
 ## When you need a new block
 
