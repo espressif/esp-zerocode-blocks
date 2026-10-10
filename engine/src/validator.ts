@@ -21,6 +21,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { chipCapabilities } from './hardware.js'
+import { unknownExcludes, withDefaults } from './defaults.js'
 import {
   type Block,
   type BoardFile,
@@ -71,6 +72,14 @@ export function validateBlock(block: Block): ValidationResult {
     warnings.push({ level: 'warning', ...ctx, message: 'block has no kind' })
   } else if (!VALID_BLOCK_KINDS.includes(block.kind)) {
     errors.push({ level: 'error', ...ctx, message: `unknown kind '${block.kind}'` })
+  }
+
+  if (block.defaults !== undefined) {
+    if (block.kind !== 'framework') {
+      errors.push({ level: 'error', ...ctx, message: '`defaults:` is for framework blocks only' })
+    } else if (!Array.isArray(block.defaults) || block.defaults.some((d) => typeof d !== 'string')) {
+      errors.push({ level: 'error', ...ctx, message: '`defaults:` must be a list of block ids' })
+    }
   }
 
   for (const [refKey, refType] of Object.entries(block.param_refs ?? {})) {
@@ -191,6 +200,9 @@ export interface BoardCheckOptions {
    *  here fires. Not discovered from the product: the caller owns the answer
    *  (a host reads the user's, `scripts/validate.mjs` reads the two samples'). */
   board?: BoardFile | null
+  /** The base default list (`base_firmware/defaults.yml`). Framework defaults
+   *  come from the framework blocks in `blocks`. */
+  baseDefaults?: string[]
 }
 
 /** Where the packs are looked for when nothing names them: a directory that
@@ -379,13 +391,24 @@ export function boardPinOwners(boardDir: string): Map<number, BoardPinOwner> {
 }
 
 export function validateProduct(
-  product: Product,
+  given: Product,
   blocks: Map<string, Block>,
   boardOpts: BoardCheckOptions = {},
 ): ValidationResult {
   const errors: ValidationIssue[] = []
   const warnings: ValidationIssue[] = []
-  const ctx = { product: product.id }
+  const ctx = { product: given.id }
+
+  const frameworkBlocks = new Map<string, Block>()
+  for (const name of given.frameworks ?? []) {
+    const fw = blocks.get(`frameworks/${name}`)
+    if (fw) frameworkBlocks.set(name, fw)
+  }
+  const baseDefaults = boardOpts.baseDefaults ?? []
+  for (const id of unknownExcludes(given, frameworkBlocks, baseDefaults)) {
+    warnings.push({ level: 'warning', ...ctx, message: `exclude: '${id}' is not a default of this product` })
+  }
+  const product = withDefaults(given, frameworkBlocks, baseDefaults)
 
   if (!product.id) {
     errors.push({ level: 'error', message: 'product is missing required `id:` field' })

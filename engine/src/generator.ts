@@ -26,6 +26,7 @@ import {
 import { loadBlock, loadBoardFile, type CatalogPaths } from './loader.js'
 import { boardProvidesBus, boardsRoot, findBoardDir } from './validator.js'
 import { CHIP_MODULES, normalizeChipTarget } from './hardware.js'
+import { loadBaseDefaults, withDefaults } from './defaults.js'
 
 const VALUE_TYPE_TO_UNION_MEMBER: Record<ValueType, string> = {
   bool: 'b',
@@ -53,6 +54,7 @@ const COPY_EXCLUDE = new Set([
   'dependencies.lock',
   'node_modules',
   'services',
+  'defaults.yml',
 ])
 
 export interface GeneratorPaths extends CatalogPaths {
@@ -108,9 +110,14 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   // means the bundled table of that name: writers reach for the path they see
   // in the tree, and resolving it a second time under partition-tables/ made
   // every such product fail on a table that exists.
-  const product = input.product.partition_table
+  const asGiven = input.product.partition_table
     ? { ...input.product, partition_table: normalizePartitionTableName(input.product.partition_table) }
     : { ...input.product }
+  const product = withDefaults(
+    asGiven,
+    await loadFrameworkBlocks(paths, asGiven.frameworks ?? []),
+    await loadBaseDefaults(paths.baseFirmwareDir),
+  )
 
   // The board the user picked, and the bmgr board definition it resolves to.
   // `bmgrBoard` — not the board file — is what every step below keys off: a
@@ -868,6 +875,12 @@ async function renderInstances(
 
 function isFramework(r: RenderedInstance, name: string): boolean {
   return r.block.id === `frameworks/${name}`
+}
+
+async function loadFrameworkBlocks(paths: CatalogPaths, names: string[]): Promise<Map<string, Block>> {
+  const out = new Map<string, Block>()
+  for (const name of names) out.set(name, await loadBlock(paths, `frameworks/${name}`))
+  return out
 }
 
 async function renderFrameworkBlocks(paths: CatalogPaths, product: Product, chip = ''): Promise<RenderedInstance[]> {

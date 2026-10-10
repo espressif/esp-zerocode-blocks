@@ -684,6 +684,11 @@ but a tree whose frameworks are all local gets the two dropped
 (`P4_HOSTED_PACKAGES`). Linked whole-archive, the stack cost the voice product
 278 KB of app (measured, ESP-IDF 6.2) for nothing it could send.
 
+**Defaults.** `base_firmware/defaults.yml` lists behaviors every product gets;
+a framework's `defaults:` adds its own. The generator appends them as ordinary
+instances unless the product lists the block or names it in `exclude:`. A
+default must be a chip-agnostic behavior with no required cfg (`check.py`).
+
 **Voice fits 8mb-voice on every chip — on esp-sr 2.4.x.** The audio block pins
 `~2.4.7` on purpose: 2.5 added an esp-dl dependency that is 860 KB of code the
 framework never calls, and it turned a 1.33 MB S3 image into 2.44 MB (over the
