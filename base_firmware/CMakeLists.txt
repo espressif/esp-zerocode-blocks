@@ -67,6 +67,15 @@ endif()
 set(PROJECT_VER "1.0.0")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Hide build-machine paths with a fixed set of prefix maps. The set must not
+# depend on the component list, or every object recompiles when it changes.
+get_filename_component(_zc_third_party_abs "${CMAKE_CURRENT_LIST_DIR}/../third_party" ABSOLUTE)
+idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=${CMAKE_CURRENT_LIST_DIR}=/IDF_PROJECT" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=${_zc_third_party_abs}=/THIRD_PARTY" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=$ENV{IDF_PATH}=/IDF" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=$ENV{IDF_TOOLS_PATH}=/TOOLCHAIN" APPEND)
+
 project(zerocode_ai_firmware)
 
 file(GLOB _zc_fw_post LIST_DIRECTORIES false "${CMAKE_CURRENT_LIST_DIR}/cmake/frameworks/*/post_project.cmake")
