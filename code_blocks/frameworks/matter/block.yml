@@ -7,6 +7,12 @@ chips: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32s3, esp32s31]
 # connection is the point. On the ESP32-P4 the radio is a companion chip over
 # ESP-Hosted; a product with no radio framework gets no hosted stack at all.
 radio: true
+# Behaviors every Matter product gets unless it lists or excludes them.
+defaults:
+  - behaviors/ota_basic
+  - behaviors/network_status_log
+  - behaviors/uptime_log
+  - behaviors/wifi_disconnect_recovery
 
 # This is a "framework" block. The generator processes product.frameworks: [matter, ...]
 # by loading each framework block, copying its components/ subtree into the output,

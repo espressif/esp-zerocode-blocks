@@ -226,6 +226,9 @@ export interface Block {
   /** FRAMEWORK blocks only: what a product's first build needs before its own
    *  blocks exist (see earlyBuildComposition). */
   early_build?: EarlyBuildDecl
+  /** FRAMEWORK blocks only: behaviors every product with this framework gets
+   *  unless it lists them itself or excludes them. */
+  defaults?: string[]
   slots?: Record<string, string>
 }
 
@@ -258,6 +261,8 @@ export interface Product {
   /** Framework blocks this product composes (matter, rainmaker, audio, …). */
   frameworks: string[]
   instances: Instance[]
+  /** Default blocks (base or framework) this product leaves out. */
+  exclude?: string[]
   /** Chips CI builds this product on. Absent = chip-agnostic (CI picks one).
    *  Predates the board work and is unrelated to it: it is CI's chip list, not
    *  a statement about anybody's hardware. */

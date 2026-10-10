@@ -282,6 +282,14 @@ for pj in sorted(ROOT.glob('product_configurations/*/product.yml')):
                 err(pid, f'instance {i}: unknown key "{key}" '
                          f'(expected one of {", ".join(sorted(INSTANCE_KEYS))})')
 
+    excl = d.get('exclude', [])
+    if not isinstance(excl, list) or not all(isinstance(x, str) for x in excl):
+        err(pid, 'exclude: must be a list of block ids')
+    else:
+        for x in excl:
+            if x not in block_ids:
+                err(pid, f'exclude: unknown block "{x}"')
+
     # A PRODUCT.YML NEVER NAMES A BOARD. The catalog describes what a product
     # DOES; the board describes what hardware one instance of it RUNS ON, and
     # that is a property of a user's product, not of a catalog entry. `board:`
@@ -429,6 +437,35 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
     for name in names:
         if f'"{name}"' not in sources and f'"{name}"' not in _ENGINE_SRC:
             err(fid, f'onboarding lists console command "{name}", but neither the block nor the engine registers it')
+
+# DEFAULTS: base_firmware/defaults.yml and a framework's `defaults:` name
+# behaviors every product gets, so each must be a chip-agnostic behavior that
+# needs no cfg.
+def check_defaults(owner: str, ids) -> None:
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        err(owner, 'defaults: must be a list of block ids')
+        return
+    for bid in ids:
+        if bid not in block_ids:
+            err(owner, f'default "{bid}" is not a block')
+        elif not bid.startswith('behaviors/'):
+            err(owner, f'default "{bid}" is not a behavior')
+        elif bid in block_targets:
+            err(owner, f'default "{bid}" is for {block_targets[bid]} only')
+        else:
+            params = (yaml.safe_load((ROOT / 'code_blocks' / bid / 'block.yml').read_text()) or {}).get('params') or {}
+            for name, spec in params.items():
+                if isinstance(spec, dict) and spec.get('required') and 'default' not in spec:
+                    err(owner, f'default "{bid}" needs cfg.{name}')
+
+
+base_defaults = ROOT / 'base_firmware' / 'defaults.yml'
+if base_defaults.exists():
+    check_defaults('base_firmware/defaults.yml', (yaml.safe_load(base_defaults.read_text()) or {}).get('defaults') or [])
+for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
+    fd = (yaml.safe_load((bd / 'block.yml').read_text()) or {}) if (bd / 'block.yml').exists() else {}
+    if 'defaults' in fd:
+        check_defaults(f'frameworks/{bd.name}', fd['defaults'])
 
 # assembly must succeed (proves the authoring→consumption transform is valid)
 r = subprocess.run([sys.executable, str(ROOT / 'scripts/assemble_blocks.py'), '--check'],

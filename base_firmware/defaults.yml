@@ -1,0 +1,11 @@
+# Behaviors every product gets. A product leaves one out with `exclude:`;
+# each framework block adds its own under `defaults:`.
+defaults:
+  - behaviors/task_watchdog
+  - behaviors/console_uptime
+  - behaviors/console_chip_info
+  - behaviors/console_version
+  - behaviors/console_log_level
+  - behaviors/console_heap_stats
+  - behaviors/boot_count
+  - behaviors/boot_reason_logger

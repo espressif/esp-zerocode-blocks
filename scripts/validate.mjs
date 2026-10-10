@@ -36,6 +36,11 @@ for (const { id, block } of blocks) {
   if (block.id && block.id !== id) errors.push({ block: id, message: `id mismatch: file says '${block.id}', dir implies '${id}'` })
   errors.push(...r.errors); warnings.push(...r.warnings)
 }
+const baseDefaults = await eng.loadBaseDefaults(join(ROOT, 'base_firmware'))
+for (const message of eng.validateDefaults(baseDefaults, blockMap, 'base_firmware/defaults.yml')) errors.push({ message })
+for (const { id, block } of blocks) {
+  if (block.defaults) for (const message of eng.validateDefaults(block.defaults, blockMap, id)) errors.push({ block: id, message })
+}
 for (const { id, product: p } of products) {
   if (product && p.id !== product) continue
   // The board is a SEPARATE document (board.yaml — see engine/src/types.ts):
@@ -48,7 +53,7 @@ for (const { id, product: p } of products) {
   } catch (e) {
     errors.push({ product: p.id, message: `board.yaml: ${e.message}` })
   }
-  const r = eng.validateProduct(p, blockMap, { board })
+  const r = eng.validateProduct(p, blockMap, { board, baseDefaults })
   errors.push(...r.errors); warnings.push(...r.warnings)
 }
 
