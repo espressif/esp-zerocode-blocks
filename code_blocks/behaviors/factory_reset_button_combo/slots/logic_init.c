@@ -1,11 +1,10 @@
 {
-    gpio_config_t {{prefix_lc}}_in = {
-        .pin_bit_mask = (1ULL << {{prefix}}_FR_GPIO_A) | (1ULL << {{prefix}}_FR_GPIO_B),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = ({{prefix}}_FR_LEVEL == 0) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
-        .pull_down_en = ({{prefix}}_FR_LEVEL == 1) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
+    gpio_config_t {{prefix_lc}}_in = {};
+    {{prefix_lc}}_in.pin_bit_mask = (1ULL << {{prefix}}_FR_GPIO_A) | (1ULL << {{prefix}}_FR_GPIO_B);
+    {{prefix_lc}}_in.mode = GPIO_MODE_INPUT;
+    {{prefix_lc}}_in.pull_up_en = ({{prefix}}_FR_LEVEL == 0) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+    {{prefix_lc}}_in.pull_down_en = ({{prefix}}_FR_LEVEL == 1) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_in.intr_type = GPIO_INTR_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_in));
     const esp_timer_create_args_t {{prefix_lc}}_args = {
         .callback = &{{prefix_lc}}_combo_poll,

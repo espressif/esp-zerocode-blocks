@@ -1,20 +1,18 @@
 {
-    gpio_config_t {{prefix_lc}}_gate_cfg = {
-        .pin_bit_mask = (1ULL << {{prefix}}_TRIAC_GATE_GPIO),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
+    gpio_config_t {{prefix_lc}}_gate_cfg = {};
+    {{prefix_lc}}_gate_cfg.pin_bit_mask = (1ULL << {{prefix}}_TRIAC_GATE_GPIO);
+    {{prefix_lc}}_gate_cfg.mode = GPIO_MODE_OUTPUT;
+    {{prefix_lc}}_gate_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+    {{prefix_lc}}_gate_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_gate_cfg.intr_type = GPIO_INTR_DISABLE;
     gpio_config(&{{prefix_lc}}_gate_cfg);
     gpio_set_level((gpio_num_t){{prefix}}_TRIAC_GATE_GPIO, 0);
-    gpio_config_t {{prefix_lc}}_zcd_cfg = {
-        .pin_bit_mask = (1ULL << {{prefix}}_TRIAC_ZCD_GPIO),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_POSEDGE,
-    };
+    gpio_config_t {{prefix_lc}}_zcd_cfg = {};
+    {{prefix_lc}}_zcd_cfg.pin_bit_mask = (1ULL << {{prefix}}_TRIAC_ZCD_GPIO);
+    {{prefix_lc}}_zcd_cfg.mode = GPIO_MODE_INPUT;
+    {{prefix_lc}}_zcd_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+    {{prefix_lc}}_zcd_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_zcd_cfg.intr_type = GPIO_INTR_POSEDGE;
     gpio_config(&{{prefix_lc}}_zcd_cfg);
     const esp_timer_create_args_t {{prefix_lc}}_gate_args = {
         .callback = &{{prefix_lc}}_gate_fire,

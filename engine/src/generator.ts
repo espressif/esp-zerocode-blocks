@@ -178,6 +178,16 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     }
   }
 
+  for (const r of frameworkRendered) {
+    const name = r.block.id.split('/').pop() as string
+    for (const hook of FRAMEWORK_CMAKE_HOOKS) {
+      const src = path.join(paths.templatesDir, 'code_blocks', r.block.id, 'cmake', hook)
+      if (await fileExists(src)) {
+        await writeFileMk(path.join(outDir, 'cmake', 'frameworks', name, hook), await fs.readFile(src, 'utf8'))
+      }
+    }
+  }
+
   await writeFileMk(
     path.join(outDir, 'components/app_driver/include/app_driver_types.h'),
     genAppDriverTypesH(rendered),
@@ -872,6 +882,10 @@ async function renderInstances(
   }
   return out
 }
+
+/** CMake a framework block may ship under cmake/: included by the base
+ *  CMakeLists before and after project(), only for selected frameworks. */
+export const FRAMEWORK_CMAKE_HOOKS = ['pre_project.cmake', 'post_project.cmake'] as const
 
 function isFramework(r: RenderedInstance, name: string): boolean {
   return r.block.id === `frameworks/${name}`
@@ -1632,13 +1646,10 @@ esp_err_t app_zigbee_init(void)
 {
     s_handle = app_driver_register_solution("zigbee", zigbee_driver_cb, NULL);
 
-    const esp_console_cmd_t bind_cmd = {
-        .command = "zb-bind",
-        .help = "Start Zigbee Finding & Binding (bind this device's controls to targets)",
-        .hint = NULL,
-        .func = &zb_bind_cmd,
-        .argtable = NULL,
-    };
+    esp_console_cmd_t bind_cmd = {};
+    bind_cmd.command = "zb-bind";
+    bind_cmd.help = "Start Zigbee Finding & Binding (bind this device's controls to targets)";
+    bind_cmd.func = &zb_bind_cmd;
     app_console_register_cmd(&bind_cmd);
 
     xTaskCreate(zigbee_task, "zigbee_main", 8192, NULL, 5, NULL);
@@ -2237,13 +2248,10 @@ esp_err_t app_ble_mesh_init(void)
 {
     s_handle = app_driver_register_solution("ble_mesh", ble_mesh_driver_cb, NULL);
 
-    const esp_console_cmd_t mesh_cmd = {
-        .command = "mesh",
-        .help = "BLE Mesh: mesh <status|join|reset|on|off>",
-        .hint = NULL,
-        .func = &mesh_console_cmd,
-        .argtable = NULL,
-    };
+    esp_console_cmd_t mesh_cmd = {};
+    mesh_cmd.command = "mesh";
+    mesh_cmd.help = "BLE Mesh: mesh <status|join|reset|on|off>";
+    mesh_cmd.func = &mesh_console_cmd;
     app_console_register_cmd(&mesh_cmd);
 
     esp_err_t err = ble_host_init();
@@ -2330,7 +2338,7 @@ function genAppSoundCpp(rendered: RenderedInstance[]): string {
  */
 function genAppAgentsCpp(rendered: RenderedInstance[]): string {
   const sharedNet = rendered.some(r => isFramework(r, 'matter') || isFramework(r, 'rainmaker') || isFramework(r, 'mqtt'))
-  const body = '#include "app_agents.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_console.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <nvs.h>\n#include <esp_agent.h>\n#include <esp_agent_tools.h>\n#include <esp_agent_events.h>\n#include <esp_agent_messages.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_agents";\n\nstatic esp_agent_handle_t s_agent = NULL;\nstatic volatile bool s_started = false;\nstatic volatile bool s_have_ip = false;\nstatic char s_agent_id[64] = {0};\nstatic char s_token[300] = {0};\n__NET_STATICS__\n\n/* ── device-type tool handlers (param bus in/out) ─────────────────── */\n__SLOT_STATICS__\n\nstatic void agents_save_cfg(void)\n{\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READWRITE, &h) != ESP_OK) return;\n    nvs_set_str(h, "agent_id", s_agent_id);\n    nvs_set_str(h, "token", s_token);\n__NET_SAVE__\n    nvs_commit(h);\n    nvs_close(h);\n}\n\n/* Start once and only once everything is present. Never blocks boot: an\n * unconfigured device just logs what is missing. */\nstatic void agents_try_start(void)\n{\n    if (s_started || s_agent == NULL) return;\n    if (!s_have_ip) { ESP_LOGI(TAG, "waiting for network before starting"); return; }\n    if (s_agent_id[0] == 0 || s_token[0] == 0) {\n        ESP_LOGW(TAG, "not configured — set: agent-id <id>, agent-token <refresh token>");\n        return;\n    }\n    if (esp_agent_set_agent_id(s_agent, s_agent_id) != ESP_OK ||\n        esp_agent_set_refresh_token(s_agent, s_token) != ESP_OK) {\n        ESP_LOGE(TAG, "failed to set credentials");\n        return;\n    }\n    if (esp_agent_start(s_agent, NULL) == ESP_OK) {\n        s_started = true;\n        ESP_LOGI(TAG, "Agent conversation started (text mode)");\n    } else {\n        ESP_LOGE(TAG, "esp_agent_start failed — check credentials/network");\n    }\n}\n\n/* ── agent events ─────────────────────────────────────────────────── */\nstatic void agents_on_connected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGI(TAG, "Agent connected");\n}\n\nstatic void agents_on_disconnected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGW(TAG, "Agent disconnected — the client reconnects on its own");\n}\n\nstatic void agents_on_text(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    esp_agent_message_data_t *msg = (esp_agent_message_data_t *)data;\n    if (msg == NULL || msg->text.text == NULL) return;\n    /* FINAL only: speculative chunks would interleave into console noise. */\n    if (msg->text.role == ESP_AGENT_MESSAGE_ROLE_ASSISTANT &&\n        msg->text.generation_stage != ESP_AGENT_MESSAGE_GENERATION_STAGE_SPECULATIVE) {\n        printf("\\n[agent] %s\\n", msg->text.text);\n    }\n}\n\nstatic void agents_on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    s_have_ip = true;\n    ESP_LOGI(TAG, "network up");\n    agents_try_start();\n}\n\n/* ── console ──────────────────────────────────────────────────────── */\nstatic int agent_id_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-id <id>\\n"); return 1; }\n    strlcpy(s_agent_id, argv[1], sizeof(s_agent_id));\n    agents_save_cfg();\n    printf("agent id saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_token_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-token <refresh token>\\n"); return 1; }\n    strlcpy(s_token, argv[1], sizeof(s_token));\n    agents_save_cfg();\n    printf("token saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_say_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-say <text…>\\n"); return 1; }\n    if (!s_started) { printf("agent not started — configure agent-id/agent-token first\\n"); return 1; }\n    char line[512] = {0};\n    for (int i = 1; i < argc; i++) {\n        if (i > 1) strlcat(line, " ", sizeof(line));\n        strlcat(line, argv[i], sizeof(line));\n    }\n    if (esp_agent_send_text(s_agent, line, pdMS_TO_TICKS(5000)) != ESP_OK) {\n        printf("send failed\\n");\n        return 1;\n    }\n    return 0;\n}\n\nstatic int agent_new_cmd(int argc, char **argv)\n{\n    if (!s_started) { printf("agent not started\\n"); return 1; }\n    return esp_agent_new_conversation(s_agent) == ESP_OK ? 0 : 1;\n}\n\nstatic int agent_status_cmd(int argc, char **argv)\n{\n    printf("network: %s\\nconfigured: %s\\nstarted: %s\\n",\n           s_have_ip ? "up" : "down",\n           (s_agent_id[0] && s_token[0]) ? "yes" : "no",\n           s_started ? "yes" : "no");\n    return 0;\n}\n__NET_CMD__\n\nesp_err_t app_agents_init(void)\n{\n    /* Restore config */\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READONLY, &h) == ESP_OK) {\n        size_t n = sizeof(s_agent_id); nvs_get_str(h, "agent_id", s_agent_id, &n);\n        n = sizeof(s_token); nvs_get_str(h, "token", s_token, &n);\n__NET_RESTORE__\n        nvs_close(h);\n    }\n\n    esp_agent_config_t cfg = {};\n    cfg.conversation_type = ESP_AGENT_CONVERSATION_TEXT;\n    /* UPSTREAM BUG WORKAROUND (esp-agents-firmware c5d6798, esp_agent.c:102):\n     * init dereferences upload/download_audio_config unconditionally — the\n     * NULL guard above it only covers SPEECH mode — so TEXT mode with NULL\n     * audio configs (the documented-valid case) is a Load access fault at\n     * boot. Values are copied by init, so stack locals are fine; they are\n     * unused in text mode. Drop when upstream fixes the guard. */\n    esp_agent_audio_config_t audio_dummy = {};\n    audio_dummy.format = ESP_AGENT_CONVERSATION_AUDIO_FORMAT_PCM;\n    audio_dummy.sample_rate = 16000;\n    audio_dummy.frame_duration = 20;\n    cfg.upload_audio_config = &audio_dummy;\n    cfg.download_audio_config = &audio_dummy;\n    s_agent = esp_agent_init(&cfg);\n    if (s_agent == NULL) {\n        ESP_LOGE(TAG, "esp_agent_init failed");\n        return ESP_FAIL;\n    }\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_CONNECTED, agents_on_connected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DISCONNECTED, agents_on_disconnected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DATA_TYPE_TEXT, agents_on_text, NULL, NULL);\n\n    /* Local tools the cloud agent may invoke on THIS device. */\n__SLOT_TOOL_REGISTER__\n\n    const esp_console_cmd_t cmds[] = {\n        { .command = "agent-id", .help = "agent-id <id> — set the agent to talk to", .func = &agent_id_cmd },\n        { .command = "agent-token", .help = "agent-token <refresh token> — from the Agents platform UI", .func = &agent_token_cmd },\n        { .command = "agent-say", .help = "agent-say <text> — send a message to the agent", .func = &agent_say_cmd },\n        { .command = "agent-new", .help = "start a fresh conversation", .func = &agent_new_cmd },\n        { .command = "agent-status", .help = "connection/config state", .func = &agent_status_cmd },\n    };\n    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {\n        esp_console_cmd_register(&cmds[i]);\n    }\n__NET_INIT__\n\n    ESP_LOGI(TAG, "Agents client ready (text mode)");\n    return ESP_OK;\n}\n'
+  const body = '#include "app_agents.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_console.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <nvs.h>\n#include <esp_agent.h>\n#include <esp_agent_tools.h>\n#include <esp_agent_events.h>\n#include <esp_agent_messages.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_agents";\n\nstatic esp_agent_handle_t s_agent = NULL;\nstatic volatile bool s_started = false;\nstatic volatile bool s_have_ip = false;\nstatic char s_agent_id[64] = {0};\nstatic char s_token[300] = {0};\n__NET_STATICS__\n\n/* ── device-type tool handlers (param bus in/out) ─────────────────── */\n__SLOT_STATICS__\n\nstatic void agents_save_cfg(void)\n{\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READWRITE, &h) != ESP_OK) return;\n    nvs_set_str(h, "agent_id", s_agent_id);\n    nvs_set_str(h, "token", s_token);\n__NET_SAVE__\n    nvs_commit(h);\n    nvs_close(h);\n}\n\n/* Start once and only once everything is present. Never blocks boot: an\n * unconfigured device just logs what is missing. */\nstatic void agents_try_start(void)\n{\n    if (s_started || s_agent == NULL) return;\n    if (!s_have_ip) { ESP_LOGI(TAG, "waiting for network before starting"); return; }\n    if (s_agent_id[0] == 0 || s_token[0] == 0) {\n        ESP_LOGW(TAG, "not configured — set: agent-id <id>, agent-token <refresh token>");\n        return;\n    }\n    if (esp_agent_set_agent_id(s_agent, s_agent_id) != ESP_OK ||\n        esp_agent_set_refresh_token(s_agent, s_token) != ESP_OK) {\n        ESP_LOGE(TAG, "failed to set credentials");\n        return;\n    }\n    if (esp_agent_start(s_agent, NULL) == ESP_OK) {\n        s_started = true;\n        ESP_LOGI(TAG, "Agent conversation started (text mode)");\n    } else {\n        ESP_LOGE(TAG, "esp_agent_start failed — check credentials/network");\n    }\n}\n\n/* ── agent events ─────────────────────────────────────────────────── */\nstatic void agents_on_connected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGI(TAG, "Agent connected");\n}\n\nstatic void agents_on_disconnected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGW(TAG, "Agent disconnected — the client reconnects on its own");\n}\n\nstatic void agents_on_text(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    esp_agent_message_data_t *msg = (esp_agent_message_data_t *)data;\n    if (msg == NULL || msg->text.text == NULL) return;\n    /* FINAL only: speculative chunks would interleave into console noise. */\n    if (msg->text.role == ESP_AGENT_MESSAGE_ROLE_ASSISTANT &&\n        msg->text.generation_stage != ESP_AGENT_MESSAGE_GENERATION_STAGE_SPECULATIVE) {\n        printf("\\n[agent] %s\\n", msg->text.text);\n    }\n}\n\nstatic void agents_on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    s_have_ip = true;\n    ESP_LOGI(TAG, "network up");\n    agents_try_start();\n}\n\n/* ── console ──────────────────────────────────────────────────────── */\nstatic int agent_id_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-id <id>\\n"); return 1; }\n    strlcpy(s_agent_id, argv[1], sizeof(s_agent_id));\n    agents_save_cfg();\n    printf("agent id saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_token_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-token <refresh token>\\n"); return 1; }\n    strlcpy(s_token, argv[1], sizeof(s_token));\n    agents_save_cfg();\n    printf("token saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_say_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-say <text…>\\n"); return 1; }\n    if (!s_started) { printf("agent not started — configure agent-id/agent-token first\\n"); return 1; }\n    char line[512] = {0};\n    for (int i = 1; i < argc; i++) {\n        if (i > 1) strlcat(line, " ", sizeof(line));\n        strlcat(line, argv[i], sizeof(line));\n    }\n    if (esp_agent_send_text(s_agent, line, pdMS_TO_TICKS(5000)) != ESP_OK) {\n        printf("send failed\\n");\n        return 1;\n    }\n    return 0;\n}\n\nstatic int agent_new_cmd(int argc, char **argv)\n{\n    if (!s_started) { printf("agent not started\\n"); return 1; }\n    return esp_agent_new_conversation(s_agent) == ESP_OK ? 0 : 1;\n}\n\nstatic int agent_status_cmd(int argc, char **argv)\n{\n    printf("network: %s\\nconfigured: %s\\nstarted: %s\\n",\n           s_have_ip ? "up" : "down",\n           (s_agent_id[0] && s_token[0]) ? "yes" : "no",\n           s_started ? "yes" : "no");\n    return 0;\n}\n__NET_CMD__\n\nesp_err_t app_agents_init(void)\n{\n    /* Restore config */\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READONLY, &h) == ESP_OK) {\n        size_t n = sizeof(s_agent_id); nvs_get_str(h, "agent_id", s_agent_id, &n);\n        n = sizeof(s_token); nvs_get_str(h, "token", s_token, &n);\n__NET_RESTORE__\n        nvs_close(h);\n    }\n\n    esp_agent_config_t cfg = {};\n    cfg.conversation_type = ESP_AGENT_CONVERSATION_TEXT;\n    /* UPSTREAM BUG WORKAROUND (esp-agents-firmware c5d6798, esp_agent.c:102):\n     * init dereferences upload/download_audio_config unconditionally — the\n     * NULL guard above it only covers SPEECH mode — so TEXT mode with NULL\n     * audio configs (the documented-valid case) is a Load access fault at\n     * boot. Values are copied by init, so stack locals are fine; they are\n     * unused in text mode. Drop when upstream fixes the guard. */\n    esp_agent_audio_config_t audio_dummy = {};\n    audio_dummy.format = ESP_AGENT_CONVERSATION_AUDIO_FORMAT_PCM;\n    audio_dummy.sample_rate = 16000;\n    audio_dummy.frame_duration = 20;\n    cfg.upload_audio_config = &audio_dummy;\n    cfg.download_audio_config = &audio_dummy;\n    s_agent = esp_agent_init(&cfg);\n    if (s_agent == NULL) {\n        ESP_LOGE(TAG, "esp_agent_init failed");\n        return ESP_FAIL;\n    }\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_CONNECTED, agents_on_connected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DISCONNECTED, agents_on_disconnected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DATA_TYPE_TEXT, agents_on_text, NULL, NULL);\n\n    /* Local tools the cloud agent may invoke on THIS device. */\n__SLOT_TOOL_REGISTER__\n\n    static const struct { const char *command; const char *help; esp_console_cmd_func_t func; } cmds[] = {\n        { "agent-id", "agent-id <id> — set the agent to talk to", &agent_id_cmd },\n        { "agent-token", "agent-token <refresh token> — from the Agents platform UI", &agent_token_cmd },\n        { "agent-say", "agent-say <text> — send a message to the agent", &agent_say_cmd },\n        { "agent-new", "start a fresh conversation", &agent_new_cmd },\n        { "agent-status", "connection/config state", &agent_status_cmd },\n    };\n    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {\n        esp_console_cmd_t c = {};\n        c.command = cmds[i].command;\n        c.help = cmds[i].help;\n        c.func = cmds[i].func;\n        esp_console_cmd_register(&c);\n    }\n__NET_INIT__\n\n    ESP_LOGI(TAG, "Agents client ready (text mode)");\n    return ESP_OK;\n}\n'
   return body
     .replace('__SLOT_INCLUDES__', collectSlot(rendered, 'agents_includes'))
     .replace('__SLOT_STATICS__', collectSlot(rendered, 'agents_statics'))
@@ -2339,7 +2347,7 @@ function genAppAgentsCpp(rendered: RenderedInstance[]): string {
     .replace('__NET_SAVE__', sharedNet ? '' : '    nvs_set_str(h, "ssid", s_ssid);\n    nvs_set_str(h, "pass", s_pass);')
     .replace('__NET_RESTORE__', sharedNet ? '' : '        n = sizeof(s_ssid); nvs_get_str(h, "ssid", s_ssid, &n);\n        n = sizeof(s_pass); nvs_get_str(h, "pass", s_pass, &n);')
     .replace('__NET_CMD__', sharedNet ? '' : '\n\nstatic void agents_wifi_connect(void)\n{\n    if (s_ssid[0] == 0) { ESP_LOGW(TAG, "no Wi-Fi configured — agent-wifi <ssid> <pass>"); return; }\n    wifi_config_t wc = {};\n    strlcpy((char *)wc.sta.ssid, s_ssid, sizeof(wc.sta.ssid));\n    strlcpy((char *)wc.sta.password, s_pass, sizeof(wc.sta.password));\n    esp_wifi_set_mode(WIFI_MODE_STA);\n    esp_wifi_set_config(WIFI_IF_STA, &wc);\n    esp_wifi_connect();\n}\n\nstatic void agents_on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    if (id == WIFI_EVENT_STA_START) {\n        agents_wifi_connect();\n    } else if (id == WIFI_EVENT_STA_DISCONNECTED) {\n        s_have_ip = false;\n        esp_wifi_connect(); /* simple retry — esp-wifi rate-limits internally */\n    }\n}\n\nstatic int agent_wifi_cmd(int argc, char **argv)\n{\n    if (argc < 3) { printf("usage: agent-wifi <ssid> <password>\\n"); return 1; }\n    strlcpy(s_ssid, argv[1], sizeof(s_ssid));\n    strlcpy(s_pass, argv[2], sizeof(s_pass));\n    agents_save_cfg();\n    printf("wifi saved — connecting\\n");\n    agents_wifi_connect();\n    return 0;\n}')
-    .replace('__NET_INIT__', sharedNet ? '\n    /* Shared-network mode: a co-selected transport owns Wi-Fi. Watch for its\n     * IP (and handle the already-connected case on reboot). */\n    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, agents_on_ip, NULL);\n    esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6, agents_on_ip, NULL);\n#if CONFIG_LWIP_IPV4\n    {\n        esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");\n        esp_netif_ip_info_t ip;\n        if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {\n            s_have_ip = true;\n        }\n    }\n#endif\n    agents_try_start();' : '\n    /* Standalone: this framework owns Wi-Fi, console-provisioned (mqtt\'s\n     * pattern — a bare agents node has no phone-app provisioning). */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(loop_err);\n    esp_netif_create_default_wifi_sta();\n    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();\n    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));\n    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, agents_on_wifi, NULL);\n    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, agents_on_ip, NULL);\n    ESP_ERROR_CHECK(esp_wifi_start());\n    const esp_console_cmd_t wifi_cmd = {\n        .command = "agent-wifi", .help = "agent-wifi <ssid> <pass>", .func = &agent_wifi_cmd,\n    };\n    esp_console_cmd_register(&wifi_cmd);')
+    .replace('__NET_INIT__', sharedNet ? '\n    /* Shared-network mode: a co-selected transport owns Wi-Fi. Watch for its\n     * IP (and handle the already-connected case on reboot). */\n    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, agents_on_ip, NULL);\n    esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6, agents_on_ip, NULL);\n#if CONFIG_LWIP_IPV4\n    {\n        esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");\n        esp_netif_ip_info_t ip;\n        if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {\n            s_have_ip = true;\n        }\n    }\n#endif\n    agents_try_start();' : '\n    /* Standalone: this framework owns Wi-Fi, console-provisioned (mqtt\'s\n     * pattern — a bare agents node has no phone-app provisioning). */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) ESP_ERROR_CHECK(loop_err);\n    esp_netif_create_default_wifi_sta();\n    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();\n    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));\n    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, agents_on_wifi, NULL);\n    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, agents_on_ip, NULL);\n    ESP_ERROR_CHECK(esp_wifi_start());\n    esp_console_cmd_t wifi_cmd = {};\n    wifi_cmd.command = "agent-wifi";\n    wifi_cmd.help = "agent-wifi <ssid> <pass>";\n    wifi_cmd.func = &agent_wifi_cmd;\n    esp_console_cmd_register(&wifi_cmd);')
 }
 
 /**
@@ -3459,29 +3467,20 @@ ${sharedNet ? `    /* Transport-owned network: create-if-missing is fine either 
     /* Node-level contributions (behaviors) — before anything connects. */
 ${collectSlot(rendered, 'mqtt_node_init', 4)}
 
-${sharedNet ? '' : `    static const esp_console_cmd_t wifi_cmd = {
-        .command = "mqtt-wifi",
-        .help = "Set Wi-Fi credentials: mqtt-wifi <ssid> <password>",
-        .hint = NULL,
-        .func = &mqtt_wifi_cmd,
-        .argtable = NULL,
-    };
+${sharedNet ? '' : `    esp_console_cmd_t wifi_cmd = {};
+    wifi_cmd.command = "mqtt-wifi";
+    wifi_cmd.help = "Set Wi-Fi credentials: mqtt-wifi <ssid> <password>";
+    wifi_cmd.func = &mqtt_wifi_cmd;
     app_console_register_cmd(&wifi_cmd);
-`}    static const esp_console_cmd_t broker_cmd = {
-        .command = "mqtt-broker",
-        .help = "Set broker: mqtt-broker <uri> [username] [password]",
-        .hint = NULL,
-        .func = &mqtt_broker_cmd,
-        .argtable = NULL,
-    };
+`}    esp_console_cmd_t broker_cmd = {};
+    broker_cmd.command = "mqtt-broker";
+    broker_cmd.help = "Set broker: mqtt-broker <uri> [username] [password]";
+    broker_cmd.func = &mqtt_broker_cmd;
     app_console_register_cmd(&broker_cmd);
-    static const esp_console_cmd_t setup_cmd = {
-        .command = "mqtt-setup",
-        .help = "Guided setup: asks for ${sharedNet ? '' : 'Wi-Fi, then '}the broker URI and its credentials",
-        .hint = NULL,
-        .func = &mqtt_setup_cmd,
-        .argtable = NULL,
-    };
+    esp_console_cmd_t setup_cmd = {};
+    setup_cmd.command = "mqtt-setup";
+    setup_cmd.help = "Guided setup: asks for ${sharedNet ? '' : 'Wi-Fi, then '}the broker URI and its credentials";
+    setup_cmd.func = &mqtt_setup_cmd;
     app_console_register_cmd(&setup_cmd);
 
     mqtt_load_config();

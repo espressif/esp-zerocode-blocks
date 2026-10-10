@@ -27,8 +27,7 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # Stack sizes
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 
-# Reproducible build. Source paths in debug info and __FILE__ become the
-# placeholders /IDF, /IDF_PROJECT, /COMPONENT_<NAME>_DIR and /TOOLCHAIN, so a
-# decoded panic backtrace says nothing about the machine that built the image.
-# Also drops build date/time from the app descriptor.
-CONFIG_APP_REPRODUCIBLE_BUILD=y
+# No build date/time in the app or bootloader descriptor. Source paths are
+# hidden by the prefix maps in cmake/prefix_maps.cmake.
+# CONFIG_APP_COMPILE_TIME_DATE is not set
+# CONFIG_BOOTLOADER_COMPILE_TIME_DATE is not set
