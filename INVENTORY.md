@@ -126,7 +126,7 @@ dedup prevent update loops):
   I2C address, the MCLK ratio read from the board's I2S peripheral — driven by
   the sound framework's sequencer and by `tone` / `volume` / `mute` on the
   console. Builds on the S31 board path; not yet hardware-verified as a block
-  (the open sequence is the one t-rex ran on a Mosaico with audible tones).
+  (the open sequence was verified audible on a Mosaico bench).
 - `mosaico-touch-hub` — [matter, mqtt, display, webui, sound]: the ESP-Mosaico
   with EVERY onboard peripheral in the user guide's pin table — panel, touch,
   AI button (GPIO7), haptic motor (GPIO8), ES8311 codec + NS4150B amp, BMI270

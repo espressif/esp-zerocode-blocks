@@ -12,9 +12,9 @@ description: >-
 # pins, the codec over I2C, the amplifier GPIO. On a board product every one of
 # those resources already belongs to the board (its `i2s_audio_out`,
 # `i2c_master` and `gpio_pa_control` peripherals), so composing it there is an
-# IO conflict — and the writers did not compose it: two Mosaico games
-# hand-wrote esp_codec_dev code instead (t-rex ~100 turns of SDK lookups, one
-# ran silent after a board revision moved a pin).
+# IO conflict — so writers hand-wrote esp_codec_dev code instead (one product
+# spent ~100 turns on SDK lookups; another ran silent after a board revision
+# moved a pin).
 #
 # esp_board_manager_init() already creates the codec device — data interface,
 # control interface, the amplifier — and hands the opened esp_codec_dev handle
@@ -30,14 +30,14 @@ description: >-
 #
 # DEPENDENCY. esp_codec_dev is a Kconfig-gated dependency of
 # esp_board_manager (only when the board enables an audio codec device), and
-# that gate dropped it from two products' builds (t-rex-opt build 010,
-# minecraft build 028). The block that calls it declares it (idf_component.yml).
+# that gate has dropped it from real builds. The block that calls it declares
+# it (idf_component.yml).
 #
 # BOARD-ONLY, AND CHECKED. `bmgr.device_param` makes generation FAIL when there
 # is no board or the board declares no audio_codec of that name.
 #
-# NOT hardware-verified as a block. The open sequence is the one t-rex's own
-# code ran on a Mosaico, verified on the bench (2026-10-02: tones audible).
+# NOT hardware-verified as a block. The open sequence is one a product's own
+# code ran on an ESP-Mosaico, verified on the bench (2026-10-02: tones audible).
 
 cmake_priv_requires:
   app_driver: [espressif__esp_board_manager, espressif__esp_codec_dev]
@@ -71,8 +71,8 @@ params:
     type: int
     default: 1
     description: >-
-      Channels the app format declares. 1 (mono) matches the Mosaico's single
-      speaker; the codec duplicates it as the board's format requires.
+      Channels the app format declares. 1 (mono) suits a single-speaker board
+      (the ESP-Mosaico); the codec duplicates it as the board's format requires.
   codec_volume:
     type: int
     default: 70
