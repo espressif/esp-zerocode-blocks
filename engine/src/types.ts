@@ -159,6 +159,12 @@ export interface BmgrMapping {
    *  — the "compiles, links, boots, does nothing" shape this engine exists to
    *  refuse. */
   device_param?: string
+  /** Values the bound device's `config:` must hold (board_devices.yaml) —
+   *  e.g. `{ dac_enabled: true }` for a playback block, since a board's
+   *  microphone codec is the same `audio_codec` type with its DAC off. Checked
+   *  at generation with device_param; a mismatch is refused, naming the
+   *  devices that do qualify. */
+  device_requires?: Record<string, string | number | boolean>
   /** Configurations the mapping is valid for. All must hold. */
   requires?: BmgrGuard[]
   /** bmgr peripheral fragments. `{{cfg.x}}` / `{{prefix}}` / `{{prefix_lc}}`

@@ -48,6 +48,10 @@ bmgr:
   # amplifier lines; this block only asks for the handle.
   provided_by: audio_codec
   device_param: device
+  # A board's microphone codec is the same audio_codec type with its DAC off
+  # (the Mosaico's audio_adc): playing into it is silence. Generation refuses it.
+  device_requires:
+    dac_enabled: true
 
 params:
   device:

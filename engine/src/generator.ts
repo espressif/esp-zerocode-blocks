@@ -24,7 +24,7 @@ import {
   boardTakesOver,
 } from './types.js'
 import { loadBlock, loadBoardFile, type CatalogPaths } from './loader.js'
-import { boardProvidesBus, boardsRoot, findBoardDir } from './validator.js'
+import { boardProvidesBus, boardsRoot, deviceRequirementMisses, findBoardDir } from './validator.js'
 import { CHIP_MODULES, normalizeChipTarget } from './hardware.js'
 import { loadBaseDefaults, withDefaults } from './defaults.js'
 
@@ -871,6 +871,16 @@ async function renderInstances(
         throw new Error(
           `${where} wants board device '${want}' of type '${type}', which board '${bmgrBoard}' ` +
           `does not declare. Its ${type} devices are: ${same.join(', ') || '(none)'}.`)
+      }
+      const req = block.bmgr?.device_requires
+      const dev = boardFacts.devices.find(dv => dv.name === want && dv.type === type)!
+      const misses = deviceRequirementMisses(dev, req)
+      if (misses.length) {
+        const ok = boardFacts.devices.filter(dv => dv.type === type && !deviceRequirementMisses(dv, req).length).map(dv => `'${dv.name}'`)
+        throw new Error(
+          `${where} needs its ${type} device to have ${Object.entries(req!).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')}, ` +
+          `but board '${bmgrBoard}' declares '${want}' with ${misses.join(', ')}. ` +
+          `Its devices that qualify: ${ok.join(', ') || '(none)'}.`)
       }
     }
     const replaced = new Set(boardOwns ? block.bmgr?.replaces_slots ?? [] : [])
@@ -4128,7 +4138,10 @@ const BOARD_DEVICES = 'board_devices.yaml'
 export interface BoardDevice {
   name: string
   type: string
+  /** the device's `config:` mapping, as the board declares it */
+  config?: Record<string, unknown>
 }
+
 
 /** What the engine reads out of a board pack at GENERATION time. */
 export interface BoardFacts {
@@ -4208,7 +4221,8 @@ export async function loadBoardFacts(paths: GeneratorPaths, board: string): Prom
       // for the simple ones, only via `chip:`/`sub_type:`. Only `type:` is
       // matched: it is the field bmgr itself dispatches on.
       if (typeof e?.name === 'string' && typeof e?.type === 'string') {
-        devices.push({ name: e.name, type: e.type })
+        const config = e.config && typeof e.config === 'object' ? e.config as Record<string, unknown> : undefined
+        devices.push({ name: e.name, type: e.type, ...(config ? { config } : {}) })
       }
     }
   } catch { /* a board may declare no devices at all */ }

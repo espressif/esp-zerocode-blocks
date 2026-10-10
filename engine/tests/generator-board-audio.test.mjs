@@ -42,7 +42,9 @@ function setup(t) {
   writeFileSync(join(board, 'board_info.yaml'), 'board: demo_s31_audio\nchip: esp32s31\n')
   writeFileSync(join(board, 'sdkconfig.defaults.board'), 'CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y\n')
   writeFileSync(join(board, 'board_devices.yaml'),
-    'devices:\n  - name: audio_dac\n    chip: es8311\n    type: audio_codec\n  - name: boot_button\n    type: button\n')
+    'devices:\n  - name: audio_dac\n    chip: es8311\n    type: audio_codec\n    config:\n      dac_enabled: true\n' +
+    '  - name: audio_adc\n    chip: es8311\n    type: audio_codec\n    config:\n      adc_enabled: true\n      dac_enabled: false\n' +
+    '  - name: boot_button\n    type: button\n')
   const paths = { templatesDir: tpl, baseFirmwareDir: join(ROOT, 'base_firmware'), boardsDir: join(root, 'boards') }
   let n = 0
   const gen = async (product) => {
@@ -87,4 +89,10 @@ test('the sound framework drives board_audio_codec through its tone param', asyn
 test('a codec the board does not declare fails generation, naming the ones it has', async (t) => {
   const { gen } = setup(t)
   await assert.rejects(gen(product([speaker('speaker_out')])), /board device 'speaker_out' of type 'audio_codec'[\s\S]*'audio_dac'/)
+})
+
+test("the board's microphone codec (same type, DAC off) is refused — playing into it is silence", async (t) => {
+  const { gen } = setup(t)
+  await assert.rejects(gen(product([speaker('audio_adc')])),
+    /needs its audio_codec device to have dac_enabled: true[\s\S]*'audio_adc' with dac_enabled = false[\s\S]*qualify: 'audio_dac'/)
 })

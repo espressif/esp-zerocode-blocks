@@ -307,12 +307,23 @@ function collectPins(node: unknown, label: string, out: Map<number, string>, key
  *  board-device adapter is matched against: TYPE says which handle struct
  *  comes back, NAME is what `esp_board_manager_get_device_handle` is called
  *  with, and a board may carry several devices of one type. */
-export function boardDeclaredDevices(boardDir: string): Array<{ name: string; type: string }> {
+/** The `bmgr.device_requires` keys a board device's config fails, as
+ *  `key = <what it has>` — empty when it qualifies. */
+export function deviceRequirementMisses(dev: { config?: Record<string, unknown> }, req: Record<string, unknown> | undefined): string[] {
+  return Object.entries(req ?? {})
+    .filter(([k, want]) => dev.config?.[k] !== want)
+    .map(([k]) => `${k} = ${JSON.stringify(dev.config?.[k] ?? null)}`)
+}
+
+export function boardDeclaredDevices(boardDir: string): Array<{ name: string; type: string; config?: Record<string, unknown> }> {
   const doc = readYaml(path.join(boardDir, 'board_devices.yaml')) as
     { devices?: unknown } | undefined
-  const out: Array<{ name: string; type: string }> = []
+  const out: Array<{ name: string; type: string; config?: Record<string, unknown> }> = []
   for (const d of (Array.isArray(doc?.devices) ? doc.devices : []) as Record<string, unknown>[]) {
-    if (typeof d?.name === 'string' && typeof d?.type === 'string') out.push({ name: d.name, type: d.type })
+    if (typeof d?.name === 'string' && typeof d?.type === 'string') {
+      const config = d.config && typeof d.config === 'object' ? d.config as Record<string, unknown> : undefined
+      out.push({ name: d.name, type: d.type, ...(config ? { config } : {}) })
+    }
   }
   return out
 }
@@ -892,6 +903,20 @@ export function validateProduct(
         level: 'error',
         ...ctx,
         message: `${where} wants board device '${want}' of type '${type}', which board '${bmgrBoard}' does not declare. Its ${type} devices are: ${same.join(', ') || '(none)'}`,
+      })
+      return
+    }
+    // Same rule as the generator's: a device of the right type can still be the
+    // wrong one (a microphone codec for a playback block).
+    const req = block.bmgr?.device_requires
+    const dev = declared.find(d => d.name === want && d.type === type)!
+    const misses = deviceRequirementMisses(dev, req)
+    if (misses.length) {
+      const ok = declared.filter(d => d.type === type && !deviceRequirementMisses(d, req).length).map(d => `'${d.name}'`)
+      errors.push({
+        level: 'error',
+        ...ctx,
+        message: `${where} needs its ${type} device to have ${Object.entries(req!).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')}, but board '${bmgrBoard}' declares '${want}' with ${misses.join(', ')}. Its devices that qualify: ${ok.join(', ') || '(none)'}`,
       })
     }
   })
