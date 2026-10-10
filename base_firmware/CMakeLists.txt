@@ -1,6 +1,14 @@
 # ZeroCode AI - Matter Firmware
 cmake_minimum_required(VERSION 3.16)
 
+# Framework CMake (cmake/frameworks/<name>/), copied in for the selected
+# frameworks only. Sorted so every configure includes them in the same order.
+file(GLOB _zc_fw_pre LIST_DIRECTORIES false "${CMAKE_CURRENT_LIST_DIR}/cmake/frameworks/*/pre_project.cmake")
+list(SORT _zc_fw_pre)
+foreach(_zc_hook ${_zc_fw_pre})
+  include("${_zc_hook}")
+endforeach()
+
 # Safety net: esp_matter has various C++ standard / GCC compatibility issues.
 # IDF 6 raised the dialect to gnu++26 and the toolchain to GCC 16, so this is
 # doing more work than it was, not less.
@@ -67,6 +75,12 @@ set(PROJECT_VER "1.0.0")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(zerocode_ai_firmware)
+
+file(GLOB _zc_fw_post LIST_DIRECTORIES false "${CMAKE_CURRENT_LIST_DIR}/cmake/frameworks/*/post_project.cmake")
+list(SORT _zc_fw_post)
+foreach(_zc_hook ${_zc_fw_post})
+  include("${_zc_hook}")
+endforeach()
 
 # Patch esp_matter ClosureControl: add missing self-comparison operator==.
 # C++23 std::optional<T>::operator== requires T==T, but the structs only define

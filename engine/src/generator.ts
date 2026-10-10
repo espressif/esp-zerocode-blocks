@@ -178,6 +178,16 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     }
   }
 
+  for (const r of frameworkRendered) {
+    const name = r.block.id.split('/').pop() as string
+    for (const hook of FRAMEWORK_CMAKE_HOOKS) {
+      const src = path.join(paths.templatesDir, 'code_blocks', r.block.id, 'cmake', hook)
+      if (await fileExists(src)) {
+        await writeFileMk(path.join(outDir, 'cmake', 'frameworks', name, hook), await fs.readFile(src, 'utf8'))
+      }
+    }
+  }
+
   await writeFileMk(
     path.join(outDir, 'components/app_driver/include/app_driver_types.h'),
     genAppDriverTypesH(rendered),
@@ -872,6 +882,10 @@ async function renderInstances(
   }
   return out
 }
+
+/** CMake a framework block may ship under cmake/: included by the base
+ *  CMakeLists before and after project(), only for selected frameworks. */
+export const FRAMEWORK_CMAKE_HOOKS = ['pre_project.cmake', 'post_project.cmake'] as const
 
 function isFramework(r: RenderedInstance, name: string): boolean {
   return r.block.id === `frameworks/${name}`

@@ -768,7 +768,12 @@ the guard is narrowed to keep the stub only when the glue is absent.
 Use an existing block as a template. The pattern is consistent: a
 `block.yml` with metadata + slots. For drivers/device_types/behaviors,
 the slot targets are documented above. For frameworks, supply a
-`components/app_<name>/` subdir; the generator copies it whole.
+`components/app_<name>/` subdir; the generator copies it whole. CMake the
+framework needs at project level goes in `cmake/pre_project.cmake` (compile
+options, before `project()`) or `cmake/post_project.cmake` (patches to managed
+components, after it); the generator copies them to `cmake/frameworks/<name>/`
+and the base CMakeLists includes them, so a product without the framework never
+runs them.
 
 Watch out for these common authoring pitfalls:
 1. **Cross-TU statics.** `logic_*` slots are now grouped by concern into
