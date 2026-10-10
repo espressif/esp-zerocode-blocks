@@ -192,6 +192,10 @@ export interface Block {
   maturity?: 'stub' | Record<string, 'stub' | 'ready'>
   /** Optional esp-board-manager mapping — see BmgrMapping. */
   bmgr?: BmgrMapping
+  /** The part this block drives when a board declares it as a `custom` device
+   *  (board_devices.yaml `chip:` — `bmi270`). Discovery only: hosts name this
+   *  block for such a device; generation ignores it. */
+  board_part?: string
   /** Buses this block CONFIGURES, and which cfg key names each one. */
   provides_bus?: BusDecl | BusDecl[]
   /** Buses this block TALKS ON but does not configure — see BusDecl. */

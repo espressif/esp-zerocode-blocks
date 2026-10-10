@@ -31,6 +31,13 @@ cmake_priv_requires:
 # peripherals/i2c_bus instance or a board that owns the port; this block cannot
 # tell the two apart, which is the point. See engine/src/types.ts (BusDecl) and
 # CLAUDE.md → Shared buses.
+# The part a board declares as a `custom` device (board_devices.yaml `chip: bmm150`)
+# that THIS block drives. Discovery only — it changes nothing in generation:
+# get_board names this block for such a device, and the block talks to it over
+# the board's own I2C bus (requires_bus adopts it), so no pin is stated. A writer
+# that did not find it hand-wrote a driver with its own pins instead.
+board_part: bmm150
+
 requires_bus:
   type: i2c
   port_param: i2c_port

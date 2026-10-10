@@ -1,0 +1,94 @@
+description: >-
+  Play tones on the audio codec the BOARD already declares (`type: audio_codec`
+  in its board definition — the ESP-Mosaico's ES8311 + amplifier, any board's
+  speaker codec) through esp-board-manager. Board-only: it states no pin, no
+  I2S port and no I2C address, because those are the board's. Same
+  tone/volume/mute param contract as drivers/speaker_es8311, so the `sound`
+  framework (app_sound_play) drives it unchanged.
+
+# WHY THIS BLOCK EXISTS.
+#
+# drivers/speaker_es8311 brings the codec up itself: an I2S channel on stated
+# pins, the codec over I2C, the amplifier GPIO. On a board product every one of
+# those resources already belongs to the board (its `i2s_audio_out`,
+# `i2c_master` and `gpio_pa_control` peripherals), so composing it there is an
+# IO conflict — and the writers did not compose it: two Mosaico games
+# hand-wrote esp_codec_dev code instead (t-rex ~100 turns of SDK lookups, one
+# ran silent after a board revision moved a pin).
+#
+# esp_board_manager_init() already creates the codec device — data interface,
+# control interface, the amplifier — and hands the opened esp_codec_dev handle
+# to whoever asks by name. This block asks. Matched by TYPE
+# (`bmgr.provided_by: audio_codec`), fetched by NAME (`cfg.device`), because a
+# board may carry two codecs (the Mosaico declares `audio_dac` and `audio_adc`).
+#
+# THE CLOCK RATIO COMES FROM THE BOARD. esp_codec_dev 2.x programs the codec's
+# MCLK divider from `esp_codec_dev_sample_info_t.mclk_multiple`; it must match
+# the board's I2S peripheral or the codec listens to a clock it was not told
+# about and stays silent with no error. It is read at init from the codec's
+# own I2S peripheral config, not stated here.
+#
+# DEPENDENCY. esp_codec_dev is a Kconfig-gated dependency of
+# esp_board_manager (only when the board enables an audio codec device), and
+# that gate dropped it from two products' builds (t-rex-opt build 010,
+# minecraft build 028). The block that calls it declares it (idf_component.yml).
+#
+# BOARD-ONLY, AND CHECKED. `bmgr.device_param` makes generation FAIL when there
+# is no board or the board declares no audio_codec of that name.
+#
+# NOT hardware-verified as a block. The open sequence is the one t-rex's own
+# code ran on a Mosaico, verified on the bench (2026-10-02: tones audible).
+
+cmake_priv_requires:
+  app_driver: [espressif__esp_board_manager, espressif__esp_codec_dev]
+
+bmgr:
+  init: board_manager
+  # The board manager creates the codec device and owns its I2S, I2C and
+  # amplifier lines; this block only asks for the handle.
+  provided_by: audio_codec
+  device_param: device
+
+params:
+  device:
+    type: string
+    required: true
+    description: >-
+      The board device's NAME in its board_devices.yaml (e.g. audio_dac). Must
+      be a device of type audio_codec on the board this product runs on, with
+      its DAC enabled — generation fails if the board declares no such device.
+  sample_rate:
+    type: int
+    default: 0
+    description: >-
+      Output sample rate in Hz. 0 = the rate the board's I2S peripheral is
+      configured for (falls back to 16000 if it states none).
+  channels:
+    type: int
+    default: 1
+    description: >-
+      Channels the app format declares. 1 (mono) matches the Mosaico's single
+      speaker; the codec duplicates it as the board's format requires.
+  codec_volume:
+    type: int
+    default: 70
+    description: >-
+      Fixed codec output level 0-100. The volume param scales the generated
+      waveform on top of it, so tone/volume/mute behave the same whichever
+      speaker block a product picks.
+
+driver_params:
+  tone_param:
+    type: u32
+    required: true
+    description: Tone frequency in Hz (uint32, 0 = silent)
+  volume_param:
+    type: u8
+    required: false
+    default: ""
+    description: (Optional) playback volume 0-100. Empty disables — level stays at 50%.
+  mute_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) mute flag.

@@ -1,0 +1,4 @@
+dependencies:
+  # The version esp_board_manager 0.7.x requires (^2.0.0-beta1); stated here
+  # because the board manager only pulls it in behind a Kconfig gate.
+  espressif/esp_codec_dev: ">=2.0.0-beta1,<3.0.0"
