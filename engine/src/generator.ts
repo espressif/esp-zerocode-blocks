@@ -1038,7 +1038,7 @@ ${collectSlot(rendered, 'driver_apply_cases', 8)}
 `
 }
 
-function genAppMatterCpp(rendered: RenderedInstance[]): string {
+export function genAppMatterCpp(rendered: RenderedInstance[]): string {
   // Each endpoint's create block becomes its own static function — isolating
   // its `cfg`/`ep` locals (which would collide across endpoints in one scope)
   // and removing the bare `{ }` block. The body's `return ESP_FAIL` now returns
@@ -1069,6 +1069,7 @@ function genAppMatterCpp(rendered: RenderedInstance[]): string {
 #include "app_config.h"
 
 #include <esp_log.h>
+#include <esp_matter.h>
 #include <app/server/Server.h>
 #if CONFIG_ENABLE_MATTER_OVER_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
