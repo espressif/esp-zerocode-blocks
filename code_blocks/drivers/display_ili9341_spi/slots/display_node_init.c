@@ -35,13 +35,16 @@
     ESP_ERROR_CHECK(esp_lcd_panel_init({{prefix_lc}}_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off({{prefix_lc}}_panel, true));
 
-    if ({{prefix}}_LCD_BACKLIGHT >= 0) {
+    /* #if, not if: a negative pin must not reach the shift below. */
+#if {{prefix}}_LCD_BACKLIGHT >= 0
+    {
         gpio_config_t {{prefix_lc}}_bl = {};
         {{prefix_lc}}_bl.pin_bit_mask = 1ULL << {{prefix}}_LCD_BACKLIGHT;
         {{prefix_lc}}_bl.mode = GPIO_MODE_OUTPUT;
         gpio_config(&{{prefix_lc}}_bl);
         gpio_set_level((gpio_num_t){{prefix}}_LCD_BACKLIGHT, 1);
     }
+#endif
 
     lvgl_port_display_cfg_t {{prefix_lc}}_disp_cfg = {};
     {{prefix_lc}}_disp_cfg.io_handle = {{prefix_lc}}_io;

@@ -2342,7 +2342,7 @@ function genAppAgentsCpp(rendered: RenderedInstance[]): string {
  * brace, no double braces — it must survive the TS template literal AND
  * the slot engine.
  */
-function genAppWebuiCpp(rendered: RenderedInstance[]): string {
+export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
   // An empty manifest is a DEGENERATE page: the server comes up and serves a
   // control page with no controls, which reads as "working" and is not.
   // Observed live on hallway-web-panel-msmz4sqr — smart_plug had no
@@ -2350,10 +2350,11 @@ function genAppWebuiCpp(rendered: RenderedInstance[]): string {
   // replaced the whole generated component with a hand-rolled one. Fail here
   // instead, naming the device types that need the binding.
   const entities = collectSlot(rendered, 'webui_entities', 4)
-  if (!entities.trim()) {
-    const deviceTypes = rendered
-      .map(r => r.block.id)
-      .filter(id => id.startsWith('device_types/'))
+  const deviceTypes = rendered
+    .map(r => r.block.id)
+    .filter(id => id.startsWith('device_types/'))
+  // No device types yet means nothing to control yet, not a broken binding.
+  if (!entities.trim() && deviceTypes.length > 0) {
     throw new Error(
       'frameworks: [webui] but no device type contributes a webui_entities row, ' +
       'so the control page would have no controls. ' +
@@ -3511,7 +3512,20 @@ ${sharedNet ? `    if (s_uri[0] == 0) {
  * concurrently (feed blocks on I2S, fetch blocks on AFE's internal queue), so
  * running them on one task deadlocks as soon as either side stalls.
  */
-function genAppAudioCpp(rendered: RenderedInstance[]): string {
+export function genAppAudioCpp(rendered: RenderedInstance[]): string {
+  // The weak default only when no block defines the real one: a microphone
+  // block's audio_statics land in THIS file, and a strong and a weak definition
+  // in one translation unit is a redefinition error, not an override.
+  const micProvided = /\bzc_audio_mic_read\s*\([^;{)]*\)\s*\{/.test(collectSlot(rendered, 'audio_statics'))
+  const micDefault = micProvided ? '' : `/* Silence until a microphone block provides the real zc_audio_mic_read. */
+__attribute__((weak)) size_t zc_audio_mic_read(int16_t *dest, size_t samples)
+{
+    (void)dest;
+    (void)samples;
+    return 0;
+}
+
+`
   return `#include "app_audio.h"
 #include "app_driver.h"
 #include "app_config.h"
@@ -3580,7 +3594,7 @@ static void audio_driver_cb(
 ${collectSlot(rendered, 'audio_driver_cb_cases', 4)}
 }
 
-static void audio_feed_task(void *arg)
+${micDefault}static void audio_feed_task(void *arg)
 {
     (void)arg;
     const int chunk = s_afe->get_feed_chunksize(s_afe_data);
