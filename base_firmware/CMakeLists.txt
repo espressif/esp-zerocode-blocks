@@ -34,13 +34,6 @@ add_compile_options(-fpermissive)
 # an agent's own idiomatic code from hard-failing a build.
 add_compile_options(-Wno-error=missing-field-initializers)
 
-# GCC 16 added -Wnon-c-typedef-for-linkage, and esp-dl (pulled in by esp-sr for
-# the voice framework) trips it in dl_image_bmp.cpp. It is a MANAGED component,
-# so there is nothing of ours to fix and no patch we could carry that the next
-# esp-sr bump would not undo. Demoting the diagnostic is the only lever on our
-# side; drop this line once esp-dl builds clean under GCC 16.
-add_compile_options(-Wno-error=non-c-typedef-for-linkage)
-
 # Third-party source fetched by git_clone (and any repo the platform pre-installs)
 # lives in ../third_party/<name>, a SIBLING of this firmware tree. It is a
 # sibling on purpose: apply_template deletes and recreates the firmware dir, so
