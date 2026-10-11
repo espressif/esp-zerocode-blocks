@@ -1,10 +1,9 @@
 #if SOC_PCNT_SUPPORTED
 {
-    pcnt_unit_config_t {{prefix_lc}}_unit_cfg = {
-        .low_limit = -1000,
-        .high_limit = 1000,
-        .flags = { .accum_count = 0 },
-    };
+    pcnt_unit_config_t {{prefix_lc}}_unit_cfg = {};
+    {{prefix_lc}}_unit_cfg.low_limit = -1000;
+    {{prefix_lc}}_unit_cfg.high_limit = 1000;
+    {{prefix_lc}}_unit_cfg.flags.accum_count = 0;
     ESP_ERROR_CHECK(pcnt_new_unit(&{{prefix_lc}}_unit_cfg, &s_{{prefix_lc}}_pcnt));
 
     pcnt_chan_config_t {{prefix_lc}}_chan_cfg = {

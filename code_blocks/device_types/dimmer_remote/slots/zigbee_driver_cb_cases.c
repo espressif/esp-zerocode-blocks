@@ -1,10 +1,7 @@
 if (param_id == {{cfg.power_param}} && s_{{prefix_lc}}_zb_endpoint) {
-    ezb_zcl_on_off_cmd_t cmd = {
-        .cmd_ctrl = {
-            .dst_addr = { .addr_mode = EZB_ADDR_MODE_NONE },
-            .src_ep = s_{{prefix_lc}}_zb_endpoint,
-        },
-    };
+    ezb_zcl_on_off_cmd_t cmd = {};
+    cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
+    cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;
     if (esp_zigbee_lock_acquire(portMAX_DELAY)) {
         ezb_err_t err = val.b ? ezb_zcl_on_off_on_cmd_req(&cmd)
                               : ezb_zcl_on_off_off_cmd_req(&cmd);
@@ -19,16 +16,11 @@ if (param_id == {{cfg.power_param}} && s_{{prefix_lc}}_zb_endpoint) {
     }
 }
 if (param_id == {{cfg.level_param}} && s_{{prefix_lc}}_zb_endpoint) {
-    ezb_zcl_level_move_to_level_cmd_t cmd = {
-        .cmd_ctrl = {
-            .dst_addr = { .addr_mode = EZB_ADDR_MODE_NONE },
-            .src_ep = s_{{prefix_lc}}_zb_endpoint,
-        },
-        .payload = {
-            .level = val.u8,
-            .transition_time = 5, /* 0.5 s */
-        },
-    };
+    ezb_zcl_level_move_to_level_cmd_t cmd = {};
+    cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
+    cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;
+    cmd.payload.level = val.u8;
+    cmd.payload.transition_time = 5; /* 0.5 s */
     if (esp_zigbee_lock_acquire(portMAX_DELAY)) {
         ezb_err_t err = ezb_zcl_level_move_to_level_cmd_req(&cmd);
         esp_zigbee_lock_release();

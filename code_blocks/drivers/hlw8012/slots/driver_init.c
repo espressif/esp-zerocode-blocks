@@ -1,5 +1,7 @@
 {
-    pcnt_unit_config_t {{prefix_lc}}_cfg = { .low_limit = -1, .high_limit = 32767, .flags = { .accum_count = 0 } };
+    pcnt_unit_config_t {{prefix_lc}}_cfg = {};
+    {{prefix_lc}}_cfg.low_limit = -1;
+    {{prefix_lc}}_cfg.high_limit = 32767;
     ESP_ERROR_CHECK(pcnt_new_unit(&{{prefix_lc}}_cfg, &s_{{prefix_lc}}_hlw_pcnt));
     pcnt_chan_config_t {{prefix_lc}}_chan_cfg = {
         .edge_gpio_num = {{prefix}}_HLW_CF_GPIO,

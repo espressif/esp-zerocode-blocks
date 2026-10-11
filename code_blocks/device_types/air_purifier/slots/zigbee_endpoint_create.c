@@ -1,10 +1,9 @@
 {
-    ezb_af_ep_config_t {{prefix_lc}}_ep_cfg = {
-        .ep_id = {{cfg.zb_endpoint}},
-        .app_profile_id = EZB_AF_HA_PROFILE_ID,
-        .app_device_id = EZB_ZHA_HEATING_COOLING_UNIT_DEVICE_ID,
-        .app_device_version = 0,
-    };
+    ezb_af_ep_config_t {{prefix_lc}}_ep_cfg = {};
+    {{prefix_lc}}_ep_cfg.ep_id = {{cfg.zb_endpoint}};
+    {{prefix_lc}}_ep_cfg.app_profile_id = EZB_AF_HA_PROFILE_ID;
+    {{prefix_lc}}_ep_cfg.app_device_id = EZB_ZHA_HEATING_COOLING_UNIT_DEVICE_ID;
+    {{prefix_lc}}_ep_cfg.app_device_version = 0;
     ezb_af_ep_desc_t ep_desc = ezb_af_create_endpoint_desc(&{{prefix_lc}}_ep_cfg);
     if (ep_desc == EZB_INVALID_AF_EP_DESC) return ESP_ERR_NO_MEM;
     ezb_zha_common_device_config_t {{prefix_lc}}_common_cfg = EZB_ZHA_COMMON_DEVICE_CONFIG();
