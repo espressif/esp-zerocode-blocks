@@ -128,6 +128,27 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                  f'add the include to slots/{fam}_includes.h (each slot family is '
                  f'its own translation unit).')
 
+    # ── A NAME ANOTHER FAMILY DECLARES extern MUST HAVE EXTERNAL LINKAGE. ──
+    # Each slot family is its own translation unit, so a `static` definition in
+    # one and an `extern` declaration in another compile and then fail to link.
+    # In C++ a namespace-scope `const` is internal too, so it needs `extern` on
+    # the definition.
+    EXTERN_DECL = re.compile(r'^\s*extern\s+(?!"C")[^;(=]*?\s\**([\w{}.]+)\s*(?:\[[^\]]*\])?\s*;', re.M)
+    for name in sorted(slot_names):
+        fam = name.split('_', 1)[0]
+        for sym in EXTERN_DECL.findall(slot_text[name]):
+            for other in sorted(slot_names):
+                if other.split('_', 1)[0] == fam:
+                    continue
+                defn = re.search(r'^\s*(static\s+)?(const\s+)?[\w:<>\s\*]*?(?<![\w{}.])' + re.escape(sym)
+                              + r'\s*(?:\[[^\]]*\])?\s*[=;]', slot_text[other], re.M)
+                if defn and (defn.group(1) or defn.group(2)):
+                    err(bid, f'slots/{other} defines {sym} '
+                             f'{"static" if defn.group(1) else "const without extern"}, but '
+                             f'slots/{name} declares it extern: each slot family is its own '
+                             f'translation unit, so it does not link. Give the definition '
+                             f'external linkage.')
+
     # ── A BLOCK THAT TALKS ON A SHARED BUS MUST SAY SO. ────────────────────
     # Same failure shape as the legacy-header rule above and the same reason it
     # is an error: an undeclared consumer composed above (or without) its bus
