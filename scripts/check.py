@@ -141,7 +141,7 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                 if other.split('_', 1)[0] == fam:
                     continue
                 defn = re.search(r'^\s*(static\s+)?(const\s+)?[\w:<>\s\*]*?(?<![\w{}.])' + re.escape(sym)
-                              + r'\s*(?:\[[^\]]*\])?\s*=', slot_text[other], re.M)
+                              + r'\s*(?:\[[^\]]*\])?\s*[=;]', slot_text[other], re.M)
                 if defn and (defn.group(1) or defn.group(2)):
                     err(bid, f'slots/{other} defines {sym} '
                              f'{"static" if defn.group(1) else "const without extern"}, but '
