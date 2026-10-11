@@ -131,17 +131,12 @@ static esp_err_t {{prefix_lc}}_zb_ota_abort(void)
 
 static esp_err_t {{prefix_lc}}_zb_ota_query_image(void)
 {
-    ezb_zcl_ota_upgrade_query_next_image_req_cmd_t request = {
-        .cmd_ctrl = {
-            .dst_ep = 0xff,
-            .src_ep = {{cfg.zb_ota_endpoint}},
-        },
-        .payload = {
-            .manuf_code = {{prefix}}_ZB_OTA_MANUFACTURER_ID,
-            .image_type = {{prefix}}_ZB_OTA_IMAGE_TYPE,
-            .file_version = {{prefix}}_ZB_OTA_FILE_VERSION,
-        },
-    };
+    ezb_zcl_ota_upgrade_query_next_image_req_cmd_t request = {};
+    request.cmd_ctrl.dst_ep = 0xff;
+    request.cmd_ctrl.src_ep = {{cfg.zb_ota_endpoint}};
+    request.payload.manuf_code = {{prefix}}_ZB_OTA_MANUFACTURER_ID;
+    request.payload.image_type = {{prefix}}_ZB_OTA_IMAGE_TYPE;
+    request.payload.file_version = {{prefix}}_ZB_OTA_FILE_VERSION;
     ezb_address_set_short(&request.cmd_ctrl.dst_addr, 0xffff);
     return esp_zigbee_err_to_esp(ezb_zcl_ota_upgrade_query_next_image_cmd_req(&request));
 }

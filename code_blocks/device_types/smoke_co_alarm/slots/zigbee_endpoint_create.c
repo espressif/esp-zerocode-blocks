@@ -6,12 +6,11 @@
     ezb_zcl_identify_cluster_server_config_t identify_cfg = {
         .identify_time = EZB_ZCL_IDENTIFY_IDENTIFY_TIME_DEFAULT_VALUE,
     };
-    ezb_zcl_ias_zone_cluster_server_config_t zone_cfg = {
-        .zone_state = EZB_ZCL_IAS_ZONE_ZONE_STATE_NOT_ENROLLED,
-        .zone_type = EZB_ZCL_IAS_ZONE_ZONE_TYPE_FIRE_SENSOR,
-        .ias_cie_address = 0,
-        .zone_id = EZB_ZCL_IAS_ZONE_ZONE_ID_DEFAULT_VALUE,
-    };
+    ezb_zcl_ias_zone_cluster_server_config_t zone_cfg = {};
+    zone_cfg.zone_state = EZB_ZCL_IAS_ZONE_ZONE_STATE_NOT_ENROLLED;
+    zone_cfg.zone_type = EZB_ZCL_IAS_ZONE_ZONE_TYPE_FIRE_SENSOR;
+    zone_cfg.ias_cie_address = 0;
+    zone_cfg.zone_id = EZB_ZCL_IAS_ZONE_ZONE_ID_DEFAULT_VALUE;
     app_driver_param_val_t init = {};
     /* smoke → ALARM1, CO → ALARM2; nonzero tri-state = bit set. */
     app_driver_get_param({{cfg.smoke_state_param}}, &init);
@@ -20,12 +19,11 @@
     if (init.u8) s_{{prefix_lc}}_zb_status |= EZB_ZCL_IAS_ZONE_ZONE_STATUS_ALARM2;
     zone_cfg.zone_status = s_{{prefix_lc}}_zb_status;
 
-    ezb_af_ep_config_t ep_cfg = {
-        .ep_id = {{cfg.zb_endpoint}},
-        .app_profile_id = EZB_AF_HA_PROFILE_ID,
-        .app_device_id = EZB_ZHA_IAS_ZONE_ID,
-        .app_device_version = 0,
-    };
+    ezb_af_ep_config_t ep_cfg = {};
+    ep_cfg.ep_id = {{cfg.zb_endpoint}};
+    ep_cfg.app_profile_id = EZB_AF_HA_PROFILE_ID;
+    ep_cfg.app_device_id = EZB_ZHA_IAS_ZONE_ID;
+    ep_cfg.app_device_version = 0;
     ezb_af_ep_desc_t ep_desc = ezb_af_create_endpoint_desc(&ep_cfg);
     if (ep_desc == EZB_INVALID_AF_EP_DESC) {
         ESP_LOGE(TAG, "{{prefix_lc}}: failed to create Zigbee IAS Zone endpoint");

@@ -1,14 +1,13 @@
 /* {{prefix_lc}}: dedicated native SDK 2.0 OTA Upgrade client endpoint.
  * dev_desc is supplied by the generated scaffold and registered after every
  * endpoint slot has contributed its descriptor. */
-ezb_af_ep_config_t {{prefix_lc}}_ep_cfg = {
-    .ep_id = {{cfg.zb_ota_endpoint}},
-    .app_profile_id = EZB_AF_HA_PROFILE_ID,
-    /* No standard HA id exists for a bare OTA client endpoint. Preserve the
-     * previous custom test-device id. */
-    .app_device_id = 0xfff0,
-    .app_device_version = 0,
-};
+ezb_af_ep_config_t {{prefix_lc}}_ep_cfg = {};
+{{prefix_lc}}_ep_cfg.ep_id = {{cfg.zb_ota_endpoint}};
+{{prefix_lc}}_ep_cfg.app_profile_id = EZB_AF_HA_PROFILE_ID;
+/* No standard HA id exists for a bare OTA client endpoint. Preserve the
+ * previous custom test-device id. */
+{{prefix_lc}}_ep_cfg.app_device_id = 0xfff0;
+{{prefix_lc}}_ep_cfg.app_device_version = 0;
 ezb_zcl_ota_upgrade_cluster_client_config_t {{prefix_lc}}_ota_cfg = {
     .upgrade_server_id = EZB_ZCL_OTA_UPGRADE_UPGRADE_SERVER_ID_DEFAULT_VALUE,
     .file_offset = EZB_ZCL_OTA_UPGRADE_FILE_OFFSET_DEFAULT_VALUE,

@@ -41,12 +41,11 @@
     ESP_ERROR_CHECK(ezb_zcl_electrical_measurement_cluster_desc_add_attr(meas_desc,
         EZB_ZCL_ATTR_ELECTRICAL_MEASUREMENT_AC_CURRENT_DIVISOR_ID, &{{prefix_lc}}_div1000));
     {{/if}}
-    ezb_af_ep_config_t ep_cfg = {
-        .ep_id = {{cfg.zb_endpoint}},
-        .app_profile_id = EZB_AF_HA_PROFILE_ID,
-        .app_device_id = EZB_ZHA_METER_INTERFACE_DEVICE_ID,
-        .app_device_version = 0,
-    };
+    ezb_af_ep_config_t ep_cfg = {};
+    ep_cfg.ep_id = {{cfg.zb_endpoint}};
+    ep_cfg.app_profile_id = EZB_AF_HA_PROFILE_ID;
+    ep_cfg.app_device_id = EZB_ZHA_METER_INTERFACE_DEVICE_ID;
+    ep_cfg.app_device_version = 0;
     ezb_af_ep_desc_t ep_desc = ezb_af_create_endpoint_desc(&ep_cfg);
     ESP_ERROR_CHECK(ezb_af_endpoint_add_cluster_desc(ep_desc,
         ezb_zcl_basic_create_cluster_desc(&basic_cfg, EZB_ZCL_CLUSTER_SERVER)));
