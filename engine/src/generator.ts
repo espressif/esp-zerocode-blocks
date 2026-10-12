@@ -27,6 +27,7 @@ import { loadBlock, loadBoardFile, type CatalogPaths } from './loader.js'
 import { boardProvidesBus, boardsRoot, deviceRequirementMisses, findBoardDir } from './validator.js'
 import { CHIP_MODULES, normalizeChipTarget } from './hardware.js'
 import { loadBaseDefaults, withDefaults } from './defaults.js'
+import { DEVICE_DATA_FILE, type DeviceDataRow, collectDeviceData, deviceDataCsv } from './device-data.js'
 
 const VALUE_TYPE_TO_UNION_MEMBER: Record<ValueType, string> = {
   bool: 'b',
@@ -91,6 +92,9 @@ export interface GenerateResult {
   productId: string
   outDir: string
   blocks: string[]
+  /** The device data the tree's blocks declare, as written to
+   *  `device_data.csv`; empty when none do and no file was written. */
+  deviceData: DeviceDataRow[]
 }
 
 /** A block with `target: <chip>` applies ONLY when generating for that chip; a
@@ -167,6 +171,11 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   // — when the board carries a panel — app_display.cpp, and nothing else, so
   // that a product with no board definition and one with it differ only there.
   const boardExtras: RenderedInstance[] = bmgrBoard ? [boardRendered(bmgrBoard, boardFacts)] : []
+
+  const deviceData = collectDeviceData(rendered.map(r => ({ id: r.block.id, block: r.block })))
+  if (deviceData.errors.length > 0) {
+    throw new Error(`product '${product.id}' has invalid device data declarations:\n  - ${deviceData.errors.join('\n  - ')}`)
+  }
 
   await fs.rm(outDir, { recursive: true, force: true })
   await copyTree(paths.baseFirmwareDir, outDir)
@@ -626,6 +635,10 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     } catch { /* a bare partitions.csv with no block.yml is fine */ }
   }
 
+  if (deviceData.rows.length > 0) {
+    await fs.writeFile(path.join(outDir, DEVICE_DATA_FILE), deviceDataCsv(deviceData.rows))
+  }
+
   // ── sdkconfig.defaults ──────────────────────────────────────────────────
   // One merged file for the SELECTED chip (the tree is single-chip). IDF takes
   // the last assignment, so file order is precedence, low → high:
@@ -728,6 +741,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
     productId: product.id,
     outDir,
     blocks: product.instances.map(i => i.block),
+    deviceData: deviceData.rows,
   }
 }
 
