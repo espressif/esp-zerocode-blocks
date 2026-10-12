@@ -239,7 +239,44 @@ export interface Block {
   /** FRAMEWORK blocks only: behaviors every product with this framework gets
    *  unless it lists them itself or excludes them. */
   defaults?: string[]
+  /** Per-device values this block's firmware reads from the `fctry` NVS
+   *  partition — see DeviceDataDecl. */
+  device_data?: DeviceDataDecl
   slots?: Record<string, string>
+}
+
+/** One value a block's firmware reads from the `fctry` partition. */
+export interface DeviceDataKey {
+  /** NVS key, at most 15 bytes. */
+  key: string
+  /** `data`: the value is typed in. `file`: the value is a file's bytes
+   *  (a certificate, a key). Absent = `data`. */
+  type?: 'data' | 'file'
+  /** An `nvs_partition_gen` encoding: u8…i64 (data only), string, binary,
+   *  hex2bin, base64. */
+  encoding: string
+  /** A NON-SECRET default the form pre-fills (a port number). Data keys
+   *  only: a file key's bytes are always the user's. */
+  default?: string | number
+  /** What the form calls it. Absent = the key. */
+  label?: string
+  /** Absent = true. */
+  required?: boolean
+}
+
+/** The device data a block needs: values that differ per physical device
+ *  (an AWS IoT certificate, a thing name), entered in the browser at flash
+ *  time and written to the `fctry` partition beside the image.
+ *
+ *  A declaration, never a value: the generator turns every declaration in a
+ *  product into `device_data.csv` at the tree root, an nvs_partition_gen CSV
+ *  with the values left blank, and the platform builds its flash form from it.
+ *  Two blocks may declare the same key only identically — they then read the
+ *  same value. */
+export interface DeviceDataDecl {
+  /** NVS namespace the keys live in, at most 15 bytes. */
+  namespace: string
+  keys: DeviceDataKey[]
 }
 
 export interface Instance {

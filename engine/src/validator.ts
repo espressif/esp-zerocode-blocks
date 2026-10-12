@@ -22,6 +22,7 @@ import * as path from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { chipCapabilities } from './hardware.js'
 import { unknownExcludes, withDefaults } from './defaults.js'
+import { checkDeviceDataDecl, collectDeviceData } from './device-data.js'
 import {
   type Block,
   type BoardFile,
@@ -117,6 +118,10 @@ export function validateBlock(block: Block): ValidationResult {
         })
       }
     }
+  }
+
+  for (const message of checkDeviceDataDecl(block)) {
+    errors.push({ level: 'error', ...ctx, message })
   }
 
   const declared = new Set(Object.keys(block.params ?? {}))
@@ -427,6 +432,19 @@ export function validateProduct(
   if (!product.instances || product.instances.length === 0) {
     errors.push({ level: 'error', ...ctx, message: 'product has no instances' })
     return { errors, warnings }
+  }
+
+  // Device data: the same merge the generator runs, so a product whose blocks
+  // disagree about a key is refused before anything is written.
+  const deviceDataBlocks = [
+    ...product.instances.flatMap((i) => {
+      const block = blocks.get(i.block)
+      return block ? [{ id: i.block, block }] : []
+    }),
+    ...[...frameworkBlocks].map(([name, block]) => ({ id: `frameworks/${name}`, block })),
+  ]
+  for (const message of collectDeviceData(deviceDataBlocks).errors) {
+    errors.push({ level: 'error', ...ctx, message })
   }
 
   // FLASH-BUDGET GATES (audio) — same rules the generator enforces, surfaced

@@ -1,11 +1,13 @@
 # 8MB flash layout WITH an esp-sr model partition — for products using the
 # audio framework. `model` must hold the real srmodels.bin: wn9 wake word +
 # mn7_en quant is 3.05 MB (measured from a voice-lamp build, not estimated),
-# so the slot is 3.375 MB, ending exactly at the 8 MB boundary.
+# so the slot is 3.35 MB. OTA slots are 2.25 MB each (the voice reference app
+# is 1.38 MB).
 #
-# No fctry: that serves RainMaker self-claiming, and the audio framework is
-# incompatible — the space goes to the models instead. OTA slots are 2.25 MB each (the voice
-# reference app is 1.38 MB).
+# `fctry` is the last 24KB of the part, past everything the build flashes
+# (the image ends where srmodels.bin ends, inside `model`), so merged_flash.bin
+# never covers it and a firmware flash leaves the device data written at flash
+# time as it is.
 #
 # Name,          Type, SubType,  Offset,    Size,     Flags
 esp_secure_cert, 0x3F, ,         0xd000,    0x2000,   encrypted
@@ -15,4 +17,5 @@ otadata,         data, ota,      ,          0x2000,
 phy_init,        data, phy,      ,          0x1000,
 ota_0,           app,  ota_0,    0x20000,   0x240000,
 ota_1,           app,  ota_1,    0x260000,  0x240000,
-model,           data, spiffs,   0x4A0000,  0x360000,
+model,           data, spiffs,   0x4A0000,  0x35A000,
+fctry,           data, nvs,      0x7FA000,  0x6000,
