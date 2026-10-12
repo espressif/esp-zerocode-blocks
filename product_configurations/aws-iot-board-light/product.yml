@@ -6,9 +6,10 @@ description: >-
   (drivers/board_led_strip in colour mode: power, hue, saturation,
   brightness) and the BOOT button carries gestures (drivers/board_button:
   single click toggles the light, double click and long press call product
-  hooks, a 6 s hold factory-resets). Onboarding is the framework's own guided
-  aws-setup command. The reference composition for "board button gestures +
-  coloured board LED + console onboarding" — no gpio appears anywhere.
+  hooks, a 6 s hold factory-resets). The AWS identity is device data entered
+  at flash time, and Wi-Fi is the framework's own guided aws-setup command.
+  The reference composition for "board button gestures + coloured board LED +
+  flash-time onboarding" — no gpio appears anywhere.
 keywords: [aws, aws iot, mqtt, devkit, board-manager, rgb, colour, light, boot-button, double-click, long-press, factory-reset, aws-setup]
 
 frameworks: [aws_iot]

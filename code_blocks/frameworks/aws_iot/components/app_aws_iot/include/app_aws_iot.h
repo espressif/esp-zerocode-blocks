@@ -101,11 +101,9 @@ esp_err_t app_aws_iot_subscribe(const char *topic_filter, uint8_t qos,
  * The configured thing name — also the MQTT client id, and what shadow and jobs
  * topics are built from. Never NULL.
  *
- * NOT STABLE AT INIT. Until the device is onboarded this is a MAC-derived
- * default (zerocode-<mac>), and onboarding happens over the console long after
- * every logic_init slot has run. Build topics from it on ZC_AWS_EVENT_CONNECTED
- * rather than caching them at init, or a device will subscribe to the default
- * name, report a healthy session, and receive nothing.
+ * The flashed device data's, read by app_aws_iot_init() and so final by the
+ * time any logic_init slot runs; a MAC-derived default (zerocode-<mac>) on a
+ * device flashed without one.
  */
 const char *app_aws_iot_thing_name(void);
 
@@ -114,39 +112,22 @@ bool app_aws_iot_connected(void);
 
 /* ── Configuration ──────────────────────────────────────────────────────
  *
- * What the aws-* console commands do, as functions: for a product that
- * onboards some other way (its own console command, a web form, values set at
- * build time). Each setter validates, persists to NVS and updates the live
- * config — the session task picks it up on its next connect attempt (it polls
- * once a second while unconfigured). The NVS namespace and key names stay this
- * block's business: never write them directly.
+ * The AWS identity — endpoint, port, thing name, certificate, private key and
+ * an optional root CA — is device data: the platform's flash page asks for it
+ * and writes it to the fctry partition (block.yml device_data:). It is read
+ * once, at init, and has no setter.
  *
- * The block already ships a guided setup, `aws-setup`, that asks for every
- * value in turn. A product that wants a different flow writes a console
- * command over these setters and app_console_read_line / app_console_read_text
+ * Wi-Fi is the one value set on the device. The block ships `aws-setup`
+ * (guided) and `aws-wifi`; a product that wants a different flow writes a
+ * console command over app_aws_iot_set_wifi and app_console_read_line
  * (app_console.h) — not a second copy of the storage.
  */
 
-/** Wi-Fi network. ESP_ERR_INVALID_SIZE when the SSID is over 32 bytes or the
- *  password over 64. Stored even when another framework owns the radio (see
- *  app_aws_iot_owns_wifi), but only applied when this block owns it. */
+/** Wi-Fi network: validates, persists to NVS and applies it. The session task
+ *  picks it up at once. ESP_ERR_INVALID_SIZE when the SSID is over 32 bytes or
+ *  the password over 64. Stored even when another framework owns the radio
+ *  (see app_aws_iot_owns_wifi), but only applied when this block owns it. */
 esp_err_t app_aws_iot_set_wifi(const char *ssid, const char *password);
-
-/** AWS IoT data endpoint, e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com.
- *  @param port 8883 (MQTT over TLS) or 443 (ALPN); 0 means 8883. */
-esp_err_t app_aws_iot_set_endpoint(const char *host, uint16_t port);
-
-/** Thing name — also the MQTT client id. Over 64 bytes: ESP_ERR_INVALID_SIZE. */
-esp_err_t app_aws_iot_set_thing(const char *name);
-
-/** Device certificate / private key / root CA override, as NUL-TERMINATED PEM
- *  text (no length argument, on purpose: mbedTLS wants the length including the
- *  NUL, and strlen() is the classic way to get that wrong). Each is parsed with
- *  mbedTLS first and refused with ESP_ERR_INVALID_ARG if it does not parse.
- *  app_aws_iot_set_root_ca(NULL) drops the override (back to Amazon Root CA 1). */
-esp_err_t app_aws_iot_set_cert(const char *pem);
-esp_err_t app_aws_iot_set_key(const char *pem);
-esp_err_t app_aws_iot_set_root_ca(const char *pem);
 
 /**
  * Last will: what the broker publishes for this device when it drops off
@@ -155,12 +136,9 @@ esp_err_t app_aws_iot_set_root_ca(const char *pem);
  * ever. Typical: app_aws_iot_set_will("state/{thing}", "offline", 1, true),
  * matching a retained state topic the product publishes "online" to.
  *
- * @param topic   "{thing}" anywhere in it is replaced with the thing name AT
- *                EACH CONNECT. Do not build the topic from
- *                app_aws_iot_thing_name() yourself: until the device is
- *                onboarded that is the MAC default, and a topic built at init
- *                would announce "offline" where nobody listens. NULL clears the
- *                will. At most 127 bytes before substitution.
+ * @param topic   "{thing}" anywhere in it is replaced with the thing name at
+ *                each connect. NULL clears the will. At most 127 bytes before
+ *                substitution.
  * @param payload NUL-terminated, at most 255 bytes. Copied, like the topic.
  * @param qos     0 or 1 (AWS IoT Core has no QoS 2).
  * @param retain  Usually true, to match a retained state topic.
@@ -170,9 +148,6 @@ esp_err_t app_aws_iot_set_root_ca(const char *pem);
  * Not persisted: call it on every boot.
  */
 esp_err_t app_aws_iot_set_will(const char *topic, const char *payload, uint8_t qos, bool retain);
-
-/** Erase the stored certificate, private key and root CA override. */
-esp_err_t app_aws_iot_clear_credentials(void);
 
 /** Endpoint, thing name, certificate and key are all present. */
 bool app_aws_iot_configured(void);

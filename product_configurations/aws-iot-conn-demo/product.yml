@@ -20,12 +20,9 @@ frameworks: [aws_iot]
 # the app_logic_PRIV_REQUIRES wiring, both directions of the session, and the
 # claim that any task may publish.
 #
-# Onboarding is the serial console — an AWS thing has no commissioning protocol:
-#     aws-wifi <ssid> <password>
-#     aws-endpoint <host>            e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com
-#     aws-thing <name>
-#     aws-cert           ... then paste the certificate PEM verbatim
-#     aws-key            ... then paste the private key PEM verbatim
+# Onboarding: the flash page asks for the endpoint, thing name, certificate and
+# key (the framework's device data), and Wi-Fi is the console's aws-wifi
+# <ssid> <password> or the guided aws-setup.
 # The thing's IoT policy must grant iot:Connect, iot:Publish on
 # zerocode/<thing>/heartbeat, iot:Subscribe/iot:Receive on zerocode/<thing>/cmd,
 # and nothing more. behaviors/aws_iot_heartbeat can also keep a retained

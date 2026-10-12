@@ -5,37 +5,21 @@
  */
 
 /**
- * The configuration setters (app_aws_iot.h): validate, persist to NVS
- * (namespace "zc_aws"), update the live config. The aws-* console commands and
- * aws-setup are thin wrappers over these, so there is ONE implementation of the
- * storage and a product never needs to know the NVS layout.
+ * The Wi-Fi setter (app_aws_iot.h): validate, persist to NVS (namespace
+ * "zc_aws"), update the live config. aws-wifi and aws-setup are thin wrappers
+ * over it, so a product never needs to know the NVS layout. The AWS identity
+ * has no setter: it is the device data written at flash time.
  */
 
 #include "zc_aws_internal.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
-#include <mbedtls/pk.h>
-#include <mbedtls/platform_util.h>
-#include <mbedtls/x509_crt.h>
 #include <nvs.h>
 
 static const char *NVS_NS = "zc_aws";
-
-/* One string key, committed. */
-static esp_err_t nvs_put_str(const char *key, const char *value)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_set_str(h, key, value);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    return err;
-}
 
 esp_err_t app_aws_iot_set_wifi(const char *ssid, const char *password)
 {
@@ -59,126 +43,6 @@ esp_err_t app_aws_iot_set_wifi(const char *ssid, const char *password)
     if (g_zc_aws_wifi_owned) zc_aws_wifi_reconnect();
     zc_aws_config_changed();
     return ESP_OK;
-}
-
-esp_err_t app_aws_iot_set_endpoint(const char *host, uint16_t port)
-{
-    if (host == NULL || host[0] == '\0') return ESP_ERR_INVALID_ARG;
-    if (port == 0) port = 8883;
-    if (port != 8883 && port != 443) return ESP_ERR_INVALID_ARG;
-    if (strlen(host) >= sizeof(g_zc_aws_endpoint)) return ESP_ERR_INVALID_SIZE;
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_set_str(h, "endpoint", host);
-    if (err == ESP_OK) err = nvs_set_i32(h, "port", port);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    if (err != ESP_OK) return err;
-    zc_aws_cfg_lock();
-    strlcpy(g_zc_aws_endpoint, host, sizeof(g_zc_aws_endpoint));
-    g_zc_aws_port = port;
-    zc_aws_cfg_unlock();
-    zc_aws_config_changed();
-    return ESP_OK;
-}
-
-esp_err_t app_aws_iot_set_thing(const char *name)
-{
-    if (name == NULL || name[0] == '\0') return ESP_ERR_INVALID_ARG;
-    if (strlen(name) >= sizeof(g_zc_aws_thing)) return ESP_ERR_INVALID_SIZE;
-    esp_err_t err = nvs_put_str("thing", name);
-    if (err != ESP_OK) return err;
-    zc_aws_cfg_lock();
-    strlcpy(g_zc_aws_thing, name, sizeof(g_zc_aws_thing));
-    zc_aws_cfg_unlock();
-    zc_aws_config_changed();
-    return ESP_OK;
-}
-
-/* Does this text parse as what it claims to be? Cheap next to a failed TLS
- * handshake, and the only check that catches a truncated paste. */
-bool zc_aws_pem_parses(const char *tag, const char *pem)
-{
-    /* PEM input to mbedTLS: the length INCLUDES the NUL. */
-    size_t len = strlen(pem) + 1;
-    int rc;
-    if (strcmp(tag, "key") == 0) {
-        mbedtls_pk_context pk;
-        mbedtls_pk_init(&pk);
-        rc = mbedtls_pk_parse_key(&pk, (const unsigned char *)pem, len, NULL, 0);
-        mbedtls_pk_free(&pk);
-    } else {
-        mbedtls_x509_crt crt;
-        mbedtls_x509_crt_init(&crt);
-        rc = mbedtls_x509_crt_parse(&crt, (const unsigned char *)pem, len);
-        mbedtls_x509_crt_free(&crt);
-    }
-    if (rc != 0) {
-        /* Code only: CONFIG_MBEDTLS_ERROR_STRINGS is off in most builds, so
-         * mbedtls_strerror would just print "UNKNOWN ERROR CODE". */
-        ESP_LOGW(ZC_AWS_TAG, "%s: parse failed (-0x%04x)", tag, (unsigned)-rc);
-    }
-    return rc == 0;
-}
-
-static esp_err_t set_pem(const char *tag, const char *pem)
-{
-    if (pem == NULL || pem[0] == '\0') return ESP_ERR_INVALID_ARG;
-    if (!zc_aws_pem_parses(tag, pem)) return ESP_ERR_INVALID_ARG;
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    err = nvs_set_blob(h, tag, pem, strlen(pem) + 1);
-    if (err == ESP_OK) err = nvs_commit(h);
-    nvs_close(h);
-    if (err != ESP_OK) return err;
-    /* Reloading frees and reallocates the PEM buffers a connect in progress
-     * hands to the TLS handshake — so it waits for that connect to finish. */
-    zc_aws_cfg_lock();
-    zc_aws_load_config();
-    zc_aws_cfg_unlock();
-    zc_aws_config_changed();
-    return ESP_OK;
-}
-
-esp_err_t app_aws_iot_set_cert(const char *pem) { return set_pem("cert", pem); }
-esp_err_t app_aws_iot_set_key(const char *pem)  { return set_pem("key", pem); }
-
-esp_err_t app_aws_iot_set_root_ca(const char *pem)
-{
-    if (pem != NULL) return set_pem("rootca", pem);
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    nvs_erase_key(h, "rootca");
-    err = nvs_commit(h);
-    nvs_close(h);
-    zc_aws_cfg_lock();
-    free(g_zc_aws_rootca); g_zc_aws_rootca = NULL; g_zc_aws_rootca_len = 0;
-    zc_aws_cfg_unlock();
-    zc_aws_config_changed();
-    return err;
-}
-
-esp_err_t app_aws_iot_clear_credentials(void)
-{
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) return err;
-    nvs_erase_key(h, "cert");
-    nvs_erase_key(h, "key");
-    nvs_erase_key(h, "rootca");
-    err = nvs_commit(h);
-    nvs_close(h);
-    zc_aws_cfg_lock();
-    free(g_zc_aws_cert);   g_zc_aws_cert = NULL;   g_zc_aws_cert_len = 0;
-    if (g_zc_aws_key != NULL) mbedtls_platform_zeroize(g_zc_aws_key, g_zc_aws_key_len);
-    free(g_zc_aws_key);    g_zc_aws_key = NULL;    g_zc_aws_key_len = 0;
-    free(g_zc_aws_rootca); g_zc_aws_rootca = NULL; g_zc_aws_rootca_len = 0;
-    zc_aws_cfg_unlock();
-    zc_aws_config_changed();
-    return err;
 }
 
 bool app_aws_iot_configured(void)
@@ -241,8 +105,7 @@ bool zc_aws_will_for_connect(MQTTPublishInfo_t *out, const char *thing,
         return false;
     }
 
-    /* "{thing}" → the thing name this connect uses, which is the whole reason
-     * the topic is a template: onboarding renames the thing after init. */
+    /* "{thing}" → the thing name this connect uses. */
     size_t n = 0;
     for (const char *p = tmpl; *p != '\0';) {
         const char *ins = NULL;

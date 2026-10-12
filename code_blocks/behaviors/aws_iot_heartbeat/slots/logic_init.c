@@ -9,8 +9,7 @@
         ESP_LOGW(TAG, "{{prefix_lc}}: last will not set: %s", esp_err_to_name({{prefix_lc}}_will));
     }
 {{/if}}
-    /* Subscribing and topic-building happen on ZC_AWS_EVENT_CONNECTED, not
-     * here: the thing name is not final until the device has been onboarded. */
+    /* Subscribing and topic-building happen on ZC_AWS_EVENT_CONNECTED. */
     esp_err_t {{prefix_lc}}_err = esp_event_handler_register(
         ZC_AWS_EVENT, ZC_AWS_EVENT_CONNECTED, {{prefix_lc}}_on_connected, NULL);
     if ({{prefix_lc}}_err != ESP_OK) {

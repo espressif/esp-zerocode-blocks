@@ -189,3 +189,35 @@ test("a block may not declare keys in the product's namespace", () => {
     .errors.map((e) => e.message)
   assert.ok(errors.some((m) => /'zc_app' holds the product's own keys/.test(m)), errors.join('\n'))
 })
+
+test('aws_iot declares its zc_aws identity, reads it from fctry only, and Wi-Fi from the console\'s NVS', async (t) => {
+  const { gen, catalog } = setup(t)
+  const { result, outDir } = await gen(await catalog('aws-iot-conn-demo'))
+  const body = readFileSync(join(outDir, 'device_data.csv'), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))
+  assert.deepEqual(body, [
+    'key,type,encoding,value,label,required',
+    'zc_aws,namespace,,,,',
+    'endpoint,data,string,,AWS IoT endpoint,yes',
+    'port,data,i32,8883,MQTT port,no',
+    'thing,data,string,,Thing name,yes',
+    'cert,file,binary,,Device certificate (PEM),yes',
+    'key,file,binary,,Private key (PEM),yes',
+    'rootca,file,binary,,Root CA (PEM),no',
+  ])
+  assert.deepEqual(result.deviceData.map((r) => r.from), result.deviceData.map(() => ['frameworks/aws_iot']))
+  const src = readFileSync(join(outDir, 'components/app_aws_iot/app_aws_iot.cpp'), 'utf8')
+  // The namespace and keys the firmware reads are the ones it declares.
+  assert.match(src, /FCTRY_PART = "fctry"/)
+  assert.match(src, /NVS_NS = "zc_aws"/)
+  assert.match(src, /nvs_open_from_partition\(FCTRY_PART, NVS_NS, NVS_READONLY, &h\)/)
+  for (const key of ['endpoint', 'thing']) assert.match(src, new RegExp(`load_str\\(h, "${key}"`))
+  for (const key of ['cert', 'key', 'rootca']) assert.match(src, new RegExp(`load_pem\\(h, "${key}"`))
+  assert.match(src, /nvs_get_i32\(h, "port"/)
+  // Wi-Fi is not device data: it comes from the default partition only.
+  const wifi = src.slice(src.indexOf('static void load_wifi'))
+  assert.match(wifi, /nvs_open\(NVS_NS, NVS_READONLY, &h\)/)
+  assert.match(wifi, /"ssid"[\s\S]*"pass"/)
+  assert.ok(!/fctry/i.test(wifi.slice(0, wifi.indexOf('\n}\n'))), 'load_wifi never reads fctry')
+  // A flashed PEM has no NUL; the loader makes room for one.
+  assert.match(src, /malloc\(n \+ 1\)/)
+})

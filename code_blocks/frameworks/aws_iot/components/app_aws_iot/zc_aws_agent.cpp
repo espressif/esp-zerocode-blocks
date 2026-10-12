@@ -240,10 +240,9 @@ esp_err_t app_aws_iot_publish_retained(const char *topic, const void *payload, s
 /* ── connect ─────────────────────────────────────────────────────────── */
 
 /* One connect's own copy of the config. Taken under the config lock in a
- * moment, so a setter never waits for a TLS handshake (a wrong endpoint retries
- * for 15-25 s — exactly while somebody is fixing it), and can never free a
- * buffer the handshake is reading. Kept until the session ends: s_net holds
- * the hostname pointer for the life of the connection. */
+ * moment, so the Wi-Fi setter never waits for a TLS handshake (a failing one
+ * takes 15-25 s). Kept until the session ends: s_net holds the hostname
+ * pointer for the life of the connection. */
 struct conn_cfg_t {
     char endpoint[sizeof(g_zc_aws_endpoint)];
     char thing[sizeof(g_zc_aws_thing)];
@@ -268,7 +267,7 @@ static void release_config(conn_cfg_t *c)
     *c = conn_cfg_t{};
 }
 
-/* False when out of memory, or when the credentials were cleared meanwhile. */
+/* False when out of memory. */
 static bool snapshot_config(conn_cfg_t *c)
 {
     *c = conn_cfg_t{};
@@ -418,7 +417,7 @@ static void session_task(void *arg)
         }
 
         /* The connect runs on its own copy of the config (snapshot_config), so
-         * a setter never waits for it and never frees what it reads. */
+         * the Wi-Fi setter never waits for it. */
         conn_cfg_t cfg;
         if (!snapshot_config(&cfg)) {
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -467,10 +466,9 @@ static void session_task(void *arg)
         uint16_t delay_ms = ZC_AWS_BACKOFF_MAX_MS;
         (void)BackoffAlgorithm_GetNextBackoff(&backoff, esp_random(), &delay_ms);
         ESP_LOGI(ZC_AWS_TAG, "retrying in %u ms", (unsigned)delay_ms);
-        /* A setter changing the config (zc_aws_config_changed) ends the wait:
-         * the backoff is for an unreachable or refusing broker, and a fixed
-         * endpoint or a new certificate deserves an immediate try — not one
-         * up to 32 s later. */
+        /* New Wi-Fi credentials (zc_aws_config_changed) end the wait: the
+         * backoff is for an unreachable or refusing broker, and a fixed
+         * network deserves an immediate try — not one up to 32 s later. */
         if (xTaskNotifyWait(0, UINT32_MAX, NULL, pdMS_TO_TICKS(delay_ms)) == pdTRUE) {
             BackoffAlgorithm_InitializeParams(&backoff, ZC_AWS_BACKOFF_BASE_MS,
                                               ZC_AWS_BACKOFF_MAX_MS,

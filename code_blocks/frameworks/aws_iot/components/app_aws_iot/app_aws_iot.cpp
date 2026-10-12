@@ -25,8 +25,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <mbedtls/pk.h>
 #include <mbedtls/platform_util.h>
+#include <mbedtls/x509_crt.h>
 #include <nvs.h>
+#include <nvs_flash.h>
 
 const char *ZC_AWS_TAG = "app_aws_iot";
 
@@ -48,7 +51,7 @@ volatile bool g_zc_aws_wifi_decided = false;
 
 /* Amazon Root CA 1, compiled in. Not the IDF certificate bundle: that is ~64 KB
  * of flash for a trust store this device needs exactly one entry of, and AWS
- * documents this CA by name. `aws-rootca` overrides it from NVS for a private
+ * documents this CA by name. A flashed `rootca` overrides it for a private
  * endpoint. The length passed to mbedTLS must COUNT the NUL. */
 const char ZC_AWS_ROOT_CA[] =
 "-----BEGIN CERTIFICATE-----\n"
@@ -98,15 +101,53 @@ void zc_aws_post_event(int32_t event_id)
     (void)esp_event_post(ZC_AWS_EVENT, event_id, NULL, 0, 0);
 }
 
-/* ── configuration in NVS ────────────────────────────────────────────── */
+/* ── configuration ───────────────────────────────────────────────────── */
 
-static char *nvs_load_pem(nvs_handle_t h, const char *key, size_t *out_len)
+/* The AWS identity is the device data the platform writes at flash time
+ * (block.yml device_data:) into the fctry partition. Wi-Fi is the console's,
+ * in the default NVS partition. Both use the namespace "zc_aws". */
+static const char *FCTRY_PART = "fctry";
+static const char *NVS_NS = "zc_aws";
+
+/* Does this text parse as what it claims to be? Cheap next to a failed TLS
+ * handshake, and it names the bad file in the log instead. */
+static bool pem_parses(const char *tag, const char *pem, size_t len)
+{
+    int rc;
+    if (strcmp(tag, "key") == 0) {
+        mbedtls_pk_context pk;
+        mbedtls_pk_init(&pk);
+        rc = mbedtls_pk_parse_key(&pk, (const unsigned char *)pem, len, NULL, 0);
+        mbedtls_pk_free(&pk);
+    } else {
+        mbedtls_x509_crt crt;
+        mbedtls_x509_crt_init(&crt);
+        rc = mbedtls_x509_crt_parse(&crt, (const unsigned char *)pem, len);
+        mbedtls_x509_crt_free(&crt);
+    }
+    if (rc != 0) {
+        /* Code only: CONFIG_MBEDTLS_ERROR_STRINGS is off in most builds, so
+         * mbedtls_strerror would just print "UNKNOWN ERROR CODE". */
+        ESP_LOGW(ZC_AWS_TAG, "flashed %s does not parse (-0x%04x) — ignored", tag, (unsigned)-rc);
+    }
+    return rc == 0;
+}
+
+/* A PEM as the length mbedTLS wants, NUL included, or NULL when absent or
+ * unparseable. Written at flash time it is the file's bytes with no NUL. */
+static char *load_pem(nvs_handle_t h, const char *key, size_t *out_len)
 {
     size_t n = 0;
     if (nvs_get_blob(h, key, NULL, &n) != ESP_OK || n == 0) return NULL;
-    char *b = (char *)malloc(n);
+    char *b = (char *)malloc(n + 1);
     if (b == NULL) return NULL;
     if (nvs_get_blob(h, key, b, &n) != ESP_OK) {
+        free(b);
+        return NULL;
+    }
+    if (b[n - 1] != '\0') b[n++] = '\0';
+    if (!pem_parses(key, b, n)) {
+        mbedtls_platform_zeroize(b, n);
         free(b);
         return NULL;
     }
@@ -114,20 +155,46 @@ static char *nvs_load_pem(nvs_handle_t h, const char *key, size_t *out_len)
     return b;
 }
 
-void zc_aws_load_config(void)
+static void load_str(nvs_handle_t h, const char *key, char *buf, size_t cap)
+{
+    size_t n = cap;
+    if (nvs_get_str(h, key, buf, &n) == ESP_ERR_NVS_INVALID_LENGTH) {
+        ESP_LOGW(ZC_AWS_TAG, "flashed %s is longer than %u bytes — ignored", key, (unsigned)cap - 1);
+    }
+}
+
+static void load_identity(void)
+{
+    esp_err_t err = nvs_flash_init_partition(FCTRY_PART);
+    if (err != ESP_OK) {
+        /* Never erased here: it is the device's factory data, not ours. */
+        if (err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(ZC_AWS_TAG, "fctry partition unreadable (%s)", esp_err_to_name(err));
+        }
+        return;
+    }
+    nvs_handle_t h;
+    if (nvs_open_from_partition(FCTRY_PART, NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
+    load_str(h, "endpoint", g_zc_aws_endpoint, sizeof(g_zc_aws_endpoint));
+    load_str(h, "thing", g_zc_aws_thing, sizeof(g_zc_aws_thing));
+    int32_t port = 0;
+    if (nvs_get_i32(h, "port", &port) == ESP_OK) {
+        if (port == 8883 || port == 443) g_zc_aws_port = port;
+        else ESP_LOGW(ZC_AWS_TAG, "flashed port %d is not 8883 or 443 — using %d", (int)port, (int)g_zc_aws_port);
+    }
+    g_zc_aws_cert   = load_pem(h, "cert", &g_zc_aws_cert_len);
+    g_zc_aws_key    = load_pem(h, "key", &g_zc_aws_key_len);
+    g_zc_aws_rootca = load_pem(h, "rootca", &g_zc_aws_rootca_len);
+    nvs_close(h);
+}
+
+static void load_wifi(void)
 {
     nvs_handle_t h;
-    if (nvs_open("zc_aws", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return;
     size_t n;
-    n = sizeof(g_zc_aws_ssid);     nvs_get_str(h, "ssid", g_zc_aws_ssid, &n);
-    n = sizeof(g_zc_aws_pass);     nvs_get_str(h, "pass", g_zc_aws_pass, &n);
-    n = sizeof(g_zc_aws_endpoint); nvs_get_str(h, "endpoint", g_zc_aws_endpoint, &n);
-    n = sizeof(g_zc_aws_thing);    nvs_get_str(h, "thing", g_zc_aws_thing, &n);
-    nvs_get_i32(h, "port", &g_zc_aws_port);
-    free(g_zc_aws_cert);   g_zc_aws_cert   = nvs_load_pem(h, "cert", &g_zc_aws_cert_len);
-    if (g_zc_aws_key != NULL) mbedtls_platform_zeroize(g_zc_aws_key, g_zc_aws_key_len);
-    free(g_zc_aws_key);    g_zc_aws_key    = nvs_load_pem(h, "key", &g_zc_aws_key_len);
-    free(g_zc_aws_rootca); g_zc_aws_rootca = nvs_load_pem(h, "rootca", &g_zc_aws_rootca_len);
+    n = sizeof(g_zc_aws_ssid); nvs_get_str(h, "ssid", g_zc_aws_ssid, &n);
+    n = sizeof(g_zc_aws_pass); nvs_get_str(h, "pass", g_zc_aws_pass, &n);
     nvs_close(h);
 }
 
@@ -270,12 +337,12 @@ esp_err_t app_aws_iot_init(void)
 
     zc_aws_subs_init();
     zc_aws_console_register();
-    zc_aws_load_config();
+    load_identity();
+    load_wifi();
 
-    /* Default the thing name to the station MAC so a device that has only had
-     * its certificate installed still has a stable identity. AWS matches the
-     * client id against the certificate's policy, so this is a default, not a
-     * claim — aws-thing overrides it. */
+    /* A device flashed without a thing name still gets a stable client id. AWS
+     * matches it against the certificate's policy, so this is a default, not a
+     * claim. */
     if (g_zc_aws_thing[0] == 0) {
         uint8_t mac[6] = {0};
         esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -288,8 +355,8 @@ esp_err_t app_aws_iot_init(void)
         /* Unconfigured is a valid state — never block boot. This is also what
          * lets CI build a product for this framework with no AWS account. */
         ESP_LOGW(ZC_AWS_TAG,
-                 "not configured — run: aws-setup (guided), or aws-endpoint <host>,"
-                 " aws-thing <name>, then aws-cert / aws-key and paste each PEM");
+                 "not configured — the endpoint, certificate and key are device data:"
+                 " flash the device with them");
     }
 
     err = zc_aws_agent_start();
