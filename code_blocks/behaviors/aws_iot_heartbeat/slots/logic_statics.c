@@ -13,14 +13,9 @@ static void {{prefix_lc}}_on_cmd(const char *topic, uint16_t topic_len,
              (int)topic_len, topic, (int)len, (const char *)payload);
 }
 
-/* Topics are built HERE, on connect, and not in logic_init.
- *
- * app_aws_iot_thing_name() returns a MAC-derived default until the thing name
- * is configured, and onboarding happens over the console long after behaviour
- * init has run. Caching the topics at init means subscribing to the default
- * name and never noticing — the device connects, the console shows a healthy
- * session, and nothing is ever received. Rebuilding on every connect costs two
- * snprintf calls and cannot go stale. */
+/* Topics are built HERE, on every connect, from the thing name that connect
+ * uses: two snprintf calls, and never a topic for a name the session is not
+ * using. */
 static void {{prefix_lc}}_on_connected(void *arg, esp_event_base_t base,
                                        int32_t id, void *data)
 {

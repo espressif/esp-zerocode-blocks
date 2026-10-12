@@ -1,4 +1,4 @@
-description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. Onboarding is included: a guided `aws-setup` console command asks for Wi-Fi, endpoint, thing name, certificate and key (plus the individual aws-* commands, and public setters app_aws_iot_set_* for a custom flow). A presence topic is app_aws_iot_set_will (an MQTT last will whose topic may contain {thing}) plus app_aws_iot_publish_retained for its \"online\". Connectivity only: what gets published is the application's business."
+description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. The device's AWS identity (endpoint, thing name, certificate, key, optional root CA) is device data the flash page asks for; Wi-Fi is onboarded over the console with a guided `aws-setup` (or `aws-wifi`, or app_aws_iot_set_wifi for a custom flow). A presence topic is app_aws_iot_set_will (an MQTT last will whose topic may contain {thing}) plus app_aws_iot_publish_retained for its \"online\". Connectivity only: what gets published is the application's business."
 # Chips this framework has been BUILT for (a real ESP-IDF build of a product
 # using it). CI skips the framework on any other chip; the platform's
 # registry must agree — see CLAUDE.md § Chips.
@@ -45,56 +45,32 @@ radio: true
 # ENVIRONMENT to build against a pre-cloned tree — see the block README for why
 # it must be the environment and not -D.
 #
-# ONBOARDING IS THE CONSOLE, like mqtt and unlike RainMaker/Matter: an AWS IoT
-# thing has no commissioning protocol, so v1 configures over the serial console
-# and persists to NVS (namespace "zc_aws"):
-#     aws-setup                      GUIDED: asks for each value below in turn
+# ONBOARDING: THE IDENTITY AT FLASH TIME, WI-FI OVER THE CONSOLE. An AWS IoT
+# thing has no commissioning protocol. The platform's flash page asks for the
+# keys under device_data: below and writes them into the fctry partition
+# (namespace "zc_aws"); the framework reads them once, at init, and nothing on
+# the device changes them — a new identity is a reflash with device data. Wi-Fi
+# is the console's, persisted in the default NVS partition (namespace "zc_aws"):
+#     aws-setup                      GUIDED: asks for the network and password
 #     aws-wifi <ssid> <password>
-#     aws-endpoint <host> [port]     e.g. a1b2c3-ats.iot.eu-west-1.amazonaws.com
-#     aws-thing <name>
-#     aws-cert                       then paste the PEM, BEGIN/END lines included
-#     aws-key                        then paste the PEM
-#     aws-status / aws-creds-clear
-# CREDENTIALS ARE PASTED VERBATIM — no base64, no chunking, no newline stripping.
-# The command takes no argument; it reads the console directly until the
-# -----END line, then parses the result with mbedTLS before storing it.
-#
-# A PEM cannot be a command ARGUMENT, because the REPL ends a command at the
-# newline and a certificate is twenty lines. It is however ideal as a paste: its
-# own 64-character line wrapping sits far below the ~246 characters at which
-# USB-Serial-JTAG silently truncates a line, so the truncation that corrupted
-# chunked base64 cannot arise. An earlier revision took chunked base64 and could
-# store a 1220-byte certificate as 539 bytes of nonsense without noticing.
-#
-# THE SENDER MUST PACE ITSELF. The console's receive buffer is small and it is
-# not flow-controlled: blasting 1220 bytes in one write loses roughly half of
-# them. Verified working line-by-line with 20 ms between lines; the device
-# rejects anything that does not parse, so a too-fast sender fails loudly.
+#     aws-status
 # Boot without config MUST still reach "ZeroCode AI firmware started" (the
 # framework logs "not configured" and idles — never blocks app_main), which is
 # also what lets CI build a product for this framework with no AWS account.
 #
-# THE STORAGE IS PUBLIC API, the commands are wrappers (2026-10-07). Every
-# value above has a setter in app_aws_iot.h — app_aws_iot_set_wifi / _endpoint /
-# _thing / _cert / _key / _root_ca, _clear_credentials, _configured,
-# _owns_wifi — and the console's line and paste readers are
-# app_console_read_line / app_console_read_text. Before this, the setters were
-# static, so every product whose spec said "the device asks for its
-# credentials" wrote a 430-500 line wizard: one copied the NVS layout and the
-# mbedTLS parse, one drove these commands through esp_console_run, one edited
-# this component. Each re-learned non-blocking stdin under the REPL from IDF's
-# source (124 lookups across six runs) and shipped the bugs this file's
-# comments warn about. aws-setup is that wizard, once.
+# THE WI-FI STORAGE IS PUBLIC API, the commands are wrappers:
+# app_aws_iot_set_wifi, _configured and _owns_wifi in app_aws_iot.h, and the
+# console's line reader app_console_read_line. A product whose spec wants a
+# different flow writes a console command over them, never a copy of the NVS
+# layout.
 #
 # THE LAST WILL is public too: app_aws_iot_set_will(topic, payload, qos, retain),
-# where "{thing}" in the topic is substituted at EVERY connect (the thing name is
-# not final until onboarding), plus app_aws_iot_publish_retained for the
-# retained "online" that a retained will needs. Every writer that reached a
-# presence topic (three of three, 2026-10) edited this component to add a will
-# before this existed. Verified against a TLS listener: the CONNECT carries the
-# substituted will, and "online" arrives retained.
+# where "{thing}" in the topic is substituted at every connect, plus
+# app_aws_iot_publish_retained for the retained "online" that a retained will
+# needs. Verified against a TLS listener: the CONNECT carries the substituted
+# will, and "online" arrives retained.
 #
-# Amazon Root CA 1 is compiled in; `aws-rootca` overrides it from NVS for a
+# Amazon Root CA 1 is compiled in; a flashed `rootca` overrides it for a
 # private endpoint. mbedTLS's outbound record buffer is cut to 4 KB in the
 # sidecar sdkconfig.defaults — AWS never needs 16 KB in that direction, and it
 # is ~12 KB of heap back.
@@ -106,15 +82,41 @@ radio: true
 # the block (or the engine) does not register.
 onboarding:
   console:
-    setup: "aws-setup — guided: asks for Wi-Fi, the endpoint and thing name, then the certificate and private key (pasted)"
+    setup: "aws-setup — guided: asks for the Wi-Fi network and password, then says whether the flashed identity is complete"
     commands:
       - "aws-wifi <ssid> <password>"
-      - "aws-endpoint <host> [8883|443]"
-      - "aws-thing <name>"
-      - "aws-cert (then paste the PEM)"
-      - "aws-key (then paste the PEM)"
-      - "aws-rootca (then paste the PEM)"
       - "aws-status"
-      - "aws-creds-clear"
-    api: "app_aws_iot_set_wifi, app_aws_iot_set_endpoint, app_aws_iot_set_thing, app_aws_iot_set_cert, app_aws_iot_set_key, app_aws_iot_configured (app_aws_iot.h); app_console_read_line, app_console_read_text (app_console.h)"
+    api: "app_aws_iot_set_wifi, app_aws_iot_configured, app_aws_iot_owns_wifi (app_aws_iot.h); app_console_read_line (app_console.h)"
     note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: aws-wifi and the setup's Wi-Fi step do not apply."
+  flash: "The flash page asks for the endpoint, thing name, certificate, private key and optional root CA and writes them to the device with the firmware. There is no console command or setter for them: a new identity is a reflash with device data. Wi-Fi comes from aws-setup / aws-wifi (or the transport that owns it)."
+
+# The per-device identity the flash page asks for, written into the fctry
+# partition under zc_aws (see ONBOARDING above). The PEMs are stored as the
+# file's bytes with no NUL; the loader adds one.
+device_data:
+  namespace: zc_aws
+  keys:
+    - key: endpoint
+      encoding: string
+      label: AWS IoT endpoint
+    - key: port
+      encoding: i32
+      default: 8883
+      label: MQTT port
+      required: false
+    - key: thing
+      encoding: string
+      label: Thing name
+    - key: cert
+      type: file
+      encoding: binary
+      label: Device certificate (PEM)
+    - key: key
+      type: file
+      encoding: binary
+      label: Private key (PEM)
+    - key: rootca
+      type: file
+      encoding: binary
+      label: Root CA (PEM)
+      required: false

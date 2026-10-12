@@ -13,7 +13,8 @@
  *   - console onboarding is a COMMAND THE FRAMEWORK SHIPS (aws-setup /
  *     mqtt-setup) over PUBLIC SETTERS, and the storage exists once. Before,
  *     the setters were static, so "the device asks for its credentials" cost a
- *     430-500 line wizard that copied the NVS layout or edited the framework;
+ *     430-500 line wizard that copied the NVS layout or edited the framework.
+ *     aws_iot's identity is device data, so its console onboarding is Wi-Fi;
  *   - the shared-network mqtt variant (Matter/RainMaker owns Wi-Fi) keeps
  *     refusing Wi-Fi — its setter says NOT_SUPPORTED and no mqtt-wifi exists;
  *   - drivers/board_button carries gestures (double click, long press, a hold
@@ -77,27 +78,28 @@ const demo = (instances, frameworks = []) => ({ id: 'demo', name: 'demo', descri
 
 /* ── console onboarding ──────────────────────────────────────────────── */
 
-test('aws_iot ships a guided aws-setup over public setters, and the storage exists once', async (t) => {
+test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its identity has no setter or command', async (t) => {
   const { gen, catalog } = setup(t)
   const read = await gen(await catalog('aws-iot-conn-demo'))
   const header = read('components/app_aws_iot/include/app_aws_iot.h')
-  for (const fn of ['app_aws_iot_set_wifi', 'app_aws_iot_set_endpoint', 'app_aws_iot_set_thing',
-                    'app_aws_iot_set_cert', 'app_aws_iot_set_key', 'app_aws_iot_set_root_ca',
-                    'app_aws_iot_clear_credentials', 'app_aws_iot_configured', 'app_aws_iot_owns_wifi']) {
+  for (const fn of ['app_aws_iot_set_wifi', 'app_aws_iot_configured', 'app_aws_iot_owns_wifi']) {
     assert.match(header, new RegExp(`\\b${fn}\\(`), `app_aws_iot.h declares ${fn}`)
   }
-  // A PEM setter takes NUL-terminated text and no length: strlen() vs
-  // strlen()+1 is the mbedTLS mistake a generated product shipped.
-  assert.match(header, /esp_err_t app_aws_iot_set_cert\(const char \*pem\);/)
+  // The identity is the flashed device data: nothing on the device rewrites it.
+  for (const fn of ['app_aws_iot_set_endpoint', 'app_aws_iot_set_thing', 'app_aws_iot_set_cert',
+                    'app_aws_iot_set_key', 'app_aws_iot_set_root_ca', 'app_aws_iot_clear_credentials']) {
+    assert.ok(!header.includes(fn), `app_aws_iot.h has no ${fn}`)
+  }
   const console = read('components/app_aws_iot/zc_aws_console.cpp')
-  assert.match(console, /"aws-setup"/, 'the guided command is registered')
+  const registered = [...code(console).matchAll(/\{ "(aws-[a-z-]+)",/g)].map((m) => m[1])
+  assert.deepEqual(registered, ['aws-setup', 'aws-wifi', 'aws-status'])
   assert.match(console, /app_console_read_line\(/, 'it reads answers through the shared reader')
   // ONE implementation of the storage: the commands are wrappers.
   assert.ok(!/nvs_(open|set_|erase)/.test(console), 'no NVS access left in the console commands')
   assert.ok(!/fcntl|read\(STDIN_FILENO/.test(console), 'no private stdin reader left in the framework')
   assert.match(read('components/app_aws_iot/CMakeLists.txt'), /"zc_aws_config\.cpp"/)
-  // The last will: a {thing} template substituted at EACH connect (the thing
-  // name is not final until onboarding) and passed to MQTT_Connect; plus the
+  // The last will: a {thing} template substituted at EACH connect and passed
+  // to MQTT_Connect; plus the
   // retained publish its "online" counterpart needs. Three of three writers
   // that reached it hand-added a will to this component before it existed.
   assert.match(header, /esp_err_t app_aws_iot_set_will\(const char \*topic, const char \*payload, uint8_t qos, bool retain\);/)
@@ -226,7 +228,7 @@ test('aws_iot_heartbeat: presence is opt-in — without it, no retained will and
   assert.match(logic, /app_aws_iot_publish\(/, 'the heartbeat itself is unchanged')
 })
 
-test('aws_iot: the connect runs on a snapshot of the config, a config change ends the backoff, and a session that does not hold is backed off', async (t) => {
+test('aws_iot: the connect runs on a snapshot of the config, new Wi-Fi ends the backoff, and a session that does not hold is backed off', async (t) => {
   const { gen, catalog } = setup(t)
   const read = await gen(await catalog('aws-iot-conn-demo'))
   const agent = code(read('components/app_aws_iot/zc_aws_agent.cpp'))
@@ -239,10 +241,10 @@ test('aws_iot: the connect runs on a snapshot of the config, a config change end
   assert.match(agent, /void zc_aws_config_changed\(void\)\s*\{\s*if \(s_task != NULL\) xTaskNotify\(s_task, 1, eSetBits\);/)
   assert.match(agent, /if \(\(xTaskGetTickCount\(\) - started\) >= pdMS_TO_TICKS\(ZC_AWS_STABLE_SESSION_MS\)\) \{\s*BackoffAlgorithm_InitializeParams/)
   const config = code(read('components/app_aws_iot/zc_aws_config.cpp'))
-  assert.match(config, /zc_aws_cfg_lock\(\);\s*zc_aws_load_config\(\);\s*zc_aws_cfg_unlock\(\);\s*zc_aws_config_changed\(\);/)
-  assert.equal((config.match(/zc_aws_config_changed\(\);/g) ?? []).length, 6, 'every setter that changes the config wakes the session')
-  assert.match(config, /mbedtls_platform_zeroize\(g_zc_aws_key, g_zc_aws_key_len\);\s*free\(g_zc_aws_key\);/)
-  assert.match(read('components/app_aws_iot/zc_aws_console.cpp'), /mbedtls_platform_zeroize\(text, len\);\s*free\(text\);/)
+  assert.match(config, /if \(g_zc_aws_wifi_owned\) zc_aws_wifi_reconnect\(\);\s*zc_aws_config_changed\(\);/)
+  // a flashed key that does not parse is wiped before it is freed
+  const main = code(read('components/app_aws_iot/app_aws_iot.cpp'))
+  assert.match(main, /if \(!pem_parses\(key, b, n\)\) \{\s*mbedtls_platform_zeroize\(b, n\);\s*free\(b\);/)
   // the demo stays on a heartbeat-only policy: presence is opt-in
   assert.ok(!code(read('components/app_logic/control.cpp')).includes('app_aws_iot_set_will'))
 })
