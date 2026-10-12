@@ -15,10 +15,16 @@
  * a file the platform accepts.
  */
 
-import type { Block, DeviceDataKey } from './types.js'
+import type { Block, DeviceDataDecl, DeviceDataKey } from './types.js'
 
 export const DEVICE_DATA_FILE = 'device_data.csv'
 export const DEVICE_DATA_PARTITION = 'fctry'
+
+/** Where the product's own keys live (the platform passes the ones its spec
+ *  declares), and the `from` they carry. No block may use the namespace, so a
+ *  host can tell the product's rows from the blocks' in a generated file. */
+export const PRODUCT_DEVICE_DATA_NAMESPACE = 'zc_app'
+export const PRODUCT_DEVICE_DATA_FROM = 'product'
 
 /** NVS keys and namespace names are at most 15 bytes. */
 const NVS_NAME_MAX = 15
@@ -108,6 +114,14 @@ function keyProblems(k: DeviceDataKey): string[] {
 export function checkDeviceDataDecl(block: Block): string[] {
   const decl = block.device_data as unknown
   if (decl === undefined) return []
+  const out = checkDecl(decl)
+  if ((decl as { namespace?: unknown }).namespace === PRODUCT_DEVICE_DATA_NAMESPACE) {
+    out.push(`device_data.namespace '${PRODUCT_DEVICE_DATA_NAMESPACE}' holds the product's own keys — use the block's own`)
+  }
+  return out
+}
+
+function checkDecl(decl: unknown): string[] {
   if (!decl || typeof decl !== 'object' || Array.isArray(decl)) {
     return ['device_data must be a mapping: { namespace, keys }']
   }
@@ -155,24 +169,20 @@ function sameRow(a: DeviceDataRow, b: DeviceDataRow): boolean {
 }
 
 /**
- * Every device data key the given blocks declare, merged into one list in
- * product order with each namespace's keys together (nvs_partition_gen files
- * a row under the most recently opened namespace, so a namespace is opened
- * once). The same key declared identically by two blocks is one row; declared
- * differently, it is an error naming both — they would be reading one value
- * with two meanings.
+ * Every device data key the given blocks declare, then the product's own
+ * (under PRODUCT_DEVICE_DATA_NAMESPACE), merged into one list in product order
+ * with each namespace's keys together (nvs_partition_gen files a row under the
+ * most recently opened namespace, so a namespace is opened once). The same key
+ * declared identically by two blocks is one row; declared differently, it is
+ * an error naming both — they would be reading one value with two meanings.
  */
-export function collectDeviceData(blocks: Array<{ id: string; block: Block }>): { rows: DeviceDataRow[]; errors: string[] } {
+export function collectDeviceData(
+  blocks: Array<{ id: string; block: Block }>,
+  productKeys: DeviceDataKey[] = [],
+): { rows: DeviceDataRow[]; errors: string[] } {
   const errors: string[] = []
   const byNamespace = new Map<string, Map<string, DeviceDataRow>>()
-  for (const { id, block } of blocks) {
-    if (block.device_data === undefined) continue
-    const problems = checkDeviceDataDecl(block)
-    if (problems.length > 0) {
-      errors.push(...problems.map(p => `${id}: ${p}`))
-      continue
-    }
-    const { namespace, keys } = block.device_data
+  const add = (id: string, { namespace, keys }: DeviceDataDecl): void => {
     const rows = byNamespace.get(namespace) ?? new Map<string, DeviceDataRow>()
     byNamespace.set(namespace, rows)
     for (const k of keys) {
@@ -183,9 +193,21 @@ export function collectDeviceData(blocks: Array<{ id: string; block: Block }>): 
       if (sameRow(held, row)) { held.from.push(id); continue }
       errors.push(
         `device data '${namespace}/${k.key}' is declared differently by ${held.from.join(', ')} and ${id} — ` +
-        `blocks sharing a key must declare it identically (type, encoding, default, label, required)`,
+        `a key two declarations share must be declared identically (type, encoding, default, label, required)`,
       )
     }
+  }
+  for (const { id, block } of blocks) {
+    if (block.device_data === undefined) continue
+    const problems = checkDeviceDataDecl(block)
+    if (problems.length > 0) errors.push(...problems.map(p => `${id}: ${p}`))
+    else add(id, block.device_data)
+  }
+  if (productKeys.length > 0) {
+    const product = { namespace: PRODUCT_DEVICE_DATA_NAMESPACE, keys: productKeys }
+    const problems = checkDecl(product)
+    if (problems.length > 0) errors.push(...problems.map(p => `${PRODUCT_DEVICE_DATA_FROM}: ${p}`))
+    else add(PRODUCT_DEVICE_DATA_FROM, product)
   }
   return { rows: [...byNamespace.values()].flatMap(m => [...m.values()]), errors }
 }
@@ -198,7 +220,7 @@ function csvField(v: string): string {
 export function deviceDataCsv(rows: DeviceDataRow[]): string {
   const lines = [
     '# Device data this firmware reads from the fctry partition, generated from the',
-    "# blocks' device_data declarations on every apply. Values stay blank: they are",
+    "# blocks' device_data and the product's own keys. Values stay blank: they are",
     '# entered in the browser at flash time and never stored with the firmware.',
     'key,type,encoding,value,label,required',
   ]

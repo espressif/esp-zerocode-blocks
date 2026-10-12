@@ -34,8 +34,8 @@ function setup(t, localBlocks = {}) {
   }
   const paths = { templatesDir: tpl, baseFirmwareDir: join(ROOT, 'base_firmware'), localBlocksDir: local }
   let n = 0
-  const gen = async (product, outDir = join(root, `out-${n++}`)) => {
-    const result = await eng.generate(paths, { product, board: null, outDir, chip: 'esp32c6' })
+  const gen = async (product, outDir = join(root, `out-${n++}`), deviceData) => {
+    const result = await eng.generate(paths, { product, board: null, outDir, chip: 'esp32c6', ...(deviceData ? { deviceData } : {}) })
     return { result, outDir }
   }
   const validate = async (product) => {
@@ -144,4 +144,48 @@ test('validateBlock refuses a declaration the platform would refuse', () => {
     const errors = check(keys, namespace)
     assert.ok(errors.some((m) => want.test(m)), `${JSON.stringify(keys)} → ${errors.join(' | ') || '(no error)'}`)
   }
+})
+
+test("the product's own keys follow the blocks', under the namespace no block may use", async (t) => {
+  const { gen } = setup(t, {
+    cloud: { device_data: { namespace: 'cloud', keys: [{ key: 'endpoint', encoding: 'string', label: 'Endpoint' }] } },
+  })
+  const product = demo([use('cloud')])
+  const deviceData = [
+    { key: 'owm_key', type: 'data', encoding: 'string', label: 'OpenWeather API key', required: true },
+    { key: 'ca', type: 'file', encoding: 'binary', label: 'Server CA', required: false },
+  ]
+  const outDir = join(mkdtempSync(join(tmpdir(), 'zc-devdata-p-')), 'out')
+  t.after(() => rmSync(dirname(outDir), { recursive: true, force: true }))
+  const result = await gen(product, outDir, deviceData)
+  const body = readFileSync(join(outDir, 'device_data.csv'), 'utf8').split('\n').filter((l) => l && !l.startsWith('#'))
+  assert.deepEqual(body, [
+    'key,type,encoding,value,label,required',
+    'cloud,namespace,,,,',
+    'endpoint,data,string,,Endpoint,yes',
+    'zc_app,namespace,,,,',
+    'owm_key,data,string,,OpenWeather API key,yes',
+    'ca,file,binary,,Server CA,no',
+  ])
+  assert.deepEqual(result.result.deviceData.map((r) => r.from), [['local/cloud'], ['product'], ['product']])
+
+  // With no block declaring anything, the product's keys alone make the file.
+  const alone = await gen(demo([]), undefined, deviceData)
+  assert.deepEqual(alone.result.deviceData.map((r) => `${r.namespace}/${r.key}`), ['zc_app/owm_key', 'zc_app/ca'])
+})
+
+test("an invalid product key stops generation before the tree is touched", async (t) => {
+  const { gen, root } = setup(t)
+  const outDir = join(root, 'existing-tree')
+  mkdirSync(outDir)
+  writeFileSync(join(outDir, 'keep'), '')
+  await assert.rejects(gen(demo([]), outDir, [{ key: 'k', type: 'file', encoding: 'binary', default: 'x' }]),
+    /product: device_data key 'k': a file key takes no default/)
+  assert.ok(existsSync(join(outDir, 'keep')))
+})
+
+test("a block may not declare keys in the product's namespace", () => {
+  const errors = eng.validateBlock({ id: 'x', kind: 'behavior', device_data: { namespace: 'zc_app', keys: [{ key: 'k', encoding: 'string' }] } })
+    .errors.map((e) => e.message)
+  assert.ok(errors.some((m) => /'zc_app' holds the product's own keys/.test(m)), errors.join('\n'))
 })

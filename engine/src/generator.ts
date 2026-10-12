@@ -17,6 +17,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import {
   type Block,
   type BoardFile,
+  type DeviceDataKey,
   type Product,
   type RenderedInstance,
   type ValueType,
@@ -86,14 +87,18 @@ export interface GenerateInput {
    *  only this chip's sdkconfig block is merged into sdkconfig.defaults. Must be
    *  a CHIP_MODULES target; when a board is given, must agree with its `chip`. */
   chip: string
+  /** The product's own device data keys, beside the ones its blocks declare —
+   *  the platform passes those its spec declares. Written to device_data.csv
+   *  under PRODUCT_DEVICE_DATA_NAMESPACE. */
+  deviceData?: DeviceDataKey[]
 }
 
 export interface GenerateResult {
   productId: string
   outDir: string
   blocks: string[]
-  /** The device data the tree's blocks declare, as written to
-   *  `device_data.csv`; empty when none do and no file was written. */
+  /** The device data written to `device_data.csv` — the blocks' keys, then
+   *  the product's own; empty when there are none and no file was written. */
   deviceData: DeviceDataRow[]
 }
 
@@ -172,7 +177,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   // that a product with no board definition and one with it differ only there.
   const boardExtras: RenderedInstance[] = bmgrBoard ? [boardRendered(bmgrBoard, boardFacts)] : []
 
-  const deviceData = collectDeviceData(rendered.map(r => ({ id: r.block.id, block: r.block })))
+  const deviceData = collectDeviceData(rendered.map(r => ({ id: r.block.id, block: r.block })), input.deviceData)
   if (deviceData.errors.length > 0) {
     throw new Error(`product '${product.id}' has invalid device data declarations:\n  - ${deviceData.errors.join('\n  - ')}`)
   }
