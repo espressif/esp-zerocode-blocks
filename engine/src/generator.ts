@@ -101,8 +101,10 @@ export interface GenerateResult {
    *  the product's own; empty when there are none and no file was written. */
   deviceData: DeviceDataRow[]
   /** Non-fatal, and meant to be read: an instance a `bmgr.requires` guard kept
-   *  out of the board manager (it generated with its own init instead). */
-  warnings: string[]
+   *  out of the board manager (it generated with its own init instead).
+   *  Present only when there is one — this object is the apply_template
+   *  result the writer reads, and an empty list on every product is noise. */
+  warnings?: string[]
 }
 
 /** A block with `target: <chip>` applies ONLY when generating for that chip; a
@@ -745,12 +747,13 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   )
   await fs.writeFile(path.join(outDir, 'main/idf_component.yml'), mergedYml)
 
+  const warnings = rendered.filter(r => r.bmgrFallback).map(r => r.bmgrFallback!)
   return {
     productId: product.id,
     outDir,
     blocks: product.instances.map(i => i.block),
     deviceData: deviceData.rows,
-    warnings: rendered.filter(r => r.bmgrFallback).map(r => r.bmgrFallback!),
+    ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
 

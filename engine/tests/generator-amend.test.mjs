@@ -293,7 +293,7 @@ test('a block with no mapping keeps its init even on a board product', async (t)
 test('an ACTIVE-LOW output generates with its own init and a warning that carries the author\'s reason', async (t) => {
   const { paths, outDir } = scaffold(t)
   const r = await generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: 0 })] }), outDir })
-  assert.equal(r.warnings.length, 1)
+  assert.equal(r.warnings?.length, 1)
   assert.match(r.warnings[0], /drivers\/fx_relay \(prefix=APP\)/)     // which instance
   assert.match(r.warnings[0], /cfg\.active_level is 0/)                // what it said
   assert.match(r.warnings[0], /only declared valid for 1/)             // what was allowed
@@ -310,7 +310,7 @@ test('the guard passes on the value it vouches for, including as a string', asyn
   // YAML types vary by author: `active_level: "1"` is the same answer.
   const r = await generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: '1' })] }), outDir })
   assert.ok(existsSync(amendFiles(outDir).fragment))
-  assert.deepEqual(r.warnings, [])
+  assert.equal(r.warnings, undefined, 'no warnings key when every guard holds')
 })
 
 test('a safe instance still goes to the board manager beside one that fell back', async (t) => {
@@ -321,7 +321,7 @@ test('a safe instance still goes to the board manager beside one that fell back'
     }),
     outDir,
   })
-  assert.equal(r.warnings.length, 1)
+  assert.equal(r.warnings?.length, 1)
   assert.match(r.warnings[0], /prefix=AUX/)
   const fragment = readFileSync(amendFiles(outDir).fragment, 'utf-8')
   assert.ok(fragment.includes('gpio_app_relay'), 'the safe instance is in the amend')

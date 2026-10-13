@@ -52,13 +52,17 @@ export const DIR_TO_BLOCK_KIND: Record<string, BlockKind> = Object.fromEntries(
 
 /** One guard on a block's bmgr mapping.
  *
- *  A guard is a HARD gate, not a filter: a block declares the configurations
- *  its mapping is valid for, and an instance outside them FAILS generation
- *  with `reason` printed verbatim. That direction is deliberate. The mapping
- *  hands a physical line to code the block author did not write; the failure
- *  mode of getting it wrong is hardware doing something at boot (see the
- *  active-low note on drivers/relay), and a mapping that silently declined
- *  itself would look exactly like a block with no `bmgr:` at all. */
+ *  A block declares the configurations its mapping is valid for; an instance
+ *  outside them is NOT handed to the board manager — it keeps the block's own
+ *  init, exactly as on a board-less product, and `reason` is reported
+ *  verbatim in `GenerateResult.warnings`. (It used to fail the whole
+ *  generation; writers answered that by resending the same yaml and then
+ *  hand-wiring the part.) The mapping hands a physical line to code the block
+ *  author did not write, and the failure mode of getting it wrong is hardware
+ *  doing something at boot (see the active-low note on drivers/relay) — so the
+ *  block's own init is the safe side to fall to, but never silently: a mapping
+ *  that declined itself without a word would look exactly like a block with no
+ *  `bmgr:` at all. */
 export interface BmgrGuard {
   /** cfg key whose value is checked (after block defaults are applied). */
   cfg: string
