@@ -100,6 +100,11 @@ export interface GenerateResult {
   /** The device data written to `device_data.csv` — the blocks' keys, then
    *  the product's own; empty when there are none and no file was written. */
   deviceData: DeviceDataRow[]
+  /** Non-fatal, and meant to be read: an instance a `bmgr.requires` guard kept
+   *  out of the board manager (it generated with its own init instead).
+   *  Present only when there is one — this object is the apply_template
+   *  result the writer reads, and an empty list on every product is noise. */
+  warnings?: string[]
 }
 
 /** A block with `target: <chip>` applies ONLY when generating for that chip; a
@@ -742,11 +747,13 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   )
   await fs.writeFile(path.join(outDir, 'main/idf_component.yml'), mergedYml)
 
+  const warnings = rendered.filter(r => r.bmgrFallback).map(r => r.bmgrFallback!)
   return {
     productId: product.id,
     outDir,
     blocks: product.instances.map(i => i.block),
     deviceData: deviceData.rows,
+    ...(warnings.length > 0 ? { warnings } : {}),
   }
 }
 
@@ -857,9 +864,19 @@ async function renderInstances(
     // again (they did: the generator stepped a display aside while the
     // validator reported its pins as an 11-line conflict wall).
     const providedBy = block.bmgr?.provided_by
+    // A `bmgr.requires` guard that fails keeps the instance OUT of the board
+    // manager: it generates exactly as it does on a board-less product, with
+    // its own init, and the miss is reported in GenerateResult.warnings. It
+    // used to refuse the whole composition; writers answered the refusal by
+    // resending the same yaml (ten times, one run) and then hand-wiring the
+    // relays, which is the one outcome worse than either path (2026-10-13).
+    const guardMiss = bmgrBoard && block.bmgr?.init === 'board_manager'
+      ? bmgrGuardMiss(block, cfg, `${block.id}${inst.prefix ? ` (prefix=${inst.prefix})` : ''}`, bmgrBoard)
+      : null
     const boardOwns =
       !!bmgrBoard &&
       block.bmgr?.init === 'board_manager' &&
+      !guardMiss &&
       (providedBy === undefined || boardTakesOver(block, boardFacts?.devices ?? []))
     // AN ADAPTER FOR HARDWARE THE BOARD ALREADY OWNS. `device_param` names the
     // cfg key holding a board DEVICE NAME; the block drives that device
@@ -907,7 +924,7 @@ async function renderInstances(
       if (replaced.has(slot)) continue
       slots[slot] = substitute(body, ctx)
     }
-    out.push({ block, prefix: inst.prefix, cfg, slots, replacedSlots: [...replaced] })
+    out.push({ block, prefix: inst.prefix, cfg, slots, replacedSlots: [...replaced], ...(guardMiss ? { bmgrFallback: guardMiss } : {}) })
   }
   return out
 }
@@ -4560,6 +4577,32 @@ function substituteValue(node: unknown, ctx: Record<string, unknown>): unknown {
  *  not write, so "this instance is outside what I vouched for" has to stop the
  *  build, not quietly produce a tree that looks like the block never had a
  *  mapping. */
+/** The first failed `bmgr.requires` guard of `block` for this instance's
+ *  `cfg`, as the message the writer sees — or null when every guard holds.
+ *  A malformed guard (no cfg/equals/reason, or a cfg the block does not
+ *  declare) is a block-author error and throws, as it always did. */
+export function bmgrGuardMiss(block: Block, cfg: Record<string, unknown>, where: string, bmgrBoard: string): string | null {
+  for (const guard of block.bmgr?.requires ?? []) {
+    if (!guard || typeof guard.cfg !== 'string' || guard.reason === undefined) {
+      throw new Error(`block ${block.id}: each bmgr.requires entry needs 'cfg', 'equals' and 'reason'`)
+    }
+    if (!(guard.cfg in (block.params ?? {}))) {
+      // A guard on a param that does not exist always "passes" by accident.
+      throw new Error(`block ${block.id}: bmgr.requires guards cfg.${guard.cfg}, which the block does not declare`)
+    }
+    const actual = cfg[guard.cfg]
+    if (String(actual) !== String(guard.equals)) {
+      return (
+        `${where} was not handed to the board manager on '${bmgrBoard}': cfg.${guard.cfg} is ` +
+        `${JSON.stringify(actual)}, and the block's bmgr mapping is only declared valid for ${JSON.stringify(guard.equals)}. ` +
+        `It generated with the block's own init instead (the pin is not in the board's occupied-IO list). ` +
+        `Reason: ${String(guard.reason).trim()}`
+      )
+    }
+  }
+  return null
+}
+
 export function buildBoardAmend(
   product: Product,
   rendered: RenderedInstance[],
@@ -4600,26 +4643,9 @@ export function buildBoardAmend(
       )
     }
 
-    for (const guard of map.requires ?? []) {
-      if (!guard || typeof guard.cfg !== 'string' || guard.reason === undefined) {
-        throw new Error(`block ${r.block.id}: each bmgr.requires entry needs 'cfg', 'equals' and 'reason'`)
-      }
-      if (!(guard.cfg in (r.block.params ?? {}))) {
-        // A guard on a param that does not exist always "passes" by accident.
-        throw new Error(`block ${r.block.id}: bmgr.requires guards cfg.${guard.cfg}, which the block does not declare`)
-      }
-      const actual = r.cfg[guard.cfg]
-      if (String(actual) !== String(guard.equals)) {
-        throw new Error(
-          `product '${product.id}': ${where} cannot be handed to the board manager — ` +
-          `cfg.${guard.cfg} is ${JSON.stringify(actual)}, and the block's bmgr mapping is only ` +
-          `declared valid for ${JSON.stringify(guard.equals)}.\n` +
-          `  Reason: ${guard.reason}\n` +
-          `  Fix: use a configuration the block vouches for, or clear bmgr.board ('${bmgrBoard}') ` +
-          `in this instance's board.yaml, so the block keeps its own initialization.`,
-        )
-      }
-    }
+    // Guards were judged at render time (bmgrGuardMiss); a failed one means
+    // this instance kept its own init and contributes nothing to the amend.
+    if (r.bmgrFallback) continue
 
     const ctx = { cfg: r.cfg, prefix: r.prefix, prefix_lc: r.prefix.toLowerCase() }
     for (const [kind, list, sink] of [

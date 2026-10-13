@@ -288,44 +288,44 @@ test('a block with no mapping keeps its init even on a board product', async (t)
   assert.ok(!driver.includes('BLOCK-OWNED INIT'))
 })
 
-/* ── 4. guards are a hard gate ───────────────────────────────────────── */
+/* ── 4. guards keep an instance OUT of the board manager, loudly ─────── */
 
-test('an ACTIVE-LOW output is refused, loudly, with the block author\'s reason', async (t) => {
+test('an ACTIVE-LOW output generates with its own init and a warning that carries the author\'s reason', async (t) => {
   const { paths, outDir } = scaffold(t)
-  await assert.rejects(
-    generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: 0 })] }), outDir }),
-    (e) => {
-      assert.match(e.message, /drivers\/fx_relay \(prefix=APP\)/)   // which instance
-      assert.match(e.message, /cfg\.active_level is 0/)              // what it said
-      assert.match(e.message, /only declared valid for 1/)           // what was allowed
-      assert.match(e.message, /before it writes default_level/)      // WHY — the author's words
-      assert.match(e.message, /clear bmgr\.board \('fx_board'\)/)     // what to do
-      return true
-    },
-  )
+  const r = await generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: 0 })] }), outDir })
+  assert.equal(r.warnings?.length, 1)
+  assert.match(r.warnings[0], /drivers\/fx_relay \(prefix=APP\)/)     // which instance
+  assert.match(r.warnings[0], /cfg\.active_level is 0/)                // what it said
+  assert.match(r.warnings[0], /only declared valid for 1/)             // what was allowed
+  assert.match(r.warnings[0], /before it writes default_level/)        // WHY — the author's words
+  assert.match(r.warnings[0], /own init/)                              // what happened instead
+  // The block's own init is in the tree; the board manager got nothing for it.
+  const driver = readFileSync(join(outDir, 'components/app_driver/app_driver.cpp'), 'utf-8')
+  assert.ok(driver.includes('BLOCK-OWNED INIT'))
+  assert.equal(existsSync(join(outDir, AMEND_DIR)), false, 'the only instance fell back: no amend at all')
 })
 
 test('the guard passes on the value it vouches for, including as a string', async (t) => {
   const { paths, outDir } = scaffold(t)
   // YAML types vary by author: `active_level: "1"` is the same answer.
-  await generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: '1' })] }), outDir })
+  const r = await generate(paths, { ...onBoard({ instances: [relayInstance({ active_level: '1' })] }), outDir })
   assert.ok(existsSync(amendFiles(outDir).fragment))
+  assert.equal(r.warnings, undefined, 'no warnings key when every guard holds')
 })
 
-test('an unsafe instance is refused rather than silently left out of the amend', async (t) => {
+test('a safe instance still goes to the board manager beside one that fell back', async (t) => {
   const { paths, outDir } = scaffold(t)
-  // Two instances, one safe: the safe one must NOT be quietly generated on its
-  // own. A partial amend looks exactly like a correct one.
-  await assert.rejects(
-    generate(paths, {
-      ...onBoard({
-        instances: [relayInstance(), { block: 'drivers/fx_relay', prefix: 'AUX', cfg: { gpio: 11, active_level: 0 } }],
-      }),
-      outDir,
+  const r = await generate(paths, {
+    ...onBoard({
+      instances: [relayInstance(), { block: 'drivers/fx_relay', prefix: 'AUX', cfg: { gpio: 11, active_level: 0 } }],
     }),
-    /prefix=AUX/,
-  )
-  assert.equal(existsSync(join(outDir, AMEND_DIR)), false, 'nothing is left behind by a refused generation')
+    outDir,
+  })
+  assert.equal(r.warnings?.length, 1)
+  assert.match(r.warnings[0], /prefix=AUX/)
+  const fragment = readFileSync(amendFiles(outDir).fragment, 'utf-8')
+  assert.ok(fragment.includes('gpio_app_relay'), 'the safe instance is in the amend')
+  assert.ok(!fragment.includes('gpio_aux_relay'), 'the fallen-back instance is not')
 })
 
 test('a guard is only skipped when the product has no board at all', async (t) => {

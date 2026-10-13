@@ -422,10 +422,10 @@ bmgr:
   init: board_manager        # required word: who owns the hardware at boot
   replaces_slots: [driver_init]   # dropped when a board owns the line — ONE owner
   provided_by: display_lcd   # …but ONLY on a board that already HAS this
-  requires:                  # hard gates; an instance outside them FAILS
+  requires:                  # an instance outside them keeps its OWN init + a warning
     - cfg: active_level
       equals: 1
-      reason: <printed verbatim as the error>
+      reason: <printed verbatim in GenerateResult.warnings>
   peripherals:
     - name: gpio_{{prefix_lc}}_relay
       type: gpio
