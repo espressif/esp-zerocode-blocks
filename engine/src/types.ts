@@ -419,4 +419,9 @@ export interface RenderedInstance {
    *  carries the device) — dropped from `slots`, named here so the generated
    *  code can say where that init went instead of silently having none. */
   replacedSlots?: string[]
+  /** Set when the instance has a bmgr mapping but one of its `bmgr.requires`
+   *  guards failed: the board manager does NOT take it over — it keeps its own
+   *  init (the shape the guard exists to protect) and the generator reports
+   *  this in `warnings`. The text is the guard's reason, for the writer. */
+  bmgrFallback?: string
 }
