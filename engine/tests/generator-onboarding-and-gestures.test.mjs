@@ -92,7 +92,14 @@ test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its ident
   }
   const console = read('components/app_aws_iot/zc_aws_console.cpp')
   const registered = [...code(console).matchAll(/\{ "(aws-[a-z-]+)",/g)].map((m) => m[1])
-  assert.deepEqual(registered, ['aws-setup', 'aws-wifi', 'aws-status'])
+  assert.deepEqual(registered, ['aws-setup', 'aws-wifi', 'aws-status', 'aws-inject'])
+  // aws-inject is the bench's broker: it hands a (topic, payload) to the same
+  // dispatcher a PUBLISH from AWS reaches, so a command handler can be driven on
+  // the emulator with no session (2026-10-16: every command feature of an
+  // aws_iot product was shipping "unverified").
+  assert.match(console, /static int aws_inject_cmd\(int argc, char \*\*argv\)/)
+  assert.match(console, /zc_aws_subs_dispatch\(&pub\)/)
+  assert.ok(!/MQTTAgent_|app_aws_iot_publish\(/.test(console.slice(console.indexOf('aws_inject_cmd'))), 'inject never touches the session')
   assert.match(console, /app_console_read_line\(/, 'it reads answers through the shared reader')
   // ONE implementation of the storage: the commands are wrappers.
   assert.ok(!/nvs_(open|set_|erase)/.test(console), 'no NVS access left in the console commands')

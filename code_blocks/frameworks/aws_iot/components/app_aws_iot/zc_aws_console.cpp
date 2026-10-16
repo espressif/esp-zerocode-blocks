@@ -16,6 +16,7 @@
 #include "zc_aws_internal.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <freertos/FreeRTOS.h>
@@ -46,6 +47,67 @@ static int aws_status_cmd(int argc, char **argv)
         if (!zc_aws_subs_get(i, &f, &len, &qos)) break;
         printf("  qos%u  %.*s\n", (unsigned)qos, (int)len, f);
     }
+    return 0;
+}
+
+/* ── aws-inject: deliver a message to the device's own subscribers ────────
+ *
+ * The bench has no broker. On the pipeline's emulator and on a desk with no
+ * AWS account yet, everything a product does WITH a message — parse the JSON,
+ * apply it, publish the state echo — was unverifiable, so functional testing
+ * recorded every command feature as "unverified" and shipped it untested
+ * (aws-desk-light-mvalkxvy, 2026-10-16: the one path the product exists for).
+ *
+ * This hands a (topic, payload) pair to zc_aws_subs_dispatch exactly as a
+ * PUBLISH from the broker would arrive: the same filter matching, the same
+ * callbacks, the same non-NUL-terminated payload of a known length. It never
+ * touches the session, so it works disconnected and before onboarding. What
+ * the handler then publishes goes out through app_aws_iot_publish as usual —
+ * offline that is a logged refusal, which is itself the observable.
+ *
+ * Quote a JSON payload so the console keeps it as ONE argument:
+ *     aws-inject desk-light/cmd '{"power":"on","brightness":70}'
+ * Unquoted, the console splits on spaces; the pieces are re-joined with single
+ * spaces, which is fine for JSON but not for a payload whose spaces matter. */
+static int aws_inject_cmd(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: aws-inject <topic> <payload>   (quote a JSON payload)\n");
+        return 1;
+    }
+    const char *topic = argv[1];
+    size_t topic_len = strlen(topic);
+    if (topic_len == 0 || topic_len > UINT16_MAX) {
+        printf("aws-inject: bad topic\n");
+        return 1;
+    }
+    /* Re-join argv[2..] — a payload the console split on spaces. */
+    size_t len = 0;
+    for (int i = 2; i < argc; i++) len += strlen(argv[i]) + (i > 2 ? 1 : 0);
+    char *payload = (char *)malloc(len + 1);
+    if (payload == NULL) {
+        printf("aws-inject: out of memory\n");
+        return 1;
+    }
+    size_t off = 0;
+    for (int i = 2; i < argc; i++) {
+        if (i > 2) payload[off++] = ' ';
+        size_t n = strlen(argv[i]);
+        memcpy(payload + off, argv[i], n);
+        off += n;
+    }
+    payload[off] = '\0';
+
+    MQTTPublishInfo_t pub = {};
+    pub.qos = MQTTQoS0;
+    pub.pTopicName = topic;
+    pub.topicNameLength = (uint16_t)topic_len;
+    pub.pPayload = payload;
+    pub.payloadLength = off;
+    printf("aws-inject: %s <- %u bytes (%u subscriber%s registered)\n", topic, (unsigned)off,
+           (unsigned)zc_aws_subs_count(), zc_aws_subs_count() == 1 ? "" : "s");
+    zc_aws_subs_dispatch(&pub);
+    free(payload);
     return 0;
 }
 
@@ -150,6 +212,9 @@ void zc_aws_console_register(void)
           "Set Wi-Fi credentials: aws-wifi <ssid> <password>",              &aws_wifi_cmd        },
         { "aws-status",
           "Show AWS IoT config, network and session state, and subscriptions", &aws_status_cmd   },
+        { "aws-inject",
+          "Deliver a message to this device's own subscribers, as if the broker sent it: "
+          "aws-inject <topic> <payload> (quote JSON). Works offline.",          &aws_inject_cmd   },
     };
 
     for (const auto &c : cmds) {
