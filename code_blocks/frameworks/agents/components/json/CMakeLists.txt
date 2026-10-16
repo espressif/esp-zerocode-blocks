@@ -10,7 +10,12 @@
 # purpose: the point is to put cJSON's headers on the path of whatever requires
 # `json`.
 #
-# Delete this the day esp-agents-firmware declares espressif/cjson itself. It is
+# cJSON is DEPRECATED upstream (2026-10: unmaintained, open security reports;
+# the native espressif/json_parser + json_generator replace it everywhere else
+# in this catalog). This shim is the LAST cJSON user we ship, and only because
+# the SDK's own sources call cJSON_*; the fix is upstream, not here.
+#
+# Delete this the day esp-agents-firmware moves off cJSON (or declares it). It is
 # scoped to the agents framework block, so it shadows nothing in a product that
 # does not use agents.
 idf_component_register(REQUIRES espressif__cjson)

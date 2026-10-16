@@ -15,6 +15,15 @@
 ## coreJSON and Device-Shadow are NOT here either, for a different reason: they
 ## are payload concerns, and payloads are not this block's business. Each is one
 ## entry away for whatever block needs it.
+##
+## json_parser + json_generator ARE here, and that is not a contradiction: the
+## block still has no opinion about what a payload MEANS, but every AWS IoT
+## payload is JSON, and a product with no JSON library on its path wrote one in.
+## 24 of the 31 fleet products that pulled cJSON in on their own were aws_iot
+## products (2026-10). cJSON is deprecated upstream (unmaintained, open security
+## reports; Espressif's native pair is RFC 8259 since 2.0.0 and ESP-IDF's own
+## examples moved in esp-idf!53331), so the path carries the native pair and
+## behaviors/aws_iot_heartbeat shows both directions in use.
 dependencies:
   coreMQTT-Agent:
     git: https://github.com/espressif/esp-aws-iot.git
@@ -28,3 +37,5 @@ dependencies:
     git: https://github.com/espressif/esp-aws-iot.git
     path: libraries/common/posix_compat
     version: 9c879feedb699611e7c220b93aed84c84322ff84
+  espressif/json_parser: "^2.0.0"
+  espressif/json_generator: "^2.0.0"

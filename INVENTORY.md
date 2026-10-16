@@ -222,7 +222,7 @@ flash size never drift. 16MB S3 boards only.
 `mqtt-color-light` — first HA **JSON-schema** light: plain-topic lights
 carry state and brightness on separate topics and cannot express colour,
 so color_light's mqtt binding publishes ONE retained payload with state +
-brightness + hs colour and parses commands with cJSON (no value_template —
+brightness + hs colour and parses commands with json_parser (no value_template —
 jinja braces collide with the slot engine). Driver hue/sat are Matter units
 (0-254); both conversion directions round, or HA sends h240/s80 and gets
 back h239/s79. VERIFIED on the emu+mosquitto rig: discovery, retained

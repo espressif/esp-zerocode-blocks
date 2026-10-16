@@ -414,7 +414,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
         `idf_component_register(
     SRCS "app_mqtt.cpp"
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES espressif__mqtt espressif__cjson esp_wifi esp_netif esp_event nvs_flash app_driver app_config app_console console
+    PRIV_REQUIRES espressif__mqtt espressif__json_parser esp_wifi esp_netif esp_event nvs_flash app_driver app_config app_console console
 )
 `,
       )
