@@ -16,9 +16,11 @@
 #include "zc_aws_internal.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include <esp_console.h>
@@ -46,6 +48,104 @@ static int aws_status_cmd(int argc, char **argv)
         if (!zc_aws_subs_get(i, &f, &len, &qos)) break;
         printf("  qos%u  %.*s\n", (unsigned)qos, (int)len, f);
     }
+    return 0;
+}
+
+/* ── aws-inject: deliver a message to the device's own subscribers ────────
+ *
+ * The bench has no broker. On the pipeline's emulator and on a desk with no
+ * AWS account yet, everything a product does WITH a message — parse the JSON,
+ * apply it, publish the state echo — was unverifiable, so functional testing
+ * recorded every command feature as "unverified" and shipped it untested.
+ *
+ * This hands a (topic, payload) pair to zc_aws_subs_dispatch exactly as a
+ * PUBLISH from the broker would arrive: the same filter matching, the same
+ * callbacks, the same non-NUL-terminated payload of a known length, on a task
+ * with the session task's stack (the console's is half that, and a handler
+ * that fits the real delivery must not overflow here and read as a crash). It
+ * never touches the session, so it works disconnected and before onboarding.
+ * What the handler then publishes goes out through app_aws_iot_publish as
+ * usual — offline that is a logged refusal, which is itself the observable.
+ *
+ * Type the JSON as it is, with no quotes around it:
+ *     aws-inject desk-light/cmd {"power":"on","brightness":70}
+ * The console treats a double quote as quoting only at the START of an
+ * argument, so the quotes inside the JSON are kept; wrapping the whole payload
+ * in double quotes would cut it at the first inner one. Shell habit puts single
+ * quotes around it instead; the console keeps those, so one surrounding pair is
+ * removed here. A payload the console split on spaces is re-joined with single
+ * spaces, which is fine for JSON. */
+struct zc_aws_inject_job {
+    MQTTPublishInfo_t pub;
+    SemaphoreHandle_t done;
+    size_t hits;
+};
+
+static void aws_inject_task(void *arg)
+{
+    zc_aws_inject_job *job = (zc_aws_inject_job *)arg;
+    job->hits = zc_aws_subs_dispatch(&job->pub);
+    xSemaphoreGive(job->done);
+    vTaskDelete(NULL);
+}
+
+static int aws_inject_cmd(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("usage: aws-inject <topic> <payload>   (type the JSON as it is, no quotes)\n");
+        return 1;
+    }
+    const char *topic = argv[1];
+    size_t topic_len = strlen(topic);
+    if (topic_len == 0 || topic_len > UINT16_MAX) {
+        printf("aws-inject: bad topic\n");
+        return 1;
+    }
+    /* Re-join argv[2..] — a payload the console split on spaces. */
+    size_t len = 0;
+    for (int i = 2; i < argc; i++) len += strlen(argv[i]) + (i > 2 ? 1 : 0);
+    char *payload = (char *)malloc(len + 1);
+    if (payload == NULL) {
+        printf("aws-inject: out of memory\n");
+        return 1;
+    }
+    size_t off = 0;
+    for (int i = 2; i < argc; i++) {
+        if (i > 2) payload[off++] = ' ';
+        size_t n = strlen(argv[i]);
+        memcpy(payload + off, argv[i], n);
+        off += n;
+    }
+    payload[off] = '\0';
+    const char *body = payload;
+    if (off >= 2 && payload[0] == '\'' && payload[off - 1] == '\'') {
+        body = payload + 1;
+        off -= 2;
+    }
+
+    zc_aws_inject_job job = {};
+    job.pub.qos = MQTTQoS0;
+    job.pub.pTopicName = topic;
+    job.pub.topicNameLength = (uint16_t)topic_len;
+    job.pub.pPayload = body;
+    job.pub.payloadLength = off;
+    job.done = xSemaphoreCreateBinary();
+    printf("aws-inject: %s <- %u bytes\n", topic, (unsigned)off);
+    if (job.done != NULL
+        && xTaskCreate(aws_inject_task, "aws_inject", ZC_AWS_TASK_STACK, &job, 5, NULL) == pdPASS) {
+        xSemaphoreTake(job.done, portMAX_DELAY);
+    } else {
+        /* No memory for a task: deliver here rather than not at all. */
+        job.hits = zc_aws_subs_dispatch(&job.pub);
+    }
+    if (job.done != NULL) vSemaphoreDelete(job.done);
+    free(payload);
+    if (job.hits == 0) {
+        printf("aws-inject: no subscription matches %s (%u registered; aws-status lists them)\n",
+               topic, (unsigned)zc_aws_subs_count());
+        return 1;
+    }
+    printf("aws-inject: delivered to %u subscriber%s\n", (unsigned)job.hits, job.hits == 1 ? "" : "s");
     return 0;
 }
 
@@ -150,6 +250,9 @@ void zc_aws_console_register(void)
           "Set Wi-Fi credentials: aws-wifi <ssid> <password>",              &aws_wifi_cmd        },
         { "aws-status",
           "Show AWS IoT config, network and session state, and subscriptions", &aws_status_cmd   },
+        { "aws-inject",
+          "Deliver a message to this device's own subscribers, as if the broker sent it: "
+          "aws-inject <topic> <json> (type the JSON as it is, no quotes). Works offline.",          &aws_inject_cmd   },
     };
 
     for (const auto &c : cmds) {

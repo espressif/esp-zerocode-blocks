@@ -63,6 +63,13 @@ radio: true
 #     aws-setup                      GUIDED: asks for the network and password
 #     aws-wifi <ssid> <password>
 #     aws-status
+#     aws-inject <topic> <payload>   TESTING: delivers the message to this
+#                                    device's own subscribers as if the broker
+#                                    had sent it — no session needed. The one way
+#                                    to exercise a command handler (JSON parse,
+#                                    apply, state echo) on the emulator or a
+#                                    bench with no AWS account yet. Type
+#                                    the JSON as it is, no quotes around it.
 # Boot without config MUST still reach "ZeroCode AI firmware started" (the
 # framework logs "not configured" and idles — never blocks app_main), which is
 # also what lets CI build a product for this framework with no AWS account.
@@ -95,6 +102,7 @@ onboarding:
     commands:
       - "aws-wifi <ssid> <password>"
       - "aws-status"
+      - "aws-inject <topic> <payload> (testing: delivers the message to the device's own subscribers as if the broker sent it; works offline. Type the JSON as it is, with no quotes around it: aws-inject <topic> {\"power\":\"on\"}. It says how many subscribers it reached.)"
     api: "app_aws_iot_set_wifi, app_aws_iot_configured, app_aws_iot_owns_wifi (app_aws_iot.h); app_console_read_line (app_console.h)"
     note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: aws-wifi and the setup's Wi-Fi step do not apply."
   flash: "The flash page asks for the endpoint, thing name, certificate, private key and optional root CA and writes them to the device with the firmware. There is no console command or setter for them: a new identity is a reflash with device data. Wi-Fi comes from aws-setup / aws-wifi (or the transport that owns it)."

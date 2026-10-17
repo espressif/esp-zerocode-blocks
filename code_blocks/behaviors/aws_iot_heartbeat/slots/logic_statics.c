@@ -1,8 +1,8 @@
 static char s_{{prefix_lc}}_hb_topic[128] = {0};
 static char s_{{prefix_lc}}_cmd_topic[128] = {0};
 
-/* Runs on the AWS session task. Keep it short — it is the same task that drives
- * the MQTT command loop. */
+/* Runs on the AWS session task (or aws-inject's task of the same size). Keep
+ * it short — it is the same task that drives the MQTT command loop. */
 static void {{prefix_lc}}_on_cmd(const char *topic, uint16_t topic_len,
                                  const void *payload, size_t len, void *ctx)
 {
@@ -32,38 +32,33 @@ static void {{prefix_lc}}_on_cmd(const char *topic, uint16_t topic_len,
     json_parse_end(&jctx);
 }
 
-/* Topics are built HERE, on every connect, from the thing name that connect
- * uses: two snprintf calls, and never a topic for a name the session is not
- * using. */
+/* Topics are built ONCE, at init, from the thing name — final by the time any
+ * logic_init slot runs (app_aws_iot.h) — and the command topic is subscribed
+ * there too. app_aws_iot_subscribe is declarative: registered before the
+ * session exists, it is sent at connect and re-sent after every reconnect, so
+ * there is nothing to do per connect. Registering at init is also what lets
+ * `aws-inject` reach the handler on a device that has never connected (the
+ * emulator, a bench with no AWS account). */
+static void {{prefix_lc}}_build_topics(void)
+{
+    const char *thing = app_aws_iot_thing_name();
+    snprintf(s_{{prefix_lc}}_hb_topic, sizeof(s_{{prefix_lc}}_hb_topic),
+             "%s/%s/heartbeat", {{prefix}}_TOPIC_PREFIX, thing);
+    snprintf(s_{{prefix_lc}}_cmd_topic, sizeof(s_{{prefix_lc}}_cmd_topic),
+             "%s/%s/cmd", {{prefix}}_TOPIC_PREFIX, thing);
+}
+
 static void {{prefix_lc}}_on_connected(void *arg, esp_event_base_t base,
                                        int32_t id, void *data)
 {
     (void)arg; (void)base; (void)id; (void)data;
-
-    char hb[128], cmd[128];
-    const char *thing = app_aws_iot_thing_name();
-    snprintf(hb, sizeof(hb), "%s/%s/heartbeat", {{prefix}}_TOPIC_PREFIX, thing);
-    snprintf(cmd, sizeof(cmd), "%s/%s/cmd", {{prefix}}_TOPIC_PREFIX, thing);
-
-    bool changed = strcmp(cmd, s_{{prefix_lc}}_cmd_topic) != 0;
-    strlcpy(s_{{prefix_lc}}_hb_topic, hb, sizeof(s_{{prefix_lc}}_hb_topic));
-    strlcpy(s_{{prefix_lc}}_cmd_topic, cmd, sizeof(s_{{prefix_lc}}_cmd_topic));
-
-    /* Only on a change: the framework replays existing registrations itself, so
-     * re-sending an unchanged filter on every reconnect is pure duplicate. */
-    if (changed) {
-        esp_err_t err = app_aws_iot_subscribe(s_{{prefix_lc}}_cmd_topic, 1,
-                                              {{prefix_lc}}_on_cmd, NULL);
-        ESP_LOGI(TAG, "{{prefix_lc}}: subscribe %s: %s",
-                 s_{{prefix_lc}}_cmd_topic, esp_err_to_name(err));
-    }
     ESP_LOGI(TAG, "{{prefix_lc}}: heartbeats to %s", s_{{prefix_lc}}_hb_topic);
 {{#if cfg.presence}}
     /* The other half of the last will: retained "online" on every connect, so
      * the status topic always says the truth — "offline" from the broker when
      * the device vanished, "online" from the device once it is back. */
     char status[128];
-    snprintf(status, sizeof(status), "%s/%s/status", {{prefix}}_TOPIC_PREFIX, thing);
+    snprintf(status, sizeof(status), "%s/%s/status", {{prefix}}_TOPIC_PREFIX, app_aws_iot_thing_name());
     esp_err_t err = app_aws_iot_publish_retained(status, "online", 6, 1, pdMS_TO_TICKS(1000));
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "{{prefix_lc}}: online status not sent: %s", esp_err_to_name(err));

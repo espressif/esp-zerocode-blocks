@@ -42,6 +42,9 @@ extern "C" {
 #define ZC_AWS_STABLE_SESSION_MS 10000
 #define ZC_AWS_MAX_SUBS         8
 #define ZC_AWS_CMD_QUEUE_LEN    16
+/* The session task's stack: every subscriber callback runs on it, so
+ * aws-inject delivers on a task of the same size (not the 4 KB console). */
+#define ZC_AWS_TASK_STACK       8192
 
 extern const char *ZC_AWS_TAG;
 
@@ -82,7 +85,8 @@ void zc_aws_post_event(int32_t event_id);
 void      zc_aws_subs_init(void);
 esp_err_t zc_aws_subs_add(const char *filter, uint8_t qos,
                           zc_aws_msg_cb_t cb, void *ctx);
-void      zc_aws_subs_dispatch(MQTTPublishInfo_t *pub);
+/* Calls every subscriber whose filter matches; returns how many it called. */
+size_t    zc_aws_subs_dispatch(MQTTPublishInfo_t *pub);
 size_t    zc_aws_subs_count(void);
 /* Snapshot entry i. Returns false once i is past the end. */
 bool      zc_aws_subs_get(size_t i, const char **filter, uint16_t *len, uint8_t *qos);

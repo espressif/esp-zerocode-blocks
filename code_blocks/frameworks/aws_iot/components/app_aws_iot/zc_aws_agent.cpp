@@ -92,7 +92,7 @@ static void incoming_publish_cb(MQTTAgentContext_t *ctx, uint16_t packet_id,
 {
     (void)ctx;
     (void)packet_id;
-    zc_aws_subs_dispatch(pub);
+    (void)zc_aws_subs_dispatch(pub);
 }
 
 static void command_complete_cb(MQTTAgentCommandContext_t *cmd_ctx,
@@ -499,7 +499,7 @@ esp_err_t zc_aws_agent_start(void)
     }
 
     /* 8 KB covers mbedTLS's handshake frames on top of coreMQTT and the agent. */
-    if (xTaskCreate(session_task, "aws_iot", 8192, NULL, 5, &s_task) != pdPASS) {
+    if (xTaskCreate(session_task, "aws_iot", ZC_AWS_TASK_STACK, NULL, 5, &s_task) != pdPASS) {
         ESP_LOGE(ZC_AWS_TAG, "could not start the AWS IoT session task");
         return ESP_ERR_NO_MEM;
     }
