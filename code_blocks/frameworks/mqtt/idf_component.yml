@@ -1,8 +1,12 @@
 dependencies:
-  # ESP-IDF 6 REMOVED both of these from the tree. esp-mqtt moved out to a
-  # managed component (`espressif/mqtt`), and the built-in `json` component
-  # went with it — cJSON is now `espressif/cjson`. Neither is optional here:
-  # app_mqtt is mqtt_client.h plus cJSON for the Home Assistant discovery
-  # payloads. Headers and APIs are unchanged; only where they come from moved.
+  # ESP-IDF 6 REMOVED esp-mqtt from the tree; it is the managed component
+  # `espressif/mqtt` now. Headers and APIs are unchanged; only where they come
+  # from moved.
   espressif/mqtt: "~1.1.0"
-  espressif/cjson: "~1.7.19"
+  # Command payloads for the Home Assistant JSON schema are read with
+  # Espressif's native json_parser (RFC 8259 since 2.0.0). This block used
+  # cJSON until 2026-10-16; cJSON is deprecated upstream (unmaintained, open
+  # security reports) and ESP-IDF's own examples moved (esp-idf!53331). The
+  # discovery and state payloads are written with snprintf — fixed shapes, no
+  # user text — so no generator is needed here.
+  espressif/json_parser: "^2.0.0"

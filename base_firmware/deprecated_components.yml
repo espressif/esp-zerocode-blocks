@@ -1,0 +1,31 @@
+# Registry components a product should no longer reach for, and what to use
+# instead. Read from the published catalog by the platform's component tools:
+# a search or info answer for one of these names its replacement, and a write
+# of an idf_component.yml that adds one gets a warning. scripts/check.py fails
+# a block that depends on one unless the block is listed under `allowed_in`.
+# Not copied into a generated tree (engine COPY_EXCLUDE).
+deprecated:
+  - component: espressif/cjson
+    reason: >-
+      cJSON is no longer actively maintained upstream and has open security
+      reports; Espressif recommends its native JSON components (RFC 8259
+      compliant since 2.0.0) and may drop cJSON from idf-extra-components.
+    replacements:
+      - component: espressif/json_parser
+        use: >-
+          reading JSON: json_parse_start(&ctx, text, len),
+          json_obj_get_int/_string/_bool/_object(&ctx, "key", ...),
+          json_parse_end(&ctx)
+      - component: espressif/json_generator
+        use: >-
+          writing JSON into a caller-owned buffer:
+          json_gen_str_start(&g, buf, size, NULL, NULL), json_gen_start_object,
+          json_gen_obj_set_string/_int/_bool, json_gen_end_object,
+          json_gen_str_end
+    # When the old component is still the right choice. Said once, in the
+    # warning, never a refusal.
+    keep_when: you need a mutable JSON tree (parse, modify, re-serialize)
+    allowed_in:
+      # The agent SDK's own sources call cJSON_* through the `json` shim; the
+      # fix is upstream.
+      - frameworks/agents

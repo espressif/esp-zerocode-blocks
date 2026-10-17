@@ -16,8 +16,17 @@ radio: true
 #
 # It owns the network and one MQTT session, and exposes publish/subscribe plus
 # the coreMQTT-Agent handle (app_aws_iot.h). It knows nothing about device
-# types, params, shadows or JSON. How a device is REPRESENTED in a cloud is not
+# types, params or shadows. How a device is REPRESENTED in a cloud is not
 # connectivity, and is deliberately somebody else's block.
+#
+# JSON IS ON THE PATH, THOUGH. Every AWS IoT payload is JSON, and when this
+# block shipped no library for it every writer added one — cJSON, 24 times in
+# six weeks — which is now deprecated upstream (unmaintained, open security
+# reports). idf_component.yml therefore carries espressif/json_parser (read:
+# json_parse_start / json_obj_get_*) and espressif/json_generator (write into
+# a caller-owned buffer: json_gen_str_start / json_gen_obj_set_*), both RFC
+# 8259, and requires.cmake puts them on app_logic's and main's path.
+# behaviors/aws_iot_heartbeat is the worked example of both directions.
 #
 # Because of that it needs NO codegen: like frameworks/ml and frameworks/lm it
 # is a pure copy-in framework — components/ plus requires.cmake plus the two
