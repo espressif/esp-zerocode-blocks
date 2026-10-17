@@ -708,6 +708,14 @@ a framework's `defaults:` adds its own. The generator appends them as ordinary
 instances unless the product lists the block or names it in `exclude:`. A
 default must be a chip-agnostic behavior with no required cfg (`check.py`).
 
+**Deprecated components.** `base_firmware/deprecated_components.yml` names the
+registry components a product should no longer use and what replaces them
+(today `espressif/cjson` → `json_parser` + `json_generator`). The platform's
+component tools read it from the published catalog, so a new entry needs no
+platform release. `check.py` fails a block that depends on a listed component
+unless the entry names that block under `allowed_in`. Neither file is copied
+into a generated tree.
+
 **Voice fits 8mb-voice on every chip — on esp-sr 2.4.x.** The audio block pins
 `~2.4.7` on purpose: 2.5 added an esp-dl dependency that is 860 KB of code the
 framework never calls, and it turned a 1.33 MB S3 image into 2.44 MB (over the

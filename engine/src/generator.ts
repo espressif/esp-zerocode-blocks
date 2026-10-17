@@ -57,6 +57,7 @@ const COPY_EXCLUDE = new Set([
   'node_modules',
   'services',
   'defaults.yml',
+  'deprecated_components.yml',
 ])
 
 export interface GeneratorPaths extends CatalogPaths {

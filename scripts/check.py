@@ -488,6 +488,52 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
     if 'defaults' in fd:
         check_defaults(f'frameworks/{bd.name}', fd['defaults'])
 
+# DEPRECATED COMPONENTS: base_firmware/deprecated_components.yml is read by the
+# platform's component tools, so its shape is checked here, and no block may
+# depend on a listed component unless the entry names it under `allowed_in`.
+def dep_key(name: str) -> str:
+    # A dependency with no namespace is the component manager's `espressif/`.
+    n = name.strip().lower()
+    return n if '/' in n else f'espressif/{n}'
+
+
+deprecated_file = ROOT / 'base_firmware' / 'deprecated_components.yml'
+deprecated: dict[str, set[str]] = {}
+if deprecated_file.exists():
+    where = 'base_firmware/deprecated_components.yml'
+    entries = (yaml.safe_load(deprecated_file.read_text()) or {}).get('deprecated')
+    if not isinstance(entries, list):
+        err(where, 'deprecated: must be a list')
+        entries = []
+    for e in entries:
+        if not isinstance(e, dict) or not isinstance(e.get('component'), str) or '/' not in e['component']:
+            err(where, 'each entry needs component: <namespace>/<name>')
+            continue
+        if not isinstance(e.get('reason'), str) or not e['reason'].strip():
+            err(where, f'{e["component"]}: missing reason')
+        reps = e.get('replacements')
+        if not isinstance(reps, list) or not reps or not all(
+                isinstance(r, dict) and isinstance(r.get('component'), str) and isinstance(r.get('use'), str) for r in reps):
+            err(where, f'{e["component"]}: replacements must be a non-empty list of {{component, use}}')
+        allowed = e.get('allowed_in') or []
+        if not isinstance(allowed, list) or not all(isinstance(a, str) for a in allowed):
+            err(where, f'{e["component"]}: allowed_in must be a list of block ids')
+            allowed = []
+        for a in allowed:
+            if a not in block_ids:
+                err(where, f'{e["component"]}: allowed_in names "{a}", which is not a block')
+        deprecated[e['component'].lower()] = set(allowed)
+
+for manifest in sorted([*ROOT.glob('code_blocks/**/idf_component.yml'), *ROOT.glob('base_firmware/**/idf_component.yml')]):
+    rel = manifest.relative_to(ROOT)
+    owner = '/'.join(rel.parts[1:3]) if rel.parts[0] == 'code_blocks' else 'base_firmware'
+    deps = (yaml.safe_load(manifest.read_text()) or {}).get('dependencies') or {}
+    for name in deps:
+        key = dep_key(str(name))
+        if key in deprecated and owner not in deprecated[key]:
+            err(rel.as_posix(), f'depends on {key}, which is deprecated (base_firmware/deprecated_components.yml) — use its replacements, or list {owner} under allowed_in with the reason')
+
+
 # assembly must succeed (proves the authoring→consumption transform is valid)
 r = subprocess.run([sys.executable, str(ROOT / 'scripts/assemble_blocks.py'), '--check'],
                    capture_output=True, text=True)
