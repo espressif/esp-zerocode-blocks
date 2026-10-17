@@ -9,7 +9,14 @@
         ESP_LOGW(TAG, "{{prefix_lc}}: last will not set: %s", esp_err_to_name({{prefix_lc}}_will));
     }
 {{/if}}
-    /* Subscribing and topic-building happen on ZC_AWS_EVENT_CONNECTED. */
+    {{prefix_lc}}_build_topics();
+    esp_err_t {{prefix_lc}}_sub = app_aws_iot_subscribe(s_{{prefix_lc}}_cmd_topic, 1,
+                                                        {{prefix_lc}}_on_cmd, NULL);
+    ESP_LOGI(TAG, "{{prefix_lc}}: subscribe %s: %s",
+             s_{{prefix_lc}}_cmd_topic, esp_err_to_name({{prefix_lc}}_sub));
+
+    /* Each connect logs the heartbeat topic (and, with presence, publishes the
+     * retained "online"). */
     esp_err_t {{prefix_lc}}_err = esp_event_handler_register(
         ZC_AWS_EVENT, ZC_AWS_EVENT_CONNECTED, {{prefix_lc}}_on_connected, NULL);
     if ({{prefix_lc}}_err != ESP_OK) {
