@@ -36,3 +36,15 @@ radio: true
 # could land on different channels.
 #
 # esp_now ships with ESP-IDF: no managed components. Every Wi-Fi chip.
+
+# What the firmware already ships for pairing. The platform copies this into
+# every espnow product's seed, so the spec names these commands instead of
+# describing a pairing flow the writer would then build again.
+onboarding:
+  console:
+    commands:
+      - "espnow-pair [seconds] — open the pairing window (default 30 s); run it on both devices at once, and each stores the other"
+      - "espnow-peers — list the paired devices"
+      - "espnow-forget — forget every paired device, back to the open broadcast kit"
+    api: "zc_espnow_pair_start, zc_espnow_pairing, zc_espnow_peer_count, zc_espnow_forget_peers (app_espnow.h); behaviors/espnow_pair_trigger binds the pairing window to a button"
+    note: "Unpaired devices are an open kit: broadcast, unencrypted, for a trusted space. Paired devices talk only to each other, and the pairing is kept across reboots."
