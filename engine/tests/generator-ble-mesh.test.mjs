@@ -77,6 +77,17 @@ test('a mesh node sends through its client model, with a TID, and asks the stack
   assert.match(app, /set\.onoff_set\.tid = s_tid\+\+/, 'OnOff Set carries an incrementing TID')
   assert.match(app, /set\.level_set\.tid = s_tid\+\+/, 'Level Set carries an incrementing TID')
 
+  // A command to the default group follows the client model's configured
+  // publication address — the room group a provisioner chose — and both
+  // publish paths resolve it before building the context (without it, a group
+  // picked in the app was ignored and every command went to 0xC000).
+  assert.match(app, /static uint16_t client_dest\(esp_ble_mesh_client_t \*client, uint16_t addr\)/)
+  assert.match(app, /addr == ZC_MESH_GROUP_ADDR && client && client->model && client->model->pub &&\s+client->model->pub->publish_addr != ESP_BLE_MESH_ADDR_UNASSIGNED/)
+  assert.match(app, /return client->model->pub->publish_addr;/)
+  for (const c of ['s_onoff_client', 's_level_client']) {
+    assert.match(app, new RegExp(`addr = client_dest\\(&${c}, addr\\);\\s+esp_ble_mesh_client_common_param_t common = \\{\\};\\s+esp_err_t err = client_msg_common\\(&common, &${c},`), `${c} resolves its destination first`)
+  }
+
   // Every model is defined WITH a publication context — a NULL pub is the
   // crash this rules out by construction.
   for (const pub of ['zc_onoff_srv_pub', 'zc_level_srv_pub', 'zc_onoff_cli_pub', 'zc_level_cli_pub']) {

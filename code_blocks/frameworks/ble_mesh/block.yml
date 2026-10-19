@@ -42,6 +42,8 @@ radio: true
 # server subscribes to and every client publishes to, so a light and a remote
 # provisioned into the same network work together with no per-product address
 # bookkeeping.
+# A command published to it follows the client model's configured publication
+# address when the provisioner set one (the room group picked in the phone app).
 
 # ── The ble_mesh_* slot family ────────────────────────────────────────
 # All of these render into components/app_ble_mesh/app_ble_mesh.cpp.
