@@ -1976,6 +1976,20 @@ static uint16_t client_app_idx(esp_ble_mesh_client_t *client)
     return ESP_BLE_MESH_KEY_UNUSED;
 }
 
+/* Where a client command goes. A provisioner that puts this node's client in a
+ * group (Config Model Publication Set — the room picked in the phone app) means
+ * \"send there\", so a command to the default group follows the model's
+ * configured publication address; 0xC000 is only the zero-configuration
+ * default. Any other address the caller names is kept as given. */
+static uint16_t client_dest(esp_ble_mesh_client_t *client, uint16_t addr)
+{
+    if (addr == ZC_MESH_GROUP_ADDR && client && client->model && client->model->pub &&
+        client->model->pub->publish_addr != ESP_BLE_MESH_ADDR_UNASSIGNED) {
+        return client->model->pub->publish_addr;
+    }
+    return addr;
+}
+
 static esp_err_t client_msg_common(esp_ble_mesh_client_common_param_t *common,
                                    esp_ble_mesh_client_t *client,
                                    uint32_t opcode, uint16_t addr)
@@ -2001,6 +2015,7 @@ esp_err_t zc_ble_mesh_publish_onoff(uint16_t addr, bool on)
     if (!s_mesh_ready) {
         return ESP_ERR_INVALID_STATE;
     }
+    addr = client_dest(&s_onoff_client, addr);
     esp_ble_mesh_client_common_param_t common = {};
     esp_err_t err = client_msg_common(&common, &s_onoff_client,
                                       ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET_UNACK, addr);
@@ -2028,6 +2043,7 @@ esp_err_t zc_ble_mesh_publish_level(uint16_t addr, int16_t level)
     if (!s_mesh_ready) {
         return ESP_ERR_INVALID_STATE;
     }
+    addr = client_dest(&s_level_client, addr);
     esp_ble_mesh_client_common_param_t common = {};
     esp_err_t err = client_msg_common(&common, &s_level_client,
                                       ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_SET_UNACK, addr);
@@ -3064,7 +3080,7 @@ ${collectSlot(rendered, 'display_node_init', 4)}
         return;
     }
 
-    /* One scrollable column of device cards, built under the LVGL lock. */
+${cardCalls.length ? `    /* One scrollable column of device cards, built under the LVGL lock. */
     if (lvgl_port_lock(0)) {
         lv_obj_t *col = lv_obj_create(lv_display_get_screen_active(s_disp));
         lv_obj_set_size(col, lv_pct(100), lv_pct(100));
@@ -3082,7 +3098,10 @@ ${collectSlot(rendered, 'display_node_init', 4)}
 ${cardCalls.join('\n')}
         lvgl_port_unlock();
     }
-
+` : `    /* No device cards: the screen is the product's own. A full-screen column
+     * here (opaque under LVGL's light theme) would cover a product that draws
+     * its own UI. */
+`}
     /* Register only once widgets exist — driver_cb cases null-check anyway. */
     s_handle = app_driver_register_solution("display", display_driver_cb, NULL);
 
