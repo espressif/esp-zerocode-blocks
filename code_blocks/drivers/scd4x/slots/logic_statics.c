@@ -40,6 +40,18 @@ static esp_err_t {{prefix_lc}}_scd_send_cmd(uint16_t cmd)
     return i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
 }
 
+/* Sensirion CRC-8: polynomial 0x31, init 0xFF, over each 2-byte word. */
+static uint8_t {{prefix_lc}}_scd_crc(const uint8_t *word)
+{
+    uint8_t crc = 0xFF;
+    for (int i = 0; i < 2; i++) {
+        crc ^= word[i];
+        for (int b = 0; b < 8; b++) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
 static uint8_t {{prefix_lc}}_aqi_from_co2(uint16_t ppm)
 {
     if (ppm < 600)  return 1; /* Good */
@@ -59,10 +71,30 @@ static void {{prefix_lc}}_scd_poll_cb(void *arg)
     esp_rom_delay_us(1000);
     uint8_t buf[9] = {0};
     if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) return;
+    /* Three words (CO2, T, RH), each followed by its CRC: a reading with a bad
+       word is dropped whole rather than published half-right. */
+    for (int i = 0; i < 9; i += 3) {
+        if ({{prefix_lc}}_scd_crc(&buf[i]) != buf[i + 2]) {
+            ESP_LOGW(TAG, "SCD4x {{prefix_lc}}: CRC mismatch, reading dropped");
+            return;
+        }
+    }
     uint16_t co2 = ((uint16_t)buf[0] << 8) | buf[1];
     if (co2 == 0) return; /* sensor still warming up */
     app_driver_param_val_t cv = { .u16 = co2 };
     app_driver_set_param({{cfg.co2_param}}, cv, APP_DRIVER_SOURCE_LOCAL);
     app_driver_param_val_t av = { .u8 = {{prefix_lc}}_aqi_from_co2(co2) };
     app_driver_set_param({{cfg.air_quality_param}}, av, APP_DRIVER_SOURCE_LOCAL);
+{{#if cfg.temp_param}}
+    /* Datasheet: T = -45 + 175 * raw / 65535 °C, here in hundredths. */
+    uint16_t {{prefix_lc}}_t_raw = ((uint16_t)buf[3] << 8) | buf[4];
+    app_driver_param_val_t tv = { .i16 = (int16_t)(-4500 + (int32_t)((17500UL * {{prefix_lc}}_t_raw) / 65535UL)) };
+    app_driver_set_param({{cfg.temp_param}}, tv, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+{{#if cfg.humidity_param}}
+    /* Datasheet: RH = 100 * raw / 65535 %, here in hundredths. */
+    uint16_t {{prefix_lc}}_h_raw = ((uint16_t)buf[6] << 8) | buf[7];
+    app_driver_param_val_t hv = { .i16 = (int16_t)((10000UL * {{prefix_lc}}_h_raw) / 65535UL) };
+    app_driver_set_param({{cfg.humidity_param}}, hv, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
 }
