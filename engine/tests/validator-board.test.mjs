@@ -284,6 +284,22 @@ test('gpio_-prefixed device config keys (the knob) count as occupied', () => {
   assert.match(r.errors[0].message, /knob/)
 })
 
+test('a DVP camera\'s *_io control lines count as occupied', () => {
+  // bmgr's camera device (esp_cam_ctlr dvp_config): the data bus is
+  // data_io_0..7, but PCLK, VSYNC, DE, RESET and PWDN end in a bare `_io`.
+  // The ESP-Mosaico's GPIO 17/19/48/53/55 validated as free until the shape
+  // was recognised.
+  const cam = 'devices:\n  - name: camera\n    type: camera\n    sub_type: dvp\n    config:\n      dvp_config:\n        reset_io: 53\n        pwdn_io: 48\n        vsync_io: 55\n        de_io: 19\n        pclk_io: 17\n        xclk_io: -1\n        data_io:\n          data_io_0: 16\n'
+  const root = pack({ peripherals: 'peripherals: []\n', devices: cam })
+  for (const pin of [17, 19, 48, 53, 55, 16]) {
+    const p = product({ ci_chips: ['esp32s31'] })
+    p.instances[0].cfg = { gpio: pin }
+    const r = validateProduct(p, BLOCKS, { boardsDir: root, board: boardFile() })
+    assert.equal(r.errors.length, 1, `gpio ${pin} should conflict`)
+    assert.match(r.errors[0].message, /camera/)
+  }
+})
+
 test('a -1 pin is "line not present", not a claim on gpio -1', () => {
   // dc_gpio_num: -1 above. Nothing may be recorded for it; the check must not
   // invent an occupant, and a product can never name -1 anyway.

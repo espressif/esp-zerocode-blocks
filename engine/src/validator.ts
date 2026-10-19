@@ -264,6 +264,9 @@ export function boardChip(boardDir: string): string | undefined {
  *   gpio_*                knob gpio_encoder_a/b
  *   *_io_num, *_io_<n>    spi sclk/mosi/miso/quadwp/quadhd, uart tx/rx/rts/cts,
  *                         sdmmc data_io_0..7
+ *   *_io                  a DVP camera's control lines (esp_cam_ctlr's
+ *                         dvp_config: pclk_io, vsync_io, de_io, reset_io,
+ *                         pwdn_io, xclk_io)
  * plus every DIRECT integer under a `pins:` map (sda/scl/mclk/bclk/ws/dout/
  * din/clk/cmd/d0..d7) — direct only, so `pins.invert_flags` is not descended.
  * Keys like `port`, `spi_port`, `uart_num`, `channel_id`, `bus_id` are
@@ -273,6 +276,11 @@ function isPinKey(key: string): boolean {
     key === 'pin' || key.endsWith('_pin') ||
     key === 'gpio_num' || key.endsWith('_gpio_num') ||
     key.endsWith('_io_num') || /_io_\d+$/.test(key) ||
+    // pclk_io / vsync_io / de_io / reset_io / pwdn_io: a DVP camera's control
+    // lines (bmgr dvp_config, after esp_cam_ctlr). Without this the
+    // ESP-Mosaico's camera held GPIO 17/19/48/53/55 and they validated as
+    // free. esp-virtual-parts' gen_hwcat_v2.py mirrors this rule.
+    key.endsWith('_io') ||
     // gpio_encoder_a / gpio_encoder_b: the knob device (bmgr v0.7.2) keeps
     // its pins under a gpio_ PREFIX. Without this the M5Dial's encoder pins
     // validated as free.
