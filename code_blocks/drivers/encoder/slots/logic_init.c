@@ -6,18 +6,41 @@
     {{prefix_lc}}_unit_cfg.flags.accum_count = 0;
     ESP_ERROR_CHECK(pcnt_new_unit(&{{prefix_lc}}_unit_cfg, &s_{{prefix_lc}}_pcnt));
 
-    pcnt_chan_config_t {{prefix_lc}}_chan_cfg = {
+    /* Contact bounce on a mechanical encoder is far longer than 1 us; anything
+       shorter is noise. Not every PCNT revision has the filter, so a refusal
+       is logged, never fatal. */
+    pcnt_glitch_filter_config_t {{prefix_lc}}_filter = { .max_glitch_ns = 1000 };
+    if (pcnt_unit_set_glitch_filter(s_{{prefix_lc}}_pcnt, &{{prefix_lc}}_filter) != ESP_OK) {
+        ESP_LOGW("{{prefix_lc}}_enc", "PCNT glitch filter unavailable");
+    }
+
+    /* FULL x4 quadrature: two channels, each counting both edges of one input
+       with the other as direction (IDF's rotary_encoder example). One quadrature
+       cycle = 4 counts, so pulses_per_detent 4 is one detent on the common
+       one-cycle-per-click EC11. A single channel (x2) gave 2 counts per click,
+       2 / 4 truncated to 0, and the poll cleared them: no click ever registered.
+       ESP-IDF 6 removed `io_loop_back` from EVERY driver's config flags: binding
+       two drivers to the same GPIO now just works, so the flag had nothing left
+       to do. Setting it is a hard compile error, not a deprecation. */
+    pcnt_chan_config_t {{prefix_lc}}_chan_a_cfg = {
         .edge_gpio_num = {{prefix}}_ENC_A_GPIO,
         .level_gpio_num = {{prefix}}_ENC_B_GPIO,
-        /* ESP-IDF 6 removed `io_loop_back` from EVERY driver's config flags: binding
-           two drivers to the same GPIO now just works, so the flag had nothing left
-           to do. Setting it is a hard compile error, not a deprecation. */
         .flags = { .invert_edge_input = 0, .invert_level_input = 0, .virt_edge_io_level = 0, .virt_level_io_level = 0 },
     };
-    pcnt_channel_handle_t {{prefix_lc}}_chan = NULL;
-    ESP_ERROR_CHECK(pcnt_new_channel(s_{{prefix_lc}}_pcnt, &{{prefix_lc}}_chan_cfg, &{{prefix_lc}}_chan));
-    pcnt_channel_set_edge_action({{prefix_lc}}_chan, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
-    pcnt_channel_set_level_action({{prefix_lc}}_chan, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    pcnt_channel_handle_t {{prefix_lc}}_chan_a = NULL;
+    ESP_ERROR_CHECK(pcnt_new_channel(s_{{prefix_lc}}_pcnt, &{{prefix_lc}}_chan_a_cfg, &{{prefix_lc}}_chan_a));
+    pcnt_channel_set_edge_action({{prefix_lc}}_chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
+    pcnt_channel_set_level_action({{prefix_lc}}_chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+
+    pcnt_chan_config_t {{prefix_lc}}_chan_b_cfg = {
+        .edge_gpio_num = {{prefix}}_ENC_B_GPIO,
+        .level_gpio_num = {{prefix}}_ENC_A_GPIO,
+        .flags = { .invert_edge_input = 0, .invert_level_input = 0, .virt_edge_io_level = 0, .virt_level_io_level = 0 },
+    };
+    pcnt_channel_handle_t {{prefix_lc}}_chan_b = NULL;
+    ESP_ERROR_CHECK(pcnt_new_channel(s_{{prefix_lc}}_pcnt, &{{prefix_lc}}_chan_b_cfg, &{{prefix_lc}}_chan_b));
+    pcnt_channel_set_edge_action({{prefix_lc}}_chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+    pcnt_channel_set_level_action({{prefix_lc}}_chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
 
     pcnt_unit_enable(s_{{prefix_lc}}_pcnt);
     pcnt_unit_clear_count(s_{{prefix_lc}}_pcnt);

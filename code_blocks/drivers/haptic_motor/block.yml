@@ -8,8 +8,10 @@ description: >-
 # every caller responsible for scheduling the off, and forgetting that leaves
 # the motor running against the battery.
 #
-# So the param here is a TRIGGER: write non-zero and the motor runs for
-# pulse_ms, then the driver turns it off. Writing again while it runs restarts
+# So the param here is a TRIGGER: fire non-zero and the motor runs for
+# pulse_ms, then the driver turns it off. It is an EVENT param — write it with
+# app_driver_fire_event. The driver never writes it back to 0, so a
+# change-detected app_driver_set_param of the same value would buzz only once. Writing again while it runs restarts
 # the window rather than queueing — latest wins, the same rule the sound
 # sequencer uses, because a stale buzz is worse than a missed one.
 #
@@ -36,4 +38,6 @@ params:
 driver_params:
   trigger_param:
     type: u8
-    description: write non-zero to buzz; the driver clears it when the pulse ends
+    description: >-
+      event param: app_driver_fire_event a non-zero value to buzz once per call
+      (set_param would be deduped after the first buzz; nothing clears it)

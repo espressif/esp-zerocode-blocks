@@ -11,15 +11,26 @@ __attribute__((weak)) void {{prefix_lc}}_on_step(int8_t delta)
 #if SOC_PCNT_SUPPORTED
 static pcnt_unit_handle_t s_{{prefix_lc}}_pcnt = NULL;
 
+/* Counts read off the unit but not yet a whole detent. The poll clears the
+   hardware counter every time it sees counts, so without this a click split
+   across two polls (or a part with fewer counts per click than
+   pulses_per_detent assumes) was simply thrown away. */
+static int s_{{prefix_lc}}_rem = 0;
+
 static void {{prefix_lc}}_poll_cb(void *arg)
 {
     int count = 0;
     pcnt_unit_get_count(s_{{prefix_lc}}_pcnt, &count);
-    if (count != 0) {
-        pcnt_unit_clear_count(s_{{prefix_lc}}_pcnt);
-        int8_t detents = (int8_t)(count / {{prefix}}_ENC_PER_DETENT);
-        if (detents != 0) {{prefix_lc}}_on_step(detents);
-    }
+    if (count == 0) return;
+    pcnt_unit_clear_count(s_{{prefix_lc}}_pcnt);
+    int total = s_{{prefix_lc}}_rem + count;
+    int detents = total / {{prefix}}_ENC_PER_DETENT;
+    /* on_step takes an int8; a burst past that stays in the remainder and is
+       delivered on the next poll rather than wrapping the sign. */
+    if (detents > 127) detents = 127;
+    if (detents < -127) detents = -127;
+    s_{{prefix_lc}}_rem = total - detents * {{prefix}}_ENC_PER_DETENT;
+    if (detents != 0) {{prefix_lc}}_on_step((int8_t)detents);
 }
 #else /* !SOC_PCNT_SUPPORTED — GPIO-ISR quadrature fallback (e.g. ESP32-C2/C3) */
 /* Same contract as the PCNT path — a 50 ms poll hands accumulated detents to

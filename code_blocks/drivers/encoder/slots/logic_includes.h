@@ -1,6 +1,7 @@
 #include <esp_timer.h>
 #if SOC_PCNT_SUPPORTED
 #include <driver/pulse_cnt.h>
+#include <esp_log.h>
 #else
 #include <driver/gpio.h>
 #include <esp_attr.h>

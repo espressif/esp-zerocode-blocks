@@ -70,6 +70,20 @@ app_driver_handle_t app_driver_register_solution(
     return handle;
 }
 
+const char *app_driver_solution_name(app_driver_handle_t handle)
+{
+    if (handle == APP_DRIVER_SOURCE_LOCAL) {
+        return "local";
+    }
+    const char *name = NULL;
+    portENTER_CRITICAL(&s_lock);
+    if (handle <= s_solution_count) {
+        name = s_solutions[handle - 1].name;
+    }
+    portEXIT_CRITICAL(&s_lock);
+    return name;
+}
+
 esp_err_t app_driver_set_param(
     app_driver_param_id_t id,
     app_driver_param_val_t val,

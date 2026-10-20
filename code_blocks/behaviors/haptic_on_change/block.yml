@@ -8,17 +8,22 @@ description: >-
 # writes the trigger param that drivers/haptic_motor owns, so there is exactly
 # one place that drives the GPIO and one place that schedules the pulse.
 #
-# It buzzes on LOCAL changes only. A haptic is feedback for the person standing
-# at the panel; buzzing when a Matter controller or an MQTT broker changes the
-# same param would make the device vibrate at random from across the house.
-# APP_DRIVER_SOURCE_LOCAL is exactly that distinction, and it is why the
-# callback takes `source` at all.
+# It buzzes only for changes made AT the device: a physical button
+# (APP_DRIVER_SOURCE_LOCAL) or a touch on the device's own screen (the display
+# framework's solution, matched by name). A haptic is feedback for the person
+# standing at the panel; buzzing when a Matter controller or an MQTT broker
+# changes the same param would make the device vibrate at random from across
+# the house. That distinction is why the callback takes `source` at all.
+#
+# The trigger is written with app_driver_fire_event, never set_param: the
+# trigger is never cleared, so a change-detected write would buzz on the first
+# press and swallow every one after it.
 
 driver_params:
   watch_param:
     type: bool
     required: true
-    description: the param whose local changes deserve feedback
+    description: the param whose changes made at the device deserve feedback
   trigger_param:
     type: u8
     required: true

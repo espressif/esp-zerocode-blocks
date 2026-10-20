@@ -1,21 +1,57 @@
-description: DC motor for curtains/blinds (up/down GPIOs + 2 limit switches)
+description: >-
+  DC motor for curtains/blinds (up/down GPIOs + 2 limit switches): drives to
+  fully open or fully closed, stops at the limit switch (or after max_run_ms),
+  and reports the end it reached
 
 # Drives a curtain/blind motor:
 #  - up_gpio HIGH (+ down_gpio LOW) → opens (lift up)
 #  - down_gpio HIGH (+ up_gpio LOW) → closes
-# Limit switches stop motion at endpoints. Position is reported as a percent
-# (0 = fully closed, 10000 = fully open in 0.01% units, matching Matter).
-# This is a simple bang-bang controller — for smooth motion + position estimation,
-# add an encoder or extend post-generation.
+# Position is in 0.01% units (0 = fully closed, 10000 = fully open, matching
+# Matter). This is a bang-bang controller with NO position estimate: a target
+# above 5000 runs to the upper limit, anything else to the lower one. When a
+# limit switch trips, the driver stops the motor and publishes the end it
+# reached (10000 or 0) on position_param, so the controller's current position
+# is what the curtain actually did, not the target it was sent. For partial
+# positions add an encoder or travel-time estimation post-generation.
+#
+# The limits are polled every 20 ms by the driver itself. Before 2026-10 they
+# were configured and never read — the comment told "app code" to watch them —
+# so every product ran the motor into its end stop until something else
+# intervened, and a restored target re-drove it at every boot.
+#
+# Limit wiring defaults to ACTIVE-LOW: a switch to GND with the internal
+# pull-up, the usual microswitch wiring. An unwired or broken limit then reads
+# "not at limit", and max_run_ms is the backstop that still stops the motor; the
+# old "HIGH when at limit" text, with the same pull-up, made an unwired limit
+# read as permanently tripped.
+
+cmake_priv_requires:
+  app_driver: [esp_timer, esp_driver_gpio]
 
 params:
   up_gpio:    { type: int, required: true }
   down_gpio:  { type: int, required: true }
-  upper_limit_gpio: { type: int, required: true, description: GPIO HIGH when fully open }
-  lower_limit_gpio: { type: int, required: true, description: GPIO HIGH when fully closed }
+  upper_limit_gpio: { type: int, required: true, description: limit switch input that asserts when fully open }
+  lower_limit_gpio: { type: int, required: true, description: limit switch input that asserts when fully closed }
+  limit_active_level:
+    type: int
+    default: 0
+    description: >-
+      level a tripped limit switch reads — 0 for a switch to GND (internal
+      pull-up), 1 for a switch to 3V3 (internal pull-down)
+  max_run_ms:
+    type: int
+    default: 30000
+    description: >-
+      longest the motor may run in one direction without reaching its limit;
+      the backstop for an unwired or failed switch. Set above the full travel
+      time of the actual curtain
 
 driver_params:
   position_param:
     type: u16
     required: true
-    description: Driver param ID for current/target lift position (uint16, 0-10000)
+    description: >-
+      Driver param ID for lift position (uint16, 0-10000). Written as a target
+      (>5000 opens fully, otherwise closes fully); the driver writes back 0 or
+      10000 when a limit is reached

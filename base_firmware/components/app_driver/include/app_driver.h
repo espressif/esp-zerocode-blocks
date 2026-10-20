@@ -64,6 +64,21 @@ app_driver_handle_t app_driver_register_solution(
     void *ctx);
 
 /**
+ * Name a solution was registered under, for a handle a notify callback was
+ * given as `source`. Returns "local" for APP_DRIVER_SOURCE_LOCAL and NULL for a
+ * handle nobody registered.
+ *
+ * Handles are assigned in registration order, which differs per product (the
+ * display framework even registers from its own setup task), so a callback
+ * that must tell one solution from another — a touch on the device's OWN
+ * screen versus a command from across the network — can only do it by name.
+ *
+ * @param handle  A source handle
+ * @return The registered name, "local", or NULL
+ */
+const char *app_driver_solution_name(app_driver_handle_t handle);
+
+/**
  * Set a parameter STATE. Updates state, applies to hardware, and notifies all
  * registered solutions EXCEPT the source.
  *
