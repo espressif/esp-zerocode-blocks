@@ -1,9 +1,12 @@
-description: When motion_param transitions from false→true, set light_param to true. Pair with auto_off_timer to make a motion-triggered light.
+description: When motion_param transitions from false→true, set light_param to true. Pair with auto_off_timer (target_param light_param, retrigger_param motion_param) to make a motion-triggered light.
 
 # Listens for the rising edge of motion_param. When motion appears, drives
 # light_param to true. The light won't be turned OFF by this block — pair with
 # behaviors/auto_off_timer (target_param: light_param) to clear it after N
-# seconds of inactivity.
+# seconds of inactivity — and give that timer retrigger_param: motion_param.
+# This block's write is STATE, so a re-trigger while the light is already on is
+# deduped by the bus and never reaches the timer; without retrigger_param the
+# light goes off N seconds after the FIRST detection even in an occupied room.
 
 driver_params:
   motion_param:
