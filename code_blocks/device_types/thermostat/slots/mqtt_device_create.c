@@ -43,5 +43,8 @@
         app_driver_get_param({{cfg.heat_setpoint_param}}, &init);
         snprintf(buf, sizeof(buf), "%.2f", (double)init.i16 / 100.0);
         esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_temp_state_topic, buf, 0, 1, true);
+        /* Seed the mode too, or HA shows it unknown until someone changes it. */
+        app_driver_get_param({{cfg.system_mode_param}}, &init);
+        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_mode_state_topic, init.u8 == 0 ? "off" : "heat", 0, 1, true);
     }
 }
