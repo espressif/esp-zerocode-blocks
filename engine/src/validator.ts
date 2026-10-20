@@ -451,6 +451,60 @@ export function frameworkConflicts(frameworks: readonly string[]): string[] {
     .map(([a, b, why]) => `frameworks ${a} and ${b} cannot be combined yet: ${why}. Pick one of them.`)
 }
 
+/** LEDC sharing conflicts among a product's instances, one message each.
+ *
+ *  Every chip has four LEDC timers, and a timer has ONE frequency: whichever
+ *  instance configures it second retunes it for both. A servo (50 Hz) and a
+ *  dc_motor_h_bridge (20 kHz) both defaulting to timer 3 gave a 20 kHz
+ *  "servo" or a 50 Hz motor; a buzzer retuning per note bled into whatever
+ *  shared its timer. And two instances on one CHANNEL fight over one output.
+ *  Nothing caught either — the product built, booted and misbehaved.
+ *
+ *  An LEDC user is a block with a `ledc_timer` param. Its channels are its
+ *  `ledc_channel` / `*_channel` params. Its frequency is its `freq_hz` param
+ *  when it has one; a block that calls ledc_set_freq() retunes at run time
+ *  and can share its timer with nobody; any other block has a frequency of
+ *  its own (servo_pwm's 50 Hz), shared safely only with instances of itself.
+ *  Values are the instance cfg, else the param default. */
+export function ledcConflicts(
+  instances: ReadonlyArray<{ block?: string; prefix?: string; cfg?: Record<string, unknown> }>,
+  blocks: ReadonlyMap<string, Block>,
+): string[] {
+  const out: string[] = []
+  const timers = new Map<string, { who: string; freq: string }>()
+  const channels = new Map<string, string>()
+  for (const inst of instances) {
+    const block = inst.block ? blocks.get(inst.block) : undefined
+    if (!block?.params || !('ledc_timer' in block.params)) continue
+    const cfg = inst.cfg ?? {}
+    const value = (k: string): unknown => cfg[k] ?? block.params?.[k]?.default
+    const who = `${inst.block}/${inst.prefix}`
+    const timer = value('ledc_timer')
+    if (timer !== undefined && timer !== '') {
+      const retunes = Object.values(block.slots ?? {}).some((src) => src.includes('ledc_set_freq('))
+      const freq = retunes ? `retuned at run time by ${who}`
+        : 'freq_hz' in block.params ? `${value('freq_hz')} Hz`
+        : `${inst.block}'s own frequency`
+      const key = String(timer)
+      const prev = timers.get(key)
+      if (!prev) timers.set(key, { who, freq })
+      else if (retunes || prev.freq !== freq) {
+        out.push(`LEDC timer ${key} shared by ${prev.who} (${prev.freq}) and ${who} (${freq}) — a timer has one frequency, so the later init retunes it for both; give one a different ledc_timer`)
+      }
+    }
+    for (const k of Object.keys(block.params)) {
+      if (k !== 'ledc_channel' && !k.endsWith('_channel')) continue
+      const ch = value(k)
+      if (ch === undefined || ch === '') continue
+      const key = String(ch)
+      const prev = channels.get(key)
+      if (prev) out.push(`LEDC channel ${key} used by both ${prev} and ${who}.${k} — one channel drives one output; give one a different channel`)
+      else channels.set(key, `${who}.${k}`)
+    }
+  }
+  return out
+}
+
 export function validateProduct(
   given: Product,
   blocks: Map<string, Block>,
@@ -746,6 +800,8 @@ export function validateProduct(
       })
     }
   }
+
+  errors.push(...ledcConflicts(product.instances, blocks).map((message) => ({ level: 'error' as const, ...ctx, message })))
 
   // ── Chip/pin compatibility ─────────────────────────────────────────────
   // Products are chip-agnostic, so a GPIO choice can be fine on one chip and
