@@ -1,7 +1,15 @@
-description: Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
+description: Enable IDF Power Management with dynamic frequency scaling at startup, plus FreeRTOS tickless idle and sleep-IRAM placement. Automatic light sleep stays off.
 
-# Original notes from the .defaults file:
-#   Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
-#   Reduces average power on Wi-Fi-connected idle by 50-70%. Use for
-#   battery-powered or always-on plug-in products that should be efficient.
-#   sdkconfig_fragments: [power_management]
+# DFS (CPU at XTAL when idle, max on demand under PM locks) is what this
+# fragment turns on. It needs CONFIG_PM_DFS_INIT_AUTO: PM_ENABLE alone only
+# builds the PM machinery, and with no esp_pm_configure() call anywhere (no
+# block makes one) DFS was never active — the fragment saved nothing and still
+# paid the PM-lock overhead.
+#
+# Automatic LIGHT SLEEP is deliberately not enabled: in light sleep the CPU and
+# most peripherals stop between ticks, so PWM/LEDC outputs, the UART console
+# and GPIO edges a product relies on stop or are missed unless each is set up
+# for it. A product that wants it calls esp_pm_configure() with
+# light_sleep_enable = true itself, once its peripherals are ready for it.
+#
+# Apply via: sdkconfig_fragments: [power_management]
