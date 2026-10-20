@@ -10,6 +10,13 @@ description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC
 #  - delay_us = (half_cycle_us * (255 - brightness)) / 255
 # Depends on peripherals/gpio_isr_service.
 
+# The gate pulse must land within microseconds of its deadline, so the one-shot
+# timer dispatches from the ISR (ESP_TIMER_ISR), not the esp_timer task. IDF
+# declares ESP_TIMER_ISR only when this option is on (default n) — without it
+# the block does not compile.
+sdkconfig:
+  CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD: 'y'
+
 params:
   zcd_gpio:
     type: int
