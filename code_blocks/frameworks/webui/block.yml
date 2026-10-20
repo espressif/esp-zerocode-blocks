@@ -20,10 +20,10 @@ radio: true
 # generated table.
 #
 # NETWORK: standalone products bring up a SoftAP — "ZeroCode-<id>",
-# password "zerocode" — and serve at http://192.168.4.1. When a Wi-Fi
-# transport (matter/rainmaker/mqtt) is co-selected, webui owns NOTHING:
-# it serves on the transport's network instead and announces
-# zerocode-<id>.local over mDNS (shared-network mode, same pattern as
-# mqtt's).
+# password "zerocode" — and serve at http://192.168.4.1. When any other
+# Wi-Fi framework (matter/rainmaker/mqtt/agents/aws_iot) is co-selected,
+# webui owns NOTHING: it serves on that framework's station network instead
+# and announces zerocode-<id>.local over mDNS (shared-network mode, same
+# pattern as mqtt's; the engine's wifiOwner() picks the one owner).
 #
 # esp_http_server ships with IDF; espressif/mdns is the one managed dep.
