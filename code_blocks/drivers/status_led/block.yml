@@ -16,7 +16,7 @@ description: Single GPIO LED indicator for commissioning / connection state — 
 #   1 = solid on
 #   2 = slow blink (1 Hz)
 #   3 = fast blink (4 Hz)
-#   4 = breathe
+#   4 = breathe — a GPIO LED cannot dim, so a heartbeat: 1.5 s on, 0.25 s off
 #
 # NO other block may create a second led_indicator on this pin, and NOTHING —
 # not this block, not any behavior — may call raw gpio_set_level() /

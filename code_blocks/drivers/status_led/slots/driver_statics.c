@@ -11,6 +11,7 @@ led_indicator_handle_t {{prefix_lc}}_status_led_handle(void) { return s_{{prefix
 static esp_timer_handle_t s_{{prefix_lc}}_blink_timer = NULL;
 static volatile uint8_t   s_{{prefix_lc}}_pattern = 0;
 static volatile bool      s_{{prefix_lc}}_blink_on = false;
+static uint8_t            s_{{prefix_lc}}_breathe_step = 0;
 
 static void {{prefix_lc}}_blink_timer_cb(void *arg) {
     if (!s_{{prefix_lc}}_led) return;
@@ -20,11 +21,12 @@ static void {{prefix_lc}}_blink_timer_cb(void *arg) {
         s_{{prefix_lc}}_blink_on = !s_{{prefix_lc}}_blink_on;
         led_indicator_set_on_off(s_{{prefix_lc}}_led, s_{{prefix_lc}}_blink_on);
     } else if (p == 4) {
-        /* coarse breathe via brightness ramp */
-        static uint8_t step = 0;
-        static const uint8_t ramp[] = { 20, 90, 180, 255, 180, 90, 20, 0 };
-        led_indicator_set_brightness(s_{{prefix_lc}}_led, ramp[step]);
-        step = (uint8_t)((step + 1) % (sizeof(ramp) / sizeof(ramp[0])));
+        /* "Breathe" on a plain GPIO LED: the led_indicator GPIO device has no
+           brightness hook (set_brightness warns and returns ESP_FAIL), so it
+           is a heartbeat instead — 1.5 s on, 0.25 s off, at the 250 ms tick —
+           distinct from both blink rates. */
+        s_{{prefix_lc}}_breathe_step = (uint8_t)((s_{{prefix_lc}}_breathe_step + 1) % 7);
+        led_indicator_set_on_off(s_{{prefix_lc}}_led, s_{{prefix_lc}}_breathe_step != 6);
     }
 }
 
@@ -53,7 +55,7 @@ void {{prefix_lc}}_status_led_set_pattern(uint8_t pattern) {
         case 1: /* solid*/ {{prefix_lc}}_blink_arm(0); led_indicator_set_on_off(s_{{prefix_lc}}_led, true);  break;
         case 2: /* slow */ s_{{prefix_lc}}_blink_on = false; {{prefix_lc}}_blink_arm(500000); break;
         case 3: /* fast */ s_{{prefix_lc}}_blink_on = false; {{prefix_lc}}_blink_arm(125000); break;
-        case 4: /* breathe */ {{prefix_lc}}_blink_arm(120000); break;
+        case 4: /* breathe */ s_{{prefix_lc}}_breathe_step = 0; led_indicator_set_on_off(s_{{prefix_lc}}_led, true); {{prefix_lc}}_blink_arm(250000); break;
         default: {{prefix_lc}}_blink_arm(0); break;
     }
 }

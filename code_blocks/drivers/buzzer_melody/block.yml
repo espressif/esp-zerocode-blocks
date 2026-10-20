@@ -12,7 +12,14 @@ description: Buzzer that plays preset melodies / alert patterns. Builds on the s
 
 params:
   gpio: { type: int, required: true }
-  ledc_channel: { type: int, default: 6 }
+  # Channel 2, not 6: the C2/C3/C5/C6/H2 LEDC has only channels 0-5, so 6
+  # fails ledc_channel_config with ESP_ERR_INVALID_ARG and the device
+  # boot-loops. 2 is the one low channel no other LEDC block defaults to
+  # (pwm_led 0, fan_pwm 1, buzzer 3, servo_pwm 4, dc_motor_h_bridge 5).
+  ledc_channel:
+    type: int
+    default: 2
+    description: LEDC channel (0-5 exist on every chip; must differ from any other LEDC user)
   ledc_timer:   { type: int, default: 2 }
 
 driver_params:
