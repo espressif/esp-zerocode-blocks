@@ -1,11 +1,34 @@
-description: Reverse-polarity DC lock motor + position sense (lock/unlock via H-bridge or 2-relay setup)
+description: >-
+  Reverse-polarity DC lock motor + position sense (lock/unlock via H-bridge or
+  2-relay setup); reports the sensed bolt position, including jams and manual turns
+
+cmake_priv_requires:
+  app_driver: [esp_timer, esp_driver_gpio]
 
 # Drives a motorized deadbolt:
 #  - lock_gpio HIGH (+ unlock_gpio LOW) → motor turns toward LOCK position
 #  - unlock_gpio HIGH (+ lock_gpio LOW) → motor turns toward UNLOCK position
 #  - both LOW → motor idle
-# Position sense is a single GPIO that reads HIGH when locked.
+# Position sense is a single GPIO that reads position_active_level (HIGH by
+# default) when locked.
 # A pulse_ms timer holds the motor on then releases. Adjust per-product.
+#
+# The published lock state is the SENSED one. When a pulse ends the driver
+# reads position_gpio; if the bolt did not reach the commanded end it logs a
+# jam and writes the sensed state back on locked_param, so a controller is told
+# "unlocked" for a bolt that jammed, never "locked". A 250 ms poll does the same
+# for a manual turn of the thumb-turn while the motor is idle (two equal reads
+# in a row, so switch bounce is not a turn). Before 2026-10 the pin was
+# configured and never read, and the param simply kept the commanded value.
+#
+# A sensed-state write-back does NOT drive the motor (the bolt is already
+# there). The pulse runs on a one-shot esp_timer instead of a vTaskDelay inside
+# apply_param, which used to hold the caller (the Matter task) for pulse_ms.
+#
+# The input is pulled toward the UNLOCKED reading, so an unwired or broken
+# sense switch reports unlocked: a lock that cannot see its bolt must never
+# claim to be locked. Known gap: a jam is reported only as the sensed bool —
+# Matter's LockState NotFullyLocked / a DoorLockAlarm is not raised.
 
 params:
   lock_gpio:
@@ -19,7 +42,13 @@ params:
   position_gpio:
     type: int
     required: true
-    description: GPIO input that reads HIGH when the bolt is in the LOCKED position
+    description: GPIO input that reads position_active_level when the bolt is in the LOCKED position
+  position_active_level:
+    type: int
+    default: 1
+    description: >-
+      level position_gpio reads when LOCKED (1 = switch to 3V3, internal
+      pull-down; 0 = switch to GND, internal pull-up)
   pulse_ms:
     type: int
     default: 800
@@ -29,4 +58,6 @@ driver_params:
   locked_param:
     type: bool
     required: true
-    description: Driver param ID (boolean — true = locked)
+    description: >-
+      Driver param ID (boolean — true = locked). Written as a command; the
+      driver writes back the sensed state after each pulse and on a manual turn
