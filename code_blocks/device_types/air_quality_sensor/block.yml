@@ -54,6 +54,6 @@ driver_params:
     type: u16
     required: false
     default: ""
-    description: (Optional) param ID for TVOC concentration in ppb/µg·m⁻³ (uint16). Empty disables the cluster.
+    description: (Optional) param ID for TVOC concentration in ppb (uint16; Matter MeasurementUnit PPB, HA ppb). Empty disables the cluster.
 
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

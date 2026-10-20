@@ -9,14 +9,9 @@ if (param_id == {{cfg.air_quality_param}}) {
 }
 {{#if cfg.co2_ppm_param}}
 if (param_id == {{cfg.co2_ppm_param}}) {
-    s_from_driver = true;
-    /* MeasuredValue is a nullable<float>; the driver carries ppm as u16. */
-    esp_matter_attr_val_t mval = esp_matter_nullable_float(nullable<float>((float)val.u16));
-    esp_err_t err = esp_matter::attribute::update(s_{{prefix_lc}}_endpoint_id,
-        chip::app::Clusters::CarbonDioxideConcentrationMeasurement::Id,
-        chip::app::Clusters::CarbonDioxideConcentrationMeasurement::Attributes::MeasuredValue::Id, &mval);
-    if (err != ESP_OK) ESP_LOGW(TAG, "{{prefix_lc}}: CO2 update failed: %s", esp_err_to_name(err));
-    s_from_driver = false;
+    /* Code-driven cluster: attribute::update() cannot write it (it returns
+     * ESP_ERR_NOT_SUPPORTED) — push into the registered server object. */
+    zc_aq_conc_set(s_{{prefix_lc}}_endpoint_id, chip::app::Clusters::CarbonDioxideConcentrationMeasurement::Id, (float)val.u16);
 }
 {{/if}}
 {{#if cfg.pm25_param}}
@@ -32,12 +27,8 @@ if (param_id == {{cfg.pm25_param}}) {
 {{/if}}
 {{#if cfg.tvoc_param}}
 if (param_id == {{cfg.tvoc_param}}) {
-    s_from_driver = true;
-    esp_matter_attr_val_t mval = esp_matter_nullable_float(nullable<float>((float)val.u16));
-    esp_err_t err = esp_matter::attribute::update(s_{{prefix_lc}}_endpoint_id,
-        chip::app::Clusters::TotalVolatileOrganicCompoundsConcentrationMeasurement::Id,
-        chip::app::Clusters::TotalVolatileOrganicCompoundsConcentrationMeasurement::Attributes::MeasuredValue::Id, &mval);
-    if (err != ESP_OK) ESP_LOGW(TAG, "{{prefix_lc}}: TVOC update failed: %s", esp_err_to_name(err));
-    s_from_driver = false;
+    /* Code-driven cluster: attribute::update() cannot write it (it returns
+     * ESP_ERR_NOT_SUPPORTED) — push into the registered server object. */
+    zc_aq_conc_set(s_{{prefix_lc}}_endpoint_id, chip::app::Clusters::TotalVolatileOrganicCompoundsConcentrationMeasurement::Id, (float)val.u16);
 }
 {{/if}}
