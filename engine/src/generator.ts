@@ -2564,6 +2564,10 @@ function genAppEspnowCpp(rendered: RenderedInstance[]): string {
 #include <esp_console.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 ${collectSlot(rendered, 'espnow_includes')}
 
 static const char *TAG = "app_espnow";
@@ -2600,13 +2604,38 @@ static const uint8_t ZC_NOW_BCAST[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 #define ZC_NOW_MAX_PEERS 8
 #define ZC_NOW_NVS_NS   "zc_now"
 #define ZC_NOW_NVS_KEY  "peers"
+/* The peer table is read on the Wi-Fi task (every received frame), by
+ * whichever task sends, and by the console; it is written by the pairing
+ * task and the console. s_peer_lock guards it; anything slow (NVS, the radio)
+ * runs on a copy taken under the lock, never holding it. */
 static uint8_t s_peers[ZC_NOW_MAX_PEERS][6];
 static uint8_t s_peer_count = 0;
+static SemaphoreHandle_t s_peer_lock = NULL;
 static volatile bool s_pairing = false;
 static esp_timer_handle_t s_pair_timer = NULL;   /* window end */
 static esp_timer_handle_t s_pair_beacon = NULL;  /* PAIR_REQ repeat */
 
-static bool zc_now_peer_known(const uint8_t *mac)
+/* Pairing frames are handed from the Wi-Fi task to this queue: storing a peer
+ * writes flash (nvs_commit) and answers with esp_now_send, and doing that in
+ * the receive callback stalls the Wi-Fi task — the receive callback must stay
+ * short (IDF's espnow example queues for the same reason). */
+typedef struct { uint8_t type; uint8_t mac[6]; } zc_now_pair_evt_t;
+static QueueHandle_t s_pair_q = NULL;
+
+static void zc_now_lock(void)   { xSemaphoreTake(s_peer_lock, portMAX_DELAY); }
+static void zc_now_unlock(void) { xSemaphoreGive(s_peer_lock); }
+
+/* Copies the table; returns the count. */
+static uint8_t zc_now_peers_copy(uint8_t out[ZC_NOW_MAX_PEERS][6])
+{
+    zc_now_lock();
+    uint8_t n = s_peer_count;
+    memcpy(out, s_peers, (size_t)n * 6);
+    zc_now_unlock();
+    return n;
+}
+
+static bool zc_now_peer_known_locked(const uint8_t *mac)
 {
     for (uint8_t i = 0; i < s_peer_count; i++) {
         if (memcmp(s_peers[i], mac, 6) == 0) return true;
@@ -2614,11 +2643,20 @@ static bool zc_now_peer_known(const uint8_t *mac)
     return false;
 }
 
-static void zc_now_peers_save(void)
+/* An open kit (no peers) accepts every matching frame; a paired one only its peers'. */
+static bool zc_now_accepts(const uint8_t *from)
+{
+    zc_now_lock();
+    bool ok = s_peer_count == 0 || (from != NULL && zc_now_peer_known_locked(from));
+    zc_now_unlock();
+    return ok;
+}
+
+static void zc_now_peers_save(const uint8_t peers[][6], uint8_t count)
 {
     nvs_handle_t h;
     if (nvs_open(ZC_NOW_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_blob(h, ZC_NOW_NVS_KEY, s_peers, (size_t)s_peer_count * 6);
+    nvs_set_blob(h, ZC_NOW_NVS_KEY, peers, (size_t)count * 6);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -2646,18 +2684,32 @@ static void zc_now_radio_add_peer(const uint8_t *mac)
     if (err != ESP_OK) ESP_LOGW(TAG, "add peer failed: %s", esp_err_to_name(err));
 }
 
+/* Runs on the pairing task, never the Wi-Fi task. */
 static bool zc_now_peer_store(const uint8_t *mac)
 {
-    if (zc_now_peer_known(mac)) return true;
+    uint8_t copy[ZC_NOW_MAX_PEERS][6];
+    zc_now_lock();
+    if (zc_now_peer_known_locked(mac)) { zc_now_unlock(); return true; }
     if (s_peer_count >= ZC_NOW_MAX_PEERS) {
+        zc_now_unlock();
         ESP_LOGW(TAG, "peer table full (%d) — forget a peer first", ZC_NOW_MAX_PEERS);
         return false;
     }
-    memcpy(s_peers[s_peer_count++], mac, 6);
+    zc_now_unlock();
+    /* The radio entry goes in before the table entry is visible — a send that
+     * sees the new peer must find the radio able to unicast to it — and
+     * outside the lock, which the Wi-Fi task takes on every received frame. */
     zc_now_radio_add_peer(mac);
-    zc_now_peers_save();
+    zc_now_lock();
+    if (!zc_now_peer_known_locked(mac) && s_peer_count < ZC_NOW_MAX_PEERS) {
+        memcpy(s_peers[s_peer_count++], mac, 6);
+    }
+    uint8_t n = s_peer_count;
+    memcpy(copy, s_peers, (size_t)n * 6);
+    zc_now_unlock();
+    zc_now_peers_save(copy, n);
     ESP_LOGI(TAG, "paired with %02x:%02x:%02x:%02x:%02x:%02x (%d peer%s)",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], s_peer_count, s_peer_count == 1 ? "" : "s");
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], n, n == 1 ? "" : "s");
     return true;
 }
 
@@ -2707,9 +2759,14 @@ uint8_t zc_espnow_peer_count(void) { return s_peer_count; }
 
 void zc_espnow_forget_peers(void)
 {
-    for (uint8_t i = 0; i < s_peer_count; i++) (void)esp_now_del_peer(s_peers[i]);
+    uint8_t copy[ZC_NOW_MAX_PEERS][6];
+    zc_now_lock();
+    uint8_t n = s_peer_count;
+    memcpy(copy, s_peers, (size_t)n * 6);
     s_peer_count = 0;
-    zc_now_peers_save();
+    zc_now_unlock();
+    for (uint8_t i = 0; i < n; i++) (void)esp_now_del_peer(copy[i]);
+    zc_now_peers_save(copy, 0);
     ESP_LOGI(TAG, "peers forgotten — back to open broadcast");
 }
 
@@ -2724,10 +2781,12 @@ static int zc_now_cmd_pair(int argc, char **argv)
 static int zc_now_cmd_peers(int argc, char **argv)
 {
     (void)argc; (void)argv;
-    printf("%d peer(s)%s\\n", s_peer_count, s_peer_count ? "" : " (open kit: broadcast)");
-    for (uint8_t i = 0; i < s_peer_count; i++) {
-        printf("  %02x:%02x:%02x:%02x:%02x:%02x\\n", s_peers[i][0], s_peers[i][1], s_peers[i][2],
-               s_peers[i][3], s_peers[i][4], s_peers[i][5]);
+    uint8_t peers[ZC_NOW_MAX_PEERS][6];
+    uint8_t n = zc_now_peers_copy(peers);
+    printf("%d peer(s)%s\\n", n, n ? "" : " (open kit: broadcast)");
+    for (uint8_t i = 0; i < n; i++) {
+        printf("  %02x:%02x:%02x:%02x:%02x:%02x\\n", peers[i][0], peers[i][1], peers[i][2],
+               peers[i][3], peers[i][4], peers[i][5]);
     }
     return 0;
 }
@@ -2751,12 +2810,14 @@ ${collectSlot(rendered, 'espnow_statics')}
 void zc_espnow_send(const char *param_name, uint8_t type, uint32_t value)
 {
     uint32_t hash = zc_now_hash(param_name);
-    if (s_peer_count == 0) {
+    uint8_t peers[ZC_NOW_MAX_PEERS][6];
+    uint8_t n = zc_now_peers_copy(peers);   /* this send's snapshot */
+    if (n == 0) {
         zc_now_send_raw(ZC_NOW_BCAST, type, hash, value);
         return;
     }
-    for (uint8_t i = 0; i < s_peer_count; i++) {
-        zc_now_send_raw(s_peers[i], type, hash, value);
+    for (uint8_t i = 0; i < n; i++) {
+        zc_now_send_raw(peers[i], type, hash, value);
     }
 }
 
@@ -2772,16 +2833,18 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     const uint8_t *from = info ? info->src_addr : NULL;
     if (msg.type >= 0xF0) {
         /* Pairing. Only while our own window is open — a stray request from a
-           neighbour's kit is ignored, which is the whole point of pairing. */
-        if (!from || !s_pairing) return;
-        if (msg.type == ZC_NOW_T_PAIR_REQ) {
-            if (zc_now_peer_store(from)) zc_now_send_raw(from, ZC_NOW_T_PAIR_ACK, 0, 0);
-        } else if (msg.type == ZC_NOW_T_PAIR_ACK) {
-            (void)zc_now_peer_store(from);
-        }
+           neighbour's kit is ignored, which is the whole point of pairing.
+           Handed to the pairing task: storing writes flash. A full queue drops
+           the frame; the requester repeats PAIR_REQ every 500 ms. */
+        if (!from || !s_pairing || s_pair_q == NULL) return;
+        if (msg.type != ZC_NOW_T_PAIR_REQ && msg.type != ZC_NOW_T_PAIR_ACK) return;
+        zc_now_pair_evt_t evt = {};
+        evt.type = msg.type;
+        memcpy(evt.mac, from, 6);
+        (void)xQueueSend(s_pair_q, &evt, 0);
         return;
     }
-    if (s_peer_count > 0 && (!from || !zc_now_peer_known(from))) return;
+    if (!zc_now_accepts(from)) return;
     uint32_t hash = msg.name_hash;
     (void)hash;
 ${collectSlot(rendered, 'espnow_recv_cases', 4)}
@@ -2804,9 +2867,32 @@ ${collectSlot(rendered, 'espnow_driver_cb_cases', 4)}
     }
 }
 
+static void zc_now_pair_task(void *arg)
+{
+    (void)arg;
+    zc_now_pair_evt_t evt;
+    for (;;) {
+        if (xQueueReceive(s_pair_q, &evt, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_pairing) continue;   /* the window closed while it waited */
+        if (evt.type == ZC_NOW_T_PAIR_REQ) {
+            if (zc_now_peer_store(evt.mac)) zc_now_send_raw(evt.mac, ZC_NOW_T_PAIR_ACK, 0, 0);
+        } else {
+            (void)zc_now_peer_store(evt.mac);
+        }
+    }
+}
+
 esp_err_t app_espnow_init(void)
 {
     s_handle = app_driver_register_solution("espnow", espnow_driver_cb, NULL);
+
+    s_peer_lock = xSemaphoreCreateMutex();
+    s_pair_q = xQueueCreate(4, sizeof(zc_now_pair_evt_t));
+    if (s_peer_lock == NULL || s_pair_q == NULL ||
+        xTaskCreate(zc_now_pair_task, "now_pair", 3072, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "out of memory starting ESP-NOW pairing");
+        return ESP_ERR_NO_MEM;
+    }
 
     /* Wi-Fi up in STA mode, NOT connected — ESP-NOW rides the radio alone.
      * All kit members pin channel 1 (see the trust-model note). */
@@ -2830,8 +2916,14 @@ esp_err_t app_espnow_init(void)
     ESP_ERROR_CHECK(esp_now_register_recv_cb(espnow_recv_cb));
 
     /* Peers learnt in an earlier pairing window, and the window's timers. */
+    zc_now_lock();
     zc_now_peers_load();
-    for (uint8_t i = 0; i < s_peer_count; i++) zc_now_radio_add_peer(s_peers[i]);
+    zc_now_unlock();
+    {
+        uint8_t peers[ZC_NOW_MAX_PEERS][6];
+        uint8_t n = zc_now_peers_copy(peers);
+        for (uint8_t i = 0; i < n; i++) zc_now_radio_add_peer(peers[i]);
+    }
     const esp_timer_create_args_t end_args = {
         .callback = &zc_now_pair_end_cb, .arg = NULL, .dispatch_method = ESP_TIMER_TASK,
         .name = "now_pair_end", .skip_unhandled_events = true,
