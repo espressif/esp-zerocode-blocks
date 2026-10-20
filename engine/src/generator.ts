@@ -25,7 +25,7 @@ import {
   boardTakesOver,
 } from './types.js'
 import { loadBlock, loadBoardFile, type CatalogPaths } from './loader.js'
-import { boardProvidesBus, boardsRoot, deviceRequirementMisses, findBoardDir } from './validator.js'
+import { boardProvidesBus, boardsRoot, deviceRequirementMisses, findBoardDir, frameworkConflicts } from './validator.js'
 import { CHIP_MODULES, normalizeChipTarget } from './hardware.js'
 import { loadBaseDefaults, withDefaults } from './defaults.js'
 import { DEVICE_DATA_FILE, type DeviceDataRow, collectDeviceData, deviceDataCsv } from './device-data.js'
@@ -171,6 +171,13 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   // lines survive, and the device list decides whether a block whose hardware
   // the board already has keeps its own init (see BmgrMapping.provided_by).
   // Null = no reachable pack, and every gate below then behaves as it did.
+  // Framework pairs that boot into an abort or a dead radio (see
+  // frameworkConflicts) — refused before anything is written.
+  const conflicts = frameworkConflicts(product.frameworks ?? [])
+  if (conflicts.length > 0) {
+    throw new Error(`product '${product.id}': ${conflicts.join(' ')}`)
+  }
+
   const boardFacts = bmgrBoard ? await loadBoardFacts(paths, bmgrBoard) : null
 
   const instanceRendered = await renderInstances(paths, product, bmgrBoard, boardFacts, chip)

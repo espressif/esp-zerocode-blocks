@@ -414,6 +414,39 @@ export function boardPinOwners(boardDir: string): Map<number, BoardPinOwner> {
   return out
 }
 
+/**
+ * Framework pairs that cannot share one image yet. Each is a boot-time failure
+ * no build catches, so the engine refuses the composition rather than emit a
+ * firmware that aborts or loses its radio on the bench. The platform's registry
+ * (zerocode-ai shared/src/frameworks/profiles.ts) should say the same; until it
+ * does, this is what stops the pair.
+ *
+ *   matter + rainmaker — app_rainmaker_init always runs app_network_init, which
+ *     calls esp_wifi_init under ESP_ERROR_CHECK. Listed after Matter (whose
+ *     chip stack initialised Wi-Fi synchronously) that is ESP_ERR_INVALID_STATE
+ *     and an abort; listed before it, both still run a BLE commissioning /
+ *     provisioning stack on one NimBLE host. RainMaker has no shared-network
+ *     mode to defer with.
+ *   ble_mesh + matter — ble_mesh calls nimble_port_init itself, and Matter's
+ *     sidecar turns OBSERVER/CENTRAL off (mesh cannot scan: ble_gap_disc
+ *     compiles to "not supported") and sets USE_BLE_ONLY_FOR_COMMISSIONING, so
+ *     CHIP deinits NimBLE and releases BT memory after commissioning.
+ *   ble_mesh + rainmaker — the same two NimBLE owners: RainMaker's BLE
+ *     provisioning and the mesh host.
+ */
+const FRAMEWORK_CONFLICTS: ReadonlyArray<readonly [string, string, string]> = [
+  ['matter', 'rainmaker', 'both bring up Wi-Fi and BLE onboarding, and RainMaker has no shared-network mode (esp_wifi_init aborts on the second call)'],
+  ['matter', 'ble_mesh', 'both own the NimBLE host; Matter turns BLE scanning off and tears NimBLE down after commissioning'],
+  ['rainmaker', 'ble_mesh', 'both own the NimBLE host (RainMaker BLE provisioning and the mesh stack)'],
+]
+
+/** One message per conflicting pair among `frameworks`; empty when the mix is fine. */
+export function frameworkConflicts(frameworks: readonly string[]): string[] {
+  return FRAMEWORK_CONFLICTS
+    .filter(([a, b]) => frameworks.includes(a) && frameworks.includes(b))
+    .map(([a, b, why]) => `frameworks ${a} and ${b} cannot be combined yet: ${why}. Pick one of them.`)
+}
+
 export function validateProduct(
   given: Product,
   blocks: Map<string, Block>,
@@ -458,6 +491,9 @@ export function validateProduct(
   // FLASH-BUDGET GATES (audio) — same rules the generator enforces, surfaced
   // at catalog-validation time so a bad product never reaches a build.
   const frameworks = product.frameworks ?? []
+  for (const message of frameworkConflicts(frameworks)) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
   if (frameworks.includes('audio')) {
     const table = product.partition_table ?? ''
     if (!['8mb-voice', '16mb-voice'].includes(table)) {
