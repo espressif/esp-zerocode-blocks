@@ -15,5 +15,5 @@
         return esp_zigbee_err_to_esp(err);
     }
     s_{{prefix_lc}}_zb_endpoint = {{cfg.zb_endpoint}};
-    ESP_LOGI(TAG, "{{prefix_lc}}: Zigbee Door Lock endpoint %d (state reporting only)", {{cfg.zb_endpoint}});
+    ESP_LOGI(TAG, "{{prefix_lc}}: Zigbee Door Lock endpoint %d", {{cfg.zb_endpoint}});
 }
