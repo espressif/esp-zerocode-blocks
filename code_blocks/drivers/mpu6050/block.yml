@@ -1,0 +1,70 @@
+description: >-
+  MPU6050-family accelerometer (MPU6050, MPU6500, MPU6886, MPU9250) over I2C —
+  publishes a motion flag, and optionally the vibration level and which way up
+  it is. Depends on peripherals/i2c_bus (or a board that owns the bus).
+
+# WHAT THIS PUBLISHES, and why not raw axes: the driver param bus carries
+# scalars, and three raw axes at 100 Hz is a firehose no device type can bind
+# to. Products want "is it moving", "how hard is it shaking" and "which way up
+# is it" — so those are the three outputs. Raw streaming belongs to a block
+# that owns its own transport.
+#
+# THE FAMILY. MPU6050, MPU6500, MPU6886 (M5Stack) and MPU9250 share the
+# accelerometer path used here: PWR_MGMT_1 0x6B wakes it, ACCEL_CONFIG 0x1C sets
+# the range, ACCEL_XOUT_H 0x3B starts six big-endian bytes. They differ in
+# WHO_AM_I (0x75): 0x68 (MPU6050), 0x70 (MPU6500), 0x19 (MPU6886), 0x71/0x73
+# (MPU9250/9255) — all accepted. The gyro is left on its defaults and not read.
+#
+# RECOVERY. A warm restart leaves the chip configured, a brownout leaves it
+# asleep (PWR_MGMT_1 resets to 0x40, SLEEP=1). After a run of failed reads the
+# poll re-probes WHO_AM_I and rewrites the configuration, so the block heals
+# without a reboot instead of reading zeros forever.
+#
+# The poll runs on the shared esp_timer task and never blocks there: one 6-byte
+# read per tick, nothing else.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_i2c, esp_timer]
+
+# See imu_bmi270: this block attaches ONE device to a bus somebody else owns.
+board_part: [mpu6050, mpu6500, mpu6886, mpu9250]
+
+requires_bus:
+  type: i2c
+  port_param: i2c_port
+
+params:
+  i2c_freq_hz:
+    type: int
+    default: 400000
+    description: SCL clock for THIS device, in Hz (the MPU6050 supports 400 kHz).
+  i2c_port:  { type: int, default: 0 }
+  i2c_address: { type: int, default: 0x68, description: 0x68 with AD0 low, 0x69 with AD0 high }
+  poll_interval_ms: { type: int, default: 20, description: "20 ms = 50 Hz, enough for a washing machine's spin (up to ~25 Hz)" }
+  motion_threshold_mg:
+    type: int
+    default: 120
+    description: >-
+      How far total acceleration must deviate from 1 g before a sample counts as
+      motion, in milli-g. Below ~60 the sensor's own noise trips it.
+  motion_hold_ms:
+    type: int
+    default: 2000
+    description: motion stays asserted this long after the last moving sample
+
+driver_params:
+  motion_param:
+    type: bool
+    required: true
+    description: true while the part is being moved or shaken
+  vibration_param:
+    type: u16
+    description: >-
+      Optional — the vibration level in milli-g: a smoothed average of how far
+      each sample's total acceleration is from 1 g (so orientation and gravity
+      do not count). Published when it changes by 5 mg or more. Omit to skip.
+  orientation_param:
+    type: u8
+    description: >-
+      Optional — 0 unknown, 1 face-up, 2 face-down, 3 portrait, 4 portrait
+      inverted, 5 landscape, 6 landscape inverted. Omit to skip.
