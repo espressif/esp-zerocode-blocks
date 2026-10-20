@@ -1045,6 +1045,23 @@ function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; ty
   return [...map.entries()].map(([name, type]) => ({ name, type }))
 }
 
+/** Solution-registry size for this product. Every framework registers one
+ *  solution, and so does every instance of a block whose slot code calls
+ *  app_driver_register_solution (nvs_persist_*, auto_off_timer, …). A fixed 8
+ *  ran out on a busy product: the 9th registration logged an error and got
+ *  handle 0 (= LOCAL), so its callback never ran — a persistence behavior
+ *  silently stopped saving. Sized from the composition, with headroom for
+ *  writer code that registers its own; never below the old 8, so a product
+ *  that fit keeps the same set_param stack footprint (one slot per entry is
+ *  copied onto the caller's stack on every write). */
+export function solutionRegistrySize(rendered: RenderedInstance[]): number {
+  const registrants = rendered.filter(r =>
+    r.block.kind === 'framework' ||
+    Object.values(r.slots).some(code => code.includes('app_driver_register_solution(')),
+  ).length
+  return Math.max(8, registrants + 4)
+}
+
 function genAppDriverTypesH(rendered: RenderedInstance[]): string {
   const params = collectParamIds(rendered)
   const enumLines = [
@@ -1073,7 +1090,7 @@ typedef union {
     uint32_t u32;
 } app_driver_param_val_t;
 
-#define APP_DRIVER_MAX_SOLUTIONS 8
+#define APP_DRIVER_MAX_SOLUTIONS ${solutionRegistrySize(rendered)}  /* registrants in this composition + headroom */
 typedef uint8_t app_driver_handle_t;
 #define APP_DRIVER_SOURCE_LOCAL 0
 
