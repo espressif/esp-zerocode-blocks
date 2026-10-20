@@ -5,7 +5,10 @@
  * the upgrade-image element. */
 #define {{prefix}}_ZB_OTA_MANUFACTURER_ID 0x131bU
 #define {{prefix}}_ZB_OTA_IMAGE_TYPE      0xffbfU
-#define {{prefix}}_ZB_OTA_FILE_VERSION    0x01010100U
+/* The version this image IS — a block param, because a constant reported the
+ * same number before and after every upgrade and the server kept offering the
+ * "newer" image forever. Raise it per release (block.yml zb_ota_file_version). */
+#define {{prefix}}_ZB_OTA_FILE_VERSION    ((uint32_t){{cfg.zb_ota_file_version}}U)
 #define {{prefix}}_ZB_OTA_QUERY_MINUTES   (24U * 60U)
 #define {{prefix}}_ZB_OTA_BLOCK_SIZE      64U
 #define {{prefix}}_ZB_OTA_ELEMENT_HEADER_LEN (sizeof(uint16_t) + sizeof(uint32_t))
