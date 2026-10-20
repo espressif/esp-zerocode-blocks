@@ -1,3 +1,12 @@
+/* Catch a channel/timer the target's LEDC does not have at compile time —
+   ledc_channel_config() would otherwise return ESP_ERR_INVALID_ARG under
+   ESP_ERROR_CHECK and the device would boot-loop (channels 6-7 exist only on
+   the chips with 8). */
+static_assert({{prefix}}_MEL_CHANNEL >= 0 && {{prefix}}_MEL_CHANNEL < LEDC_CHANNEL_MAX,
+              "{{prefix_lc}}: ledc_channel does not exist on this chip");
+static_assert({{prefix}}_MEL_TIMER >= 0 && {{prefix}}_MEL_TIMER < LEDC_TIMER_MAX,
+              "{{prefix_lc}}: ledc_timer does not exist on this chip");
+
 static volatile uint8_t s_{{prefix_lc}}_pattern = 0;
 static TaskHandle_t s_{{prefix_lc}}_task = NULL;
 
