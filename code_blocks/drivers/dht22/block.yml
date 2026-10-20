@@ -4,7 +4,8 @@ description: >-
   protocol is bundled in-block (same self-contained style as the I2C
   sht4x/aht21 blocks). Publishes temperature + humidity via
   app_driver_set_param so temperature_sensor + humidity_sensor endpoints
-  can bind. ESP32-C3 / single-core safe.
+  can bind. Reads from its own task; the ~5 ms frame read masks interrupts
+  on its core (see below).
 
 # DHT single-wire protocol (DHT22/AM2301/DHT21 and DHT11 share framing):
 #   1. MCU pulls the data line LOW >=1 ms (DHT22) / >=18 ms (DHT11) to wake it.
@@ -24,6 +25,9 @@ description: >-
 # inside a portMUX critical section with interrupts masked — a scheduler
 # tick or ISR mid-frame would corrupt the timing and fail the checksum.
 # DHT sensors sample at <=0.5 Hz; poll_interval_ms is clamped to >=2000.
+# On a single-core chip (C3/C6/H2) that masked window is ~5 ms every poll, which
+# Wi-Fi/BLE tolerate but notice; if it matters, an RMT-RX decoder is the
+# interrupt-friendly replacement.
 
 params:
   gpio:
@@ -61,3 +65,7 @@ driver_params:
     type: i16
     required: true
     description: Driver param ID for humidity (int16, hundredths of %RH, e.g. 5500 = 55.00 %RH)
+  status_param:
+    type: bool
+    required: false
+    description: "Optional sensor-health bool: true after a successful read, false after a failed one. Without it a dead sensor keeps its last reading on the bus."
