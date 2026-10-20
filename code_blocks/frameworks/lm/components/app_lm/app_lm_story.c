@@ -26,12 +26,21 @@
 #include <math.h>
 #include <stdint.h>   /* UINT32_MAX for the sampler */
 #include <esp_random.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 static const char *TAG = "app_lm_story";
 
 extern const uint8_t story_bin_start[] asm("_binary_story_bin_start");
 
 static esp_tinylm_model_handle_t s_story;
+
+/* Every product composes behaviors/task_watchdog, which panics when a core's
+ * IDLE task has not run for 10 s. The worker is pinned to core 1 at priority 5
+ * and esp_tinylm never blocks, so a 200-token story on esp32s3 (~17.6 tok/s,
+ * ~11.4 s plus the prompt) starved IDLE1 and rebooted the board. One tick every
+ * few tokens lets IDLE run at a cost of ~1 tick per 8 tokens. */
+#define STORY_YIELD_EVERY 8
 
 esp_err_t zc_lm_story_init(void)
 {
@@ -82,6 +91,9 @@ void zc_lm_story_run(const char *prompt, int max_new, float temp,
         if (esp_tinylm_forward(s_story, ids[i], pos++, &logits) != ESP_OK) {
             return;
         }
+        if ((i % STORY_YIELD_EVERY) == STORY_YIELD_EVERY - 1) {
+            vTaskDelay(1);
+        }
     }
 
     char tb[32];
@@ -126,6 +138,9 @@ void zc_lm_story_run(const char *prompt, int max_new, float temp,
             break;
         }
         produced++;
+        if ((produced % STORY_YIELD_EVERY) == 0) {
+            vTaskDelay(1);
+        }
     }
     ESP_LOGI(TAG, "generated %d tokens", produced);
 }

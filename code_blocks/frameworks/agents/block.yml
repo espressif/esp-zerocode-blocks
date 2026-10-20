@@ -19,7 +19,8 @@ radio: true
 #
 # NETWORK: standalone products own Wi-Fi via the console (agent-wifi), exactly
 # mqtt's pattern; with matter/rainmaker/mqtt co-selected app_agents owns
-# NOTHING and waits for the transport's IP (shared-net mode).
+# NOTHING and waits for the transport's IP (shared-net mode). Beside webui
+# or aws_iot it still owns Wi-Fi, and they serve/connect on its station.
 #
 # ONBOARDING: agent-wifi <ssid> <pass>, agent-id <id>, agent-token <refresh
 # token> — all NVS-persisted. The refresh token comes from the Agents
