@@ -30,7 +30,9 @@ static inline int {{prefix_lc}}_luma(const uint8_t *f, int x, int y)
     case V4L2_PIX_FMT_RGB565: {
         const uint8_t *p = f + (y * s_{{prefix_lc}}_w + x) * 2;
         uint16_t v = (uint16_t)(p[0] | (p[1] << 8));
-        return (v >> 5) & 0x3F;               /* 6-bit green, ~luma */
+        /* 6-bit green scaled to 0-255: pixel_threshold is in 8-bit luma
+           units, and unscaled green made RGB565 sensors ~4x less sensitive. */
+        return ((v >> 5) & 0x3F) << 2;
     }
     default: return 0;
     }
