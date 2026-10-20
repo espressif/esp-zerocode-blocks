@@ -4,7 +4,8 @@
      * closes, put back what was showing when it opened (in a voice+transport
      * product that is commissioning_led's state — unprovisioned, offline),
      * instead of a fixed "solid" that claimed the device was online. A state
-     * change made while the window was open is left alone. */
+     * change made while the window was open is left alone — unless it equals
+     * the overlay's own pattern, which the close cannot tell apart from it. */
     static uint8_t s_{{prefix_lc}}_under = 1;
     static bool s_{{prefix_lc}}_open = false;
     app_driver_param_val_t {{prefix_lc}}_cur = {};

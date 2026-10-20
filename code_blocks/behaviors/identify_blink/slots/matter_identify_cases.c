@@ -5,7 +5,8 @@
      * a fixed "solid" after an Identify made an offline or unprovisioned device
      * claim to be online until the next connectivity event. If something
      * changed the pattern during identify (a real state change), that newer
-     * value is left alone. idle_pattern is only the fallback when nothing had
+     * value is left alone — unless it equals the identify pattern itself, which
+     * STOP cannot tell apart from the overlay and replaces with the old state. idle_pattern is only the fallback when nothing had
      * set the pattern yet. */
     static uint8_t s_{{prefix_lc}}_under = {{prefix}}_IDLE_PATTERN;
     static bool s_{{prefix_lc}}_active = false;

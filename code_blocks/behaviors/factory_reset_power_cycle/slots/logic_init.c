@@ -8,7 +8,11 @@
          * own reboot) also come back through here, and counting them meant a
          * crash loop or a weak supply could erase NVS — every fabric and
          * credential — with nobody touching the device. Those boots leave the
-         * count as it is; the stable-boot timer below still clears it. */
+         * count as it is; the stable-boot timer below still clears it. The EN
+         * pin reports POWERON on every current chip (ESP_RST_EXT is kept for
+         * one that reports it). A flick too short for the rail to drop below
+         * power-on reset reads as a brownout and is not counted: cycles must
+         * be off long enough to fully power down (about a second). */
         esp_reset_reason_t {{prefix_lc}}_rr = esp_reset_reason();
         if ({{prefix_lc}}_rr == ESP_RST_POWERON || {{prefix_lc}}_rr == ESP_RST_EXT) {
             {{prefix_lc}}_pc++;
