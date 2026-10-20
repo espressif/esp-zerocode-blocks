@@ -2023,12 +2023,17 @@ ${collectSlot(rendered, 'ble_mesh_statics')}
  * onto the mesh and comes back lands on the value it started from. */
 int16_t zc_ble_mesh_level_from_u8(uint8_t value)
 {
-    return (int16_t)((int32_t)value * 65535 / 254 - 32768);
+    /* Rounded both ways: truncating in each direction took most values down a
+     * step per round trip (1 -> 0, 100 -> 99), so an echoed brightness crept
+     * down. The driver range is 0-254; 255 would overflow int16 (33025 wraps
+     * to -32511, nearly off), so it is clamped. */
+    if (value > 254) value = 254;
+    return (int16_t)(((int32_t)value * 65535 + 127) / 254 - 32768);
 }
 
 uint8_t zc_ble_mesh_level_to_u8(int16_t level)
 {
-    return (uint8_t)(((int32_t)level + 32768) * 254 / 65535);
+    return (uint8_t)((((int32_t)level + 32768) * 254 + 32767) / 65535);
 }
 
 bool zc_ble_mesh_provisioned(void)
