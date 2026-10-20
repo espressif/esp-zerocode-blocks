@@ -14,8 +14,15 @@ description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC
 # timer dispatches from the ISR (ESP_TIMER_ISR), not the esp_timer task. IDF
 # declares ESP_TIMER_ISR only when this option is on (default n) — without it
 # the block does not compile.
+# That ISR is IRAM-safe (CONFIG_ESP_TIMER_IN_IRAM, default y), so it also fires
+# while flash is being written — an NVS save of the brightness, say — and then
+# everything the callback calls must be in IRAM too. gpio_set_level is placed
+# there only with GPIO_CTRL_FUNC_IN_IRAM (default n); without it a gate pulse
+# that lands during a flash write is a cache-access panic, at 100-120 pulses
+# a second.
 sdkconfig:
   CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD: 'y'
+  CONFIG_GPIO_CTRL_FUNC_IN_IRAM: 'y'
 
 params:
   zcd_gpio:
