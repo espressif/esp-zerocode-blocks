@@ -38,15 +38,6 @@ params:
   i2c_port: { type: int, default: 0 }
   i2c_address: { type: int, default: 0x62 }
   poll_interval_ms: { type: int, default: 6000, description: "5 s recommended; allow some headroom" }
-  temp_param:
-    type: string
-    required: false
-    default: ""
-    description: i16 temp x 100 (optional — leave empty to skip)
-  humidity_param:
-    type: string
-    required: false
-    default: ""
 
 driver_params:
   co2_param:
@@ -57,3 +48,9 @@ driver_params:
     type: u8
     required: true
     description: u8 AirQuality enum (Matter encoding)
+  temp_param:
+    type: i16
+    description: Optional — int16, hundredths of °C, from the same measurement. Omit to skip publishing it.
+  humidity_param:
+    type: i16
+    description: Optional — int16, hundredths of %RH, from the same measurement. Omit to skip publishing it.

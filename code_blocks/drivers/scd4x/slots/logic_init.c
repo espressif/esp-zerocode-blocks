@@ -6,7 +6,12 @@
     if ({{prefix_lc}}_i2c_attach() != ESP_OK) {
         ESP_LOGE(TAG, "SCD4x {{prefix_lc}}: not started — no I2C bus");
     } else {
-        /* Start periodic measurement */
+        /* A warm restart leaves the sensor measuring, and it refuses a start
+           while it measures: stop it first (0x3F86, then 500 ms before the
+           next command, per the datasheet). A cold sensor NACKs the stop,
+           which is harmless. Then start periodic measurement (0x21B1). */
+        (void){{prefix_lc}}_scd_send_cmd(0x3F86);
+        vTaskDelay(pdMS_TO_TICKS(500));
         {{prefix_lc}}_scd_send_cmd(0x21B1);
         const esp_timer_create_args_t {{prefix_lc}}_args = {
             .callback = &{{prefix_lc}}_scd_poll_cb,
