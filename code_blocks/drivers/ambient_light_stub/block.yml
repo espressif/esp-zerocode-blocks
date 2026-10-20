@@ -8,5 +8,5 @@ driver_params:
   value_param:
     type: u16
     required: true
-    description: Driver param ID (uint16, MeasuredValue spec encoding)
+    description: Driver param ID (uint16 illuminance in plain lux — device_types/light_sensor encodes it for Matter/Zigbee)
 maturity: stub

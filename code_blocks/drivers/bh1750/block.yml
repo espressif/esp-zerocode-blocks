@@ -41,4 +41,4 @@ driver_params:
   value_param:
     type: u16
     required: true
-    description: u16 illuminance — Matter MeasuredValue uses log10(lux)*10000 encoding; this driver publishes a clamped lux value. Convert in app code if strict spec compliance required.
+    description: u16 illuminance in plain lux (clamped to 65535). device_types/light_sensor does the Matter/Zigbee log10 encoding, so wire this straight into it.

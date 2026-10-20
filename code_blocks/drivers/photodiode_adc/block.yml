@@ -1,7 +1,8 @@
 description: Real ADC oneshot read for ambient light (photodiode / photoresistor / phototransistor)
 
-# Generic ADC photodiode reader. Publishes a u16 value scaled to the spec's
-# IlluminanceMeasurement::MeasuredValue range. The exact mapping from raw ADC to lux
+# Generic ADC photodiode reader. Publishes a u16 value linearly scaled from the
+# raw reading, meant as approximate lux (device_types/light_sensor takes plain
+# lux and does the Matter/Zigbee log encoding). The exact mapping from raw ADC to lux
 # depends on the photodiode + amplifier circuit — replace the simple linear scale
 # below with whatever your sensor datasheet recommends.
 
