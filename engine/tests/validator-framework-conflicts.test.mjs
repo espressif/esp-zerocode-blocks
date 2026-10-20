@@ -8,9 +8,14 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { frameworkConflicts, validateProduct } from '../dist/validator.js'
 
-test('matter + rainmaker is refused in either order', () => {
+test('matter + rainmaker is refused in either order, as not supported YET', () => {
   assert.equal(frameworkConflicts(['matter', 'rainmaker']).length, 1)
   assert.equal(frameworkConflicts(['rainmaker', 'matter']).length, 1)
+  // The pair works upstream (RainMaker joining through Matter): the message
+  // must not read as impossible, and must still tell the writer what to do.
+  assert.match(frameworkConflicts(['matter', 'rainmaker'])[0], /cannot be combined yet/)
+  assert.match(frameworkConflicts(['matter', 'rainmaker'])[0], /does not build yet/)
+  assert.match(frameworkConflicts(['matter', 'rainmaker'])[0], /Pick one of them\./)
 })
 
 test('ble_mesh beside matter or rainmaker is refused', () => {

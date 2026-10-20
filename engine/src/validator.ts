@@ -426,7 +426,11 @@ export function boardPinOwners(boardDir: string): Map<number, BoardPinOwner> {
  *     chip stack initialised Wi-Fi synchronously) that is ESP_ERR_INVALID_STATE
  *     and an abort; listed before it, both still run a BLE commissioning /
  *     provisioning stack on one NimBLE host. RainMaker has no shared-network
- *     mode to defer with.
+ *     mode to defer with. The pair itself is supported upstream
+ *     (esp-rainmaker examples/matter): Matter owns Wi-Fi and BLE, and RainMaker
+ *     joins through it with a certificate claimed from a host BEFORE
+ *     commissioning, which is not a self-claim. This catalog does not build
+ *     that yet, so the refusal says "not yet", not "never".
  *   ble_mesh + matter — ble_mesh calls nimble_port_init itself, and Matter's
  *     sidecar turns OBSERVER/CENTRAL off (mesh cannot scan: ble_gap_disc
  *     compiles to "not supported") and sets USE_BLE_ONLY_FOR_COMMISSIONING, so
@@ -435,7 +439,7 @@ export function boardPinOwners(boardDir: string): Map<number, BoardPinOwner> {
  *     provisioning and the mesh host.
  */
 const FRAMEWORK_CONFLICTS: ReadonlyArray<readonly [string, string, string]> = [
-  ['matter', 'rainmaker', 'both bring up Wi-Fi and BLE onboarding, and RainMaker has no shared-network mode (esp_wifi_init aborts on the second call)'],
+  ['matter', 'rainmaker', 'here both bring up Wi-Fi and BLE onboarding, and RainMaker has no shared-network mode (esp_wifi_init aborts on the second call). Supported upstream, RainMaker joins through Matter with a certificate claimed before commissioning, which this catalog does not build yet'],
   ['matter', 'ble_mesh', 'both own the NimBLE host; Matter turns BLE scanning off and tears NimBLE down after commissioning'],
   ['rainmaker', 'ble_mesh', 'both own the NimBLE host (RainMaker BLE provisioning and the mesh stack)'],
 ]
