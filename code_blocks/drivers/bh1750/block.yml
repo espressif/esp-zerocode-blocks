@@ -42,3 +42,7 @@ driver_params:
     type: u16
     required: true
     description: u16 illuminance in plain lux (clamped to 65535). device_types/light_sensor does the Matter/Zigbee log10 encoding, so wire this straight into it.
+  status_param:
+    type: bool
+    required: false
+    description: "Optional sensor-health bool: true after a successful read, false after a failed one. Without it a dead sensor keeps its last reading on the bus."
