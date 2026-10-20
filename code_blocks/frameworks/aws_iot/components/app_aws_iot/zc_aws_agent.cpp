@@ -327,23 +327,37 @@ static bool session_connect(bool clean_session, const conn_cfg_t *c)
     msg.getCommand = Agent_GetCommand;
     msg.releaseCommand = Agent_ReleaseCommand;
 
-    /* Clock_GetTimeMs is posix_compat's — coreMQTT keeps no clock of its own,
+    /* The agent is initialised ONCE, on the first connect. MQTTAgent_Init
+     * memsets the whole context — the agent's table of commands awaiting an
+     * ack and coreMQTT's QoS1 records with it — so re-running it on every
+     * reconnect left MQTTAgent_ResumeSession below nothing to resend or
+     * cancel: a QoS1 publish in flight at the drop was lost, and its
+     * command_complete_cb never ran to free the copied topic and payload.
+     * Everything the context holds stays valid across sessions (s_net,
+     * s_net_buf and the message queue are static), and MQTT_Connect resets the
+     * connection and keep-alive state itself — Amazon's reference agent task
+     * reconnects the same way.
+     *
+     * Clock_GetTimeMs is posix_compat's — coreMQTT keeps no clock of its own,
      * and a dummy one silently disables keep-alive. */
-    MQTTStatus_t st = MQTTAgent_Init(&s_agent, &msg, &netbuf, &transport,
-                                     Clock_GetTimeMs, incoming_publish_cb, NULL);
-    if (st == MQTTSuccess) {
-        /* REQUIRED for QoS1. Without it every QoS1 publish is rejected before
-         * it reaches the wire. */
-        st = MQTT_InitStatefulQoS(&s_agent.mqttContext,
-                                  s_out_acks, sizeof(s_out_acks) / sizeof(s_out_acks[0]),
-                                  s_in_acks, sizeof(s_in_acks) / sizeof(s_in_acks[0]));
+    MQTTStatus_t st = MQTTSuccess;
+    if (!s_agent_ready) {
+        st = MQTTAgent_Init(&s_agent, &msg, &netbuf, &transport,
+                            Clock_GetTimeMs, incoming_publish_cb, NULL);
+        if (st == MQTTSuccess) {
+            /* REQUIRED for QoS1. Without it every QoS1 publish is rejected
+             * before it reaches the wire. */
+            st = MQTT_InitStatefulQoS(&s_agent.mqttContext,
+                                      s_out_acks, sizeof(s_out_acks) / sizeof(s_out_acks[0]),
+                                      s_in_acks, sizeof(s_in_acks) / sizeof(s_in_acks[0]));
+        }
+        if (st != MQTTSuccess) {
+            ESP_LOGE(ZC_AWS_TAG, "MQTTAgent_Init: %s", MQTT_Status_strerror(st));
+            xTlsDisconnect(&s_net);
+            return false;
+        }
+        s_agent_ready = true;
     }
-    if (st != MQTTSuccess) {
-        ESP_LOGE(ZC_AWS_TAG, "MQTTAgent_Init: %s", MQTT_Status_strerror(st));
-        xTlsDisconnect(&s_net);
-        return false;
-    }
-    s_agent_ready = true;
 
     MQTTConnectInfo_t ci = {};
     ci.cleanSession = clean_session;
