@@ -5,3 +5,5 @@
 #define {{prefix}}_LCD_RST         {{cfg.reset_gpio}}
 #define {{prefix}}_LCD_BACKLIGHT   {{cfg.backlight_gpio}}
 #define {{prefix}}_LCD_BUF_LINES   {{cfg.buffer_lines}}
+#define {{prefix}}_LCD_PHY_LDO_CHAN {{cfg.phy_ldo_chan}}
+#define {{prefix}}_LCD_PHY_LDO_MV   {{cfg.phy_ldo_mv}}

@@ -5,6 +5,23 @@
 
     /* MIPI-DSI has no pins to claim: the D-PHY pads are dedicated, so unlike
        the SPI panels this block spends none of the chip's GPIO budget. */
+
+    /* Power the D-PHY FIRST. VDD_MIPI_DPHY is fed by an on-chip LDO on the
+       P4 boards, and until that channel is acquired the PHY sits in "no power":
+       every call below still returns ESP_OK and the panel simply stays dark.
+       Preprocessor guard so a board with an external regulator (-1) compiles
+       no LDO code at all. The handle is never released — the PHY needs the
+       supply for the life of the display. */
+#if {{prefix}}_LCD_PHY_LDO_CHAN >= 0
+    {
+        esp_ldo_channel_handle_t {{prefix_lc}}_phy_ldo = NULL;
+        esp_ldo_channel_config_t {{prefix_lc}}_ldo_cfg = {};
+        {{prefix_lc}}_ldo_cfg.chan_id = {{prefix}}_LCD_PHY_LDO_CHAN;
+        {{prefix_lc}}_ldo_cfg.voltage_mv = {{prefix}}_LCD_PHY_LDO_MV;
+        ESP_ERROR_CHECK(esp_ldo_acquire_channel(&{{prefix_lc}}_ldo_cfg, &{{prefix_lc}}_phy_ldo));
+    }
+#endif
+
     esp_lcd_dsi_bus_handle_t {{prefix_lc}}_bus = NULL;
     esp_lcd_dsi_bus_config_t {{prefix_lc}}_bus_cfg = {};
     {{prefix_lc}}_bus_cfg.bus_id = 0;
