@@ -1212,7 +1212,16 @@ using namespace chip::app::Clusters;
 static const char *TAG = "app_matter";
 
 static app_driver_handle_t s_handle = 0;
-static bool s_from_driver = false;
+/* "This attribute update is the driver's own echo — do not apply it back."
+ * THREAD-LOCAL, because the echo and a controller write run on different
+ * tasks: matter_driver_cb sets it on the task that called set_param, then
+ * attribute::update blocks there for the CHIP lock. A plain global was true
+ * for that whole wait, so a controller write the CHIP task handled meanwhile
+ * hit PRE_UPDATE with the flag set and was dropped — the attribute changed,
+ * the hardware did not. Per task, only the update the setter itself makes
+ * (PRE_UPDATE runs on the caller of attribute::update) is skipped. ESP-IDF's
+ * FreeRTOS gives every task its own copy (api-guides/thread-local-storage). */
+static thread_local bool s_from_driver = false;
 
 ${collectSlot(rendered, 'matter_statics')}
 
