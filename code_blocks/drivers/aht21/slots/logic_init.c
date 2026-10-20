@@ -6,6 +6,15 @@
     if ({{prefix_lc}}_i2c_attach() != ESP_OK) {
         ESP_LOGE(TAG, "AHT21 {{prefix_lc}}: not started — no I2C bus");
     } else {
+        {{prefix_lc}}_aht_calibrate();
+        const esp_timer_create_args_t {{prefix_lc}}_read_args = {
+            .callback = &{{prefix_lc}}_aht_read_cb,
+            .arg = NULL,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "{{prefix_lc}}_ahtr",
+            .skip_unhandled_events = true,
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_read_args, &s_{{prefix_lc}}_aht_read_timer));
         const esp_timer_create_args_t {{prefix_lc}}_args = {
             .callback = &{{prefix_lc}}_aht_poll_cb,
             .arg = NULL,
