@@ -3,7 +3,7 @@ description: Sensirion SHT4x I2C temp+humidity sensor (real protocol). Depends o
 # Real Sensirion SHT4x protocol:
 #   - I2C addr 0x44 (0x45 for the alt variant)
 #   - Send measurement command (0xFD = high-precision, no clock stretching)
-#   - Wait ~10 ms
+#   - Wait >= 10 ms (8.3 ms max; one tick more than pdMS_TO_TICKS(10) — see logic_statics.c)
 #   - Read 6 bytes: t_msb, t_lsb, t_crc, h_msb, h_lsb, h_crc
 #   - T (°C) = -45 + 175 * (t_raw / 65535)
 #   - RH (%) = -6  + 125 * (h_raw / 65535)

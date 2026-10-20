@@ -36,10 +36,19 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
 
 static esp_err_t {{prefix_lc}}_sht3_read(int16_t *t_x100, int16_t *rh_x100)
 {
-    uint8_t cmd[2] = { 0x2C, 0x06 };
+    /* 0x2400 = single shot, high repeatability, NO clock stretching. The
+       stretching variant (0x2C06) holds SCL low until the measurement is done
+       — up to 15 ms — and the I2C master gives up on a stretched clock after
+       its default scl_wait_us (~2 ms, I2C_LL_SCL_WAIT_US_VAL_DEFAULT), so an
+       early read timed out. Without stretching an early read is a plain NACK,
+       and the wait below makes it not early. */
+    uint8_t cmd[2] = { 0x24, 0x00 };
     esp_err_t err = i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, cmd, sizeof(cmd), 50);
     if (err != ESP_OK) return err;
-    vTaskDelay(pdMS_TO_TICKS(15));
+    /* +1 tick: vTaskDelay(n) waits (n-1, n] ticks, and at the default 100 Hz
+       pdMS_TO_TICKS(15) is ONE tick (0-10 ms) against a 15 ms maximum
+       measurement time. One extra tick floors the wait at 15 ms. */
+    vTaskDelay(pdMS_TO_TICKS(15) + 1);
     uint8_t buf[6] = {0};
     err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) return err;
@@ -57,10 +66,15 @@ static esp_err_t {{prefix_lc}}_sht3_read(int16_t *t_x100, int16_t *rh_x100)
 static void {{prefix_lc}}_sht3_poll_cb(void *arg)
 {
     int16_t t = 0, h = 0;
-    if ({{prefix_lc}}_sht3_read(&t, &h) == ESP_OK) {
+    esp_err_t err = {{prefix_lc}}_sht3_read(&t, &h);
+    if (err == ESP_OK) {
         app_driver_param_val_t tv = { .i16 = t };
         app_driver_set_param({{cfg.temp_param}}, tv, APP_DRIVER_SOURCE_LOCAL);
         app_driver_param_val_t hv = { .i16 = h };
         app_driver_set_param({{cfg.humidity_param}}, hv, APP_DRIVER_SOURCE_LOCAL);
+    } else {
+        /* Say so: a failed read used to return silently, so a dead or
+           miswired sensor left nothing in the device log. */
+        ESP_LOGW(TAG, "{{prefix_lc}}: SHT3x read failed: %s", esp_err_to_name(err));
     }
 }
