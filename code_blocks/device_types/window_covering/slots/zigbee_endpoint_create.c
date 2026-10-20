@@ -12,8 +12,9 @@
         ezb_af_endpoint_get_cluster_desc(ep_desc, EZB_ZCL_CLUSTER_ID_WINDOW_COVERING, EZB_ZCL_CLUSTER_SERVER);
     app_driver_param_val_t init = {};
     app_driver_get_param({{cfg.position_param}}, &init);
-    /* Driver position is centi-percent (0-10000); ZCL lift percentage is u8 0-100. */
-    uint8_t {{prefix_lc}}_lift_pct = (uint8_t)(init.u16 / 100 > 100 ? 100 : init.u16 / 100);
+    /* Driver position is centi-percent OPEN (0-10000); ZCL lift percentage is
+     * u8 percent CLOSED (0 = open, 100 = closed). */
+    uint8_t {{prefix_lc}}_lift_pct = (uint8_t)(100 - (init.u16 / 100 > 100 ? 100 : init.u16 / 100));
     ESP_ERROR_CHECK(esp_zigbee_err_to_esp(ezb_zcl_window_covering_cluster_desc_add_attr(
         wc_desc, EZB_ZCL_ATTR_WINDOW_COVERING_CURRENT_POSITION_LIFT_PERCENTAGE_ID,
         &{{prefix_lc}}_lift_pct)));

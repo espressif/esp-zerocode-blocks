@@ -47,6 +47,8 @@ driver_params:
       Driver param ID for wash mode index (uint8_t, 0-3). OPTIONAL — leave
       empty for a mandatory-only laundry washer (OperationalState alone). Set it
       to add the optional LaundryWasherMode cluster, e.g. APP_DRIVER_PARAM_WASHER_MODE.
+      Every mode control (RainMaker Mode, MQTT select, display dropdown,
+      voice phrases) exists only when it is set.
   state_param:
     type: u8
     default: APP_DRIVER_PARAM_WASHER_STATE

@@ -9,9 +9,12 @@ device_types:
 # Framework SDK deps come from the framework blocks (frameworks/matter, ...) —
 # this block contributes only bindings.
 
-# Generic Switch reports CurrentPosition; the Switch cluster also generates action events
-# (InitialPress / LongPress / MultiPressOngoing / MultiPressComplete). For V0 we expose
-# CurrentPosition only — action events can be emitted directly from app code if needed.
+# Matter: each nonzero position_param notification is ONE momentary press on the
+# Generic Switch — CurrentPosition goes to that position, InitialPress is emitted,
+# then CurrentPosition returns to 0 (+ ShortRelease where the feature is on).
+# Controllers act on the events. Drive it with an EVENT producer
+# (drivers/momentary_button's position_param fires 1 per click), never a
+# set_param of the same value twice, which the bus would swallow.
 params:
   zb_endpoint:
     type: int
@@ -30,7 +33,7 @@ driver_params:
   position_param:
     type: u8
     required: true
-    description: Driver param ID for switch position (uint8_t — 0..NumberOfPositions-1)
+    description: Driver param ID for switch presses (uint8_t; each notification is one press at that position, 1..NumberOfPositions-1; 0 = no press)
 
 # Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
 

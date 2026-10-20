@@ -57,4 +57,4 @@ driver_params:
   system_mode_param:
     type: u8
     required: true
-    description: Driver param ID for SystemMode (uint8 — 0=Off, 4=Heat, 3=Cool)
+    description: Driver param ID for SystemMode (uint8 — 0=Off, 4=Heat). The Matter endpoint is heat-only (Heating feature, ControlSequenceOfOperation=HeatingOnly), so Cool (3) is refused by Matter.

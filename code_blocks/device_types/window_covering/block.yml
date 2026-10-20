@@ -7,8 +7,12 @@ device_types:
 # Framework SDK deps come from the framework blocks (frameworks/matter,
 # frameworks/rainmaker) — this block contributes only bindings.
 
-# Reports CurrentPositionLiftPercent100ths (uint16, 0-10000 = 0-100%).
-# Driver translates target lift% to motor commands.
+# position_param is percent OPEN (0 = closed, 10000 = fully open), as the
+# driver, voice, MQTT, RainMaker and display bindings all count it. Matter
+# (*LiftPercent100ths) and ZCL (lift percentage) count percent CLOSED
+# (0 = open), so those two bindings convert at the boundary. Matter runs with
+# Lift + PositionAwareLift, so Up/Down/GoToLiftPercentage set Target, which
+# reaches the driver.
 params:
   label:
     type: string
@@ -49,4 +53,4 @@ driver_params:
   position_param:
     type: u16
     required: true
-    description: Driver param ID for current lift position (uint16, 0-10000 = 0-100%)
+    description: Driver param ID for current lift position (uint16, 0-10000 = percent OPEN in 0.01% units; 10000 = fully open)

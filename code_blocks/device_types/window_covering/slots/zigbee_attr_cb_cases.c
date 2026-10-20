@@ -8,7 +8,8 @@ if (endpoint == s_{{prefix_lc}}_zb_endpoint &&
     message->in.attribute.data.value) {
     uint8_t pct = *(uint8_t *)message->in.attribute.data.value;
     if (pct > 100) pct = 100;
-    /* ZCL lift percentage is 0-100; driver position is centi-percent (0-10000). */
-    app_driver_param_val_t pv = { .u16 = (uint16_t)(pct * 100) };
+    /* ZCL lift percentage is percent CLOSED (0 = open, 100 = closed); the
+     * driver position is centi-percent OPEN (0-10000). */
+    app_driver_param_val_t pv = { .u16 = (uint16_t)((100 - pct) * 100) };
     app_driver_set_param({{cfg.position_param}}, pv, s_handle);
 }

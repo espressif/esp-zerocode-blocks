@@ -1,3 +1,4 @@
+{{#if cfg.mode_param}}
 {
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, lv_pct(100), LV_SIZE_CONTENT);
@@ -14,3 +15,4 @@
     }
     lv_obj_add_event_cb(s_{{prefix_lc}}_mode_dd, {{prefix_lc}}_mode_dd_cb, LV_EVENT_VALUE_CHANGED, NULL);
 }
+{{/if}}

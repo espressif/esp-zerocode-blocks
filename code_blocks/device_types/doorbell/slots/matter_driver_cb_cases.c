@@ -1,8 +1,6 @@
+/* One notification = one ring. drivers/button TOGGLES press_param, so a
+ * press shows up as a change in EITHER direction; keying on "true" alone
+ * would ring on every other press. */
 if (param_id == {{cfg.press_param}}) {
-    s_from_driver = true;
-    esp_matter_attr_val_t mval = esp_matter_uint8(val.b ? 1 : 0);
-    esp_matter::attribute::update(s_{{prefix_lc}}_endpoint_id,
-        chip::app::Clusters::Switch::Id,
-        chip::app::Clusters::Switch::Attributes::CurrentPosition::Id, &mval);
-    s_from_driver = false;
+    zc_switch_press(s_{{prefix_lc}}_endpoint_id, 1);
 }
