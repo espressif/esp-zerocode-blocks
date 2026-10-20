@@ -1,4 +1,4 @@
-description: "Electrical Sensor device type (ElectricalPowerMeasurement / ElectricalEnergyMeasurement) (Matter: electrical_sensor; RainMaker: esp.device.other)"
+description: "Electrical Sensor device type (ElectricalPowerMeasurement: active power + optional voltage/current; energy is not reported) (Matter: electrical_sensor; RainMaker: esp.device.other)"
 device_types:
   matter: electrical_sensor
   rainmaker: esp.device.other
@@ -18,8 +18,8 @@ params:
 # voltage_param / current_param are optional param_refs (same idiom as
 # device_types/air_quality_sensor): set → establishes this endpoint as the
 # param's u32 consumer; left empty (default "") → the generator + validator
-# skip them. Matter's ElectricalPowerMeasurement doesn't expose them (see the
-# matter_driver_cb_cases note), but the RainMaker binding reports them.
+# skip them. When set, Matter reports them as ElectricalPowerMeasurement
+# Voltage / ActiveCurrent (attributes added only then), RainMaker likewise.
   zb_endpoint:
     type: int
     default: 26
