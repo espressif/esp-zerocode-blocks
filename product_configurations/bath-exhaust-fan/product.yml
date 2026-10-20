@@ -14,13 +14,19 @@ instances:
       freq_hz: 25000
       speed_param: APP_DRIVER_PARAM_FAN_SPEED
 
-  - block: drivers/i2c_temp_humidity
-    prefix: HUM
+  - block: peripherals/i2c_bus
+    prefix: HUM_BUS
     cfg:
-      i2c_port: 0
+      port: 0
       sda_gpio: 1
       scl_gpio: 2
       freq_hz: 100000
+
+  - block: drivers/sht4x
+    prefix: HUM
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x44
       poll_interval_ms: 10000
       temp_param: APP_DRIVER_PARAM_HUM_TEMP_INTERNAL
       humidity_param: APP_DRIVER_PARAM_HUMIDITY

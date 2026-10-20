@@ -277,6 +277,16 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                 err(bid, f'{key} names port_param "{pp}", which is not in params')
 
 INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include'}
+# Blocks that publish NOTHING on the param bus although their driver_params
+# say otherwise. A ready-made product composing one reports no reading, ever,
+# and no build or gate notices: seven catalog products shipped
+# drivers/i2c_temp_humidity as their only temperature/humidity source. A
+# real-sensor block (sht4x, sht3x, aht21, ds18b20) behind peripherals/i2c_bus
+# is the replacement. The block itself stays — a writer may still use it as a
+# scaffold — but a catalog product may not.
+NOT_IN_PRODUCTS = {
+    'drivers/i2c_temp_humidity': 'peripherals/i2c_bus + drivers/sht4x (or sht3x / aht21)',
+}
 baselines = {p.stem for p in ROOT.glob('baselines/*.yml')}
 for pj in sorted(ROOT.glob('product_configurations/*/product.yml')):
     pid = pj.parent.name
@@ -291,6 +301,9 @@ for pj in sorted(ROOT.glob('product_configurations/*/product.yml')):
         elif 'block' in inst:
             if inst['block'] not in block_ids:
                 err(pid, f'instance {i}: unknown block "{inst["block"]}"')
+            elif inst['block'] in NOT_IN_PRODUCTS:
+                err(pid, f'instance {i}: {inst["block"]} publishes no readings; '
+                         f'use {NOT_IN_PRODUCTS[inst["block"]]}')
         else:
             err(pid, f'instance {i}: neither block: nor include:')
         # A misspelt key does not fail loudly on its own: the engine reads
