@@ -1,3 +1,4 @@
+{{#if cfg.mode_param}}
 {
     snprintf(s_{{prefix_lc}}_state_topic, sizeof(s_{{prefix_lc}}_state_topic),
              "zerocode/%s/{{prefix_lc}}/state", s_node_id);
@@ -27,3 +28,4 @@
                                     s_{{prefix_lc}}_options[init.u8], 0, 1, true);
     }
 }
+{{/if}}

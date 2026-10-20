@@ -1,3 +1,4 @@
+{{#if cfg.mode_param}}
 if (tlen == (int)strlen(s_{{prefix_lc}}_cmd_topic) &&
     strncmp(topic, s_{{prefix_lc}}_cmd_topic, tlen) == 0) {
     for (int i = 0; i < 4; i++) {
@@ -12,3 +13,4 @@ if (tlen == (int)strlen(s_{{prefix_lc}}_cmd_topic) &&
     }
     return;
 }
+{{/if}}

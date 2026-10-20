@@ -9,6 +9,7 @@
     esp_rmaker_device_add_param(s_{{prefix_lc}}_device,
         esp_rmaker_name_param_create(ESP_RMAKER_DEF_NAME_PARAM, "{{cfg.label}}"));
     app_driver_param_val_t init = {};
+{{#if cfg.mode_param}}
     app_driver_get_param({{cfg.mode_param}}, &init);
     s_{{prefix_lc}}_mode_param = esp_rmaker_param_create(
         "Mode", ESP_RMAKER_PARAM_MODE,
@@ -19,12 +20,19 @@
             esp_rmaker_int(0), esp_rmaker_int(3), esp_rmaker_int(1));
     }
     esp_rmaker_device_add_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_mode_param);
+{{/if}}
     app_driver_get_param({{cfg.state_param}}, &init);
     s_{{prefix_lc}}_state_param = esp_rmaker_param_create(
         "Operational State", NULL,
         esp_rmaker_int(init.u8), PROP_FLAG_READ);
     esp_rmaker_device_add_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_state_param);
+    /* Mode is the primary control when the product has one; a mandatory-only
+     * appliance (no mode_param) leads with its operational state. The later
+     * assignment wins. */
+    esp_rmaker_device_assign_primary_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_state_param);
+{{#if cfg.mode_param}}
     esp_rmaker_device_assign_primary_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_mode_param);
+{{/if}}
     esp_rmaker_node_add_device(node, s_{{prefix_lc}}_device);
     ESP_LOGI(TAG, "{{prefix_lc}}: RainMaker Dish Washer device '{{cfg.label}}'");
 }
