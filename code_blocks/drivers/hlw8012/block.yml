@@ -6,8 +6,14 @@ description: HLW8012 / BL0937 single-phase energy meter. Counts pulses on CF (ac
 # This block measures CF only (active power); for voltage / current add a second
 # instance pointing at CF1 and toggle SEL via GPIO.
 #
-# Power calibration: power_ref / freq_ref where freq_ref is the pulse rate at the
-# reference power. Datasheet defaults are around: power = 1206000 / period_us (mW).
+# Power calibration: power_scale_milliw_per_hz is the slope, mW per Hz of CF.
+# From the datasheet, F_CF = 48 * V_V * V_I * (F_osc / 128) / Vref^2 with
+# F_osc = 3.579 MHz and Vref = 2.43 V, so for the common front end — a 1 mOhm
+# shunt and a 2.35 MOhm : 1 kOhm voltage divider (Sonoff POW and most clones) —
+# one Hz of CF is ~10.3 W: a 230 W load pulses at ~22 Hz. The default below is
+# that design; any other shunt or divider scales it (calibrate against a known
+# resistive load: scale = load_mW / measured_Hz). It used to default to 1206000,
+# which reported a 230 W load as ~26 kW.
 
 params:
   cf_gpio:
@@ -20,8 +26,8 @@ params:
     description: Counting window. Longer = smoother, slower update.
   power_scale_milliw_per_hz:
     type: int
-    default: 1206000
-    description: Power in mW per Hz of CF pulses (depends on hardware design — calibrate)
+    default: 10340
+    description: Power in mW per Hz of CF pulses. 10340 = a 1 mOhm shunt + 2.35 MOhm:1 kOhm divider; other front ends scale it — calibrate against a known load.
 
 driver_params:
   power_param:
