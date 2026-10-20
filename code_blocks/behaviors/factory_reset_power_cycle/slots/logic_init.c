@@ -3,7 +3,18 @@
     if (nvs_open({{prefix}}_PC_NVS_NS, NVS_READWRITE, &{{prefix_lc}}_pc_h) == ESP_OK) {
         uint8_t {{prefix_lc}}_pc = 0;
         nvs_get_u8({{prefix_lc}}_pc_h, {{prefix}}_PC_NVS_KEY, &{{prefix_lc}}_pc);
-        {{prefix_lc}}_pc++;
+        /* Only a power-on (or the reset pin) is a deliberate power cycle.
+         * Panics, watchdogs, brownouts and esp_restart() (OTA, a framework's
+         * own reboot) also come back through here, and counting them meant a
+         * crash loop or a weak supply could erase NVS — every fabric and
+         * credential — with nobody touching the device. Those boots leave the
+         * count as it is; the stable-boot timer below still clears it. */
+        esp_reset_reason_t {{prefix_lc}}_rr = esp_reset_reason();
+        if ({{prefix_lc}}_rr == ESP_RST_POWERON || {{prefix_lc}}_rr == ESP_RST_EXT) {
+            {{prefix_lc}}_pc++;
+        } else {
+            ESP_LOGI(TAG, "{{prefix_lc}}: reset reason %d is not a power cycle — not counted", (int){{prefix_lc}}_rr);
+        }
         ESP_LOGI(TAG, "{{prefix_lc}}: power-cycle count = %u/%u", {{prefix_lc}}_pc, {{prefix}}_PC_THRESHOLD);
         if ({{prefix_lc}}_pc >= {{prefix}}_PC_THRESHOLD) {
             ESP_LOGW(TAG, "{{prefix_lc}}: threshold reached — erasing NVS and rebooting");
