@@ -14,6 +14,7 @@ instances:
     cfg:
       gpio: 9
       active_level: 0
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
 
   - block: device_types/scene_button
     prefix: BELL

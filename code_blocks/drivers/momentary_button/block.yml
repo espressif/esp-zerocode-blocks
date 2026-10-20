@@ -3,6 +3,11 @@ description: Push-button without a local-param action — for controller product
 # Use this when the button shouldn't toggle a local driver param. The block sets up the
 # GPIO + iot_button device and registers a single-click callback that just logs and
 # delegates to a user-overridable hook. Wire your Matter command emission in app code.
+#
+# Optionally it also reports each click on the param bus: set position_param
+# and every single click FIRES position 1 as an event (app_driver_fire_event,
+# so two clicks are two notifications). That is what device_types/scene_button
+# needs — without it the switch endpoint never sees a press.
 
 params:
   gpio:
@@ -11,3 +16,12 @@ params:
   active_level:
     type: int
     default: 0
+
+driver_params:
+  position_param:
+    type: u8
+    default: ""
+    description: >-
+      OPTIONAL. Driver param ID fired with value 1 on every single click
+      (an event, never deduplicated), e.g. APP_DRIVER_PARAM_SWITCH_POSITION
+      wired to device_types/scene_button. Leave empty for a hook-only button.

@@ -4,14 +4,16 @@ description: Battery-powered scene controller — single button mapped to a Matt
 keywords: [scene, button, controller, wireless, generic switch]
 frameworks: [matter]
 
-# The momentary button doesn't toggle a local param — instead, override scene_btn_on_press()
-# in app code to advance APP_DRIVER_PARAM_SWITCH_POSITION or emit Matter Switch events.
+# Each click of the momentary button FIRES APP_DRIVER_PARAM_SWITCH_POSITION = 1, which
+# the Generic Switch endpoint reports as one press (InitialPress). scene_btn_on_press()
+# is still there to override for anything more.
 instances:
   - block: drivers/momentary_button
     prefix: SCENE_BTN
     cfg:
       gpio: 9
       active_level: 0
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
 
   - block: device_types/scene_button
     prefix: SWITCH
