@@ -1677,9 +1677,21 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
                 schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
             }
             break;
-        case EZB_ZDO_SIGNAL_LEAVE:
-            ESP_LOGW(TAG, "Left the Zigbee network");
+        case EZB_ZDO_SIGNAL_LEAVE: {
+            /* A leave WITHOUT rejoin (removed from the hub, or told to leave)
+             * clears the network data, and nothing else would ever look for a
+             * network again — the device stayed off-network until a power
+             * cycle. Steer again, as esp-zigbee's examples do. A leave WITH
+             * rejoin is the stack's own business: it rejoins by itself. */
+            const ezb_zdo_signal_leave_params_t *leave = (const ezb_zdo_signal_leave_params_t *)signal_params;
+            if (leave && leave->leave_type == EZB_ZDO_LEAVE_TYPE_RESET) {
+                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");
+                schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
+            } else {
+                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");
+            }
             break;
+        }
         default:
             ESP_LOGI(TAG, "ZDO signal: %s (0x%x), status: 0x%x",
                      ezb_app_signal_to_string(sig_type), sig_type, err_status);
