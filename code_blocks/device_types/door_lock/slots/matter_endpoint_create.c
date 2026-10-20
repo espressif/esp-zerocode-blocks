@@ -4,5 +4,6 @@
         node, &{{prefix_lc}}_cfg, ENDPOINT_FLAG_NONE, NULL);
     if (!ep) { ESP_LOGE(TAG, "Failed to create {{prefix_lc}} endpoint"); return ESP_FAIL; }
     s_{{prefix_lc}}_endpoint_id = esp_matter::endpoint::get_id(ep);
+    zc_door_lock_register(s_{{prefix_lc}}_endpoint_id);
     ESP_LOGI(TAG, "{{prefix_lc}}: door_lock endpoint id=%d", s_{{prefix_lc}}_endpoint_id);
 }
