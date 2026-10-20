@@ -2,6 +2,7 @@ extern adc_oneshot_unit_handle_t s_{{prefix_lc}}_adc;
 
 static void {{prefix_lc}}_adc_poll_cb(void *arg)
 {
+    if (s_{{prefix_lc}}_adc == NULL) return;  /* init failed and said so */
     int raw = 0;
     if (adc_oneshot_read(s_{{prefix_lc}}_adc, (adc_channel_t){{prefix}}_ADC_CHANNEL, &raw) != ESP_OK) return;
     if (raw < 0) raw = 0;
