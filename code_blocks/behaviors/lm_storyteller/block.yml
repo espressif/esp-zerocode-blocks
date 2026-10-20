@@ -12,8 +12,10 @@ description: "Console command that makes the device write a story — `story onc
 # without one.
 #
 # SLOW BY MCU STANDARDS, fast for what it is: ~26.7 tok/s on esp32s31, 17.6 on
-# esp32s3. A 200-token story is roughly 8 seconds, which is why output streams
-# token by token rather than arriving at the end.
+# esp32s3. A 200-token story is roughly 8 seconds on the S31 and 11-12 on the
+# S3, which is why output streams token by token rather than arriving at the
+# end (the worker yields a tick every 8 tokens, so the task watchdog's 10 s
+# IDLE check never fires during a long story).
 
 sdkconfig:
   CONFIG_ZC_LM_MODEL_STORY: "y"
