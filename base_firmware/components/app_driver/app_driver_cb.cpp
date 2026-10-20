@@ -158,12 +158,15 @@ esp_err_t app_driver_set_param(
         applied = current;
     }
 
-    /* Notify all OTHER registered solutions */
+    /* Notify all OTHER registered solutions — with the value the hardware
+     * ended on, not this call's: when the loop above re-applied a later
+     * writer's value, this notify may be the LAST one, and announcing `val`
+     * would leave every listener (a Matter attribute, NVS) on the stale value. */
     for (uint8_t i = 0; i < count; i++) {
         uint8_t handle = i + 1;
         if (handle == source) continue; /* skip the source */
         if (snapshot[i].active && snapshot[i].cb) {
-            snapshot[i].cb(id, val, source, snapshot[i].ctx);
+            snapshot[i].cb(id, applied, source, snapshot[i].ctx);
         }
     }
 
