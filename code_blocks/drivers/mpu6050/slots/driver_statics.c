@@ -60,20 +60,45 @@ static bool {{prefix_lc}}_known_id(uint8_t id)
     return id == 0x68 || id == 0x70 || id == 0x19 || id == 0x71 || id == 0x73;
 }
 
+/* Why the last configure failed: 0 configured, 1 nothing answers, 0x100|id an
+ * answering device that is not in the family. 0xFFFF until the first attempt.
+ * Each cause is logged ONCE, when it starts: the poll retries every few
+ * hundred ms for as long as the part is absent, and a line per retry floods
+ * the console the user (and a tester) reads. */
+static uint16_t s_{{prefix_lc}}_cause = 0xFFFF;
+
 /* Probe and configure. Register writes only — no delay — so the poll can call
  * it to recover without blocking the shared esp_timer task. Wake comes first:
- * after a power-on or brownout the chip is asleep (PWR_MGMT_1 = 0x40). */
+ * after a power-on or brownout the chip is asleep (PWR_MGMT_1 = 0x40).
+ * An unknown WHO_AM_I is NOT configured: 0x68 is also a common RTC's address,
+ * and these writes would land in its registers. */
 static bool {{prefix_lc}}_configure(void)
 {
     uint8_t id = 0;
-    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_WHO_AM_I, &id, 1) != ESP_OK || !{{prefix_lc}}_known_id(id)) {
+    uint16_t cause = 0;
+    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_WHO_AM_I, &id, 1) != ESP_OK) cause = 1;
+    else if (!{{prefix_lc}}_known_id(id)) cause = (uint16_t)(0x100 | id);
+    if (cause != 0) {
+        if (cause != s_{{prefix_lc}}_cause) {
+            s_{{prefix_lc}}_cause = cause;
+            if (cause == 1) {
+                ESP_LOGW(TAG, "{{prefix_lc}}: no accelerometer answering at 0x%02x — will keep trying", {{prefix}}_IMU_ADDR);
+            } else {
+                ESP_LOGW(TAG, "{{prefix_lc}}: the device at 0x%02x reports WHO_AM_I 0x%02x, not an MPU6050-family id "
+                         "(0x68, 0x70, 0x19, 0x71, 0x73) — left unconfigured, so it reports no motion",
+                         {{prefix}}_IMU_ADDR, id);
+            }
+        }
         return false;
     }
     bool ok = {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_MGMT_1, 0x01) == ESP_OK      /* awake, PLL clock */
            && {{prefix_lc}}_wr({{prefix}}_IMU_REG_CONFIG, 0x03) == ESP_OK          /* DLPF ~44 Hz */
            && {{prefix_lc}}_wr({{prefix}}_IMU_REG_SMPLRT_DIV, 0x09) == ESP_OK      /* 1 kHz / 10 = 100 Hz */
            && {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACCEL_CONFIG, 0x00) == ESP_OK;   /* +/-2 g */
-    if (ok) ESP_LOGI(TAG, "{{prefix_lc}}: accelerometer WHO_AM_I 0x%02x configured", id);
+    if (ok && s_{{prefix_lc}}_cause != 0) {
+        ESP_LOGI(TAG, "{{prefix_lc}}: accelerometer WHO_AM_I 0x%02x configured", id);
+        s_{{prefix_lc}}_cause = 0;
+    }
     return ok;
 }
 
@@ -108,8 +133,7 @@ static void {{prefix_lc}}_poll_cb(void *arg)
     if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_ACCEL_XOUT_H, d, sizeof(d)) != ESP_OK) {
         if (++s_{{prefix_lc}}_fail >= {{prefix}}_IMU_RECOVER_AFTER) {
             s_{{prefix_lc}}_fail = 0;
-            if ({{prefix_lc}}_configure()) ESP_LOGW(TAG, "{{prefix_lc}}: accelerometer recovered");
-            else ESP_LOGW(TAG, "{{prefix_lc}}: accelerometer not answering at 0x%02x", {{prefix}}_IMU_ADDR);
+            (void){{prefix_lc}}_configure(); /* logs a change of state, once */
         }
         return;
     }
