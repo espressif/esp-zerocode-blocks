@@ -117,6 +117,16 @@ int main(void) {
     CHECK(app_driver_fire_event(APP_DRIVER_PARAM_MAX, B(true), sol1) == ESP_ERR_INVALID_ARG,
           "fire_event rejects an out-of-range param id");
 
+    /* 11) A notify callback can tell its sources apart by NAME — handles are
+     *     assigned in registration order, which differs per product. */
+    CHECK(strcmp(app_driver_solution_name(APP_DRIVER_SOURCE_LOCAL), "local") == 0,
+          "solution_name(LOCAL) is \"local\"");
+    CHECK(app_driver_solution_name(sol2) != NULL &&
+          strcmp(app_driver_solution_name(sol2), "sol2") == 0,
+          "solution_name(sol2) is the name it registered");
+    CHECK(app_driver_solution_name((app_driver_handle_t)200) == NULL,
+          "solution_name of an unregistered handle is NULL");
+
     (void)sol1; (void)sol2;
     printf(s_failures ? "\nRESULT: FAIL (%d)\n" : "\nRESULT: PASS\n", s_failures);
     return s_failures ? 1 : 0;
