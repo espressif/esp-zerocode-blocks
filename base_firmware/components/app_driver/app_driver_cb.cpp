@@ -12,7 +12,9 @@
  * layer that all protocol solutions depend on.
  *
  * Thread safety: Uses portMUX_TYPE spinlock (ISR-safe). Lock held only
- * during state snapshot; released before HW apply and callbacks.
+ * during state snapshot; released before HW apply and callbacks. set_param
+ * re-reads the committed value after applying, so concurrent writers of one
+ * param cannot leave the hardware on the older value.
  */
 
 #include "app_driver.h"
@@ -132,10 +134,28 @@ esp_err_t app_driver_set_param(
     count = s_solution_count;
     portEXIT_CRITICAL(&s_lock);
 
-    /* Apply to hardware (outside lock) */
-    esp_err_t err = app_driver_apply_param(id, val);
-    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGW(TAG, "apply_param(%d) failed: %s", id, esp_err_to_name(err));
+    /* Apply to hardware (outside lock — an apply may sleep on a bus).
+     *
+     * Commit and apply are not one atomic step, so two tasks writing the same
+     * param at once can commit A then B and APPLY B then A: the hardware ends
+     * on A while the state says B, and change detection then swallows the
+     * set_param(B) that would correct it. So after applying, look again: if a
+     * later write committed a different value meanwhile, apply that one too.
+     * Whichever task applies last re-reads after it, so the hardware ends on
+     * the committed value. Bounded — a param rewritten faster than it can be
+     * applied gives up after a few rounds; its own writers still apply. */
+    app_driver_param_val_t applied = val;
+    for (int round = 0; round < 4; round++) {
+        esp_err_t err = app_driver_apply_param(id, applied);
+        if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "apply_param(%d) failed: %s", id, esp_err_to_name(err));
+        }
+        app_driver_param_val_t current;
+        portENTER_CRITICAL(&s_lock);
+        current = s_params[id];
+        portEXIT_CRITICAL(&s_lock);
+        if (memcmp(&current, &applied, sizeof(current)) == 0) break;
+        applied = current;
     }
 
     /* Notify all OTHER registered solutions */

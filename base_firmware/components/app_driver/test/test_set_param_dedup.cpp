@@ -25,8 +25,22 @@ static app_driver_param_id_t s_apply_last_id;
 static app_driver_param_val_t s_apply_last_val;
 
 /* app_driver_apply_param is normally the generated app_driver.cpp; stub it. */
+/* When set, the NEXT apply of LEVEL commits this value from "another task"
+ * while the first apply is still running (simulated by re-entering set_param
+ * from inside the apply). */
+static bool s_race_armed = false;
+static uint16_t s_race_value = 0;
+
 esp_err_t app_driver_apply_param(app_driver_param_id_t id, app_driver_param_val_t val) {
     s_apply_calls++;
+    if (s_race_armed && id == APP_DRIVER_PARAM_LEVEL) {
+        s_race_armed = false;
+        app_driver_param_val_t other;
+        memset(&other, 0, sizeof(other));
+        other.u16 = s_race_value;
+        app_driver_set_param(id, other, APP_DRIVER_SOURCE_LOCAL);
+    }
+    /* recorded AFTER the nested write: this apply finishes last */
     s_apply_last_id = id;
     s_apply_last_val = val;
     return ESP_OK;
@@ -126,6 +140,20 @@ int main(void) {
           "solution_name(sol2) is the name it registered");
     CHECK(app_driver_solution_name((app_driver_handle_t)200) == NULL,
           "solution_name of an unregistered handle is NULL");
+
+    /* 12) Two writers of one param racing: A commits and starts applying, B
+     *     commits and applies inside A's apply, then A's apply finishes LAST.
+     *     The hardware must still end on B, the committed value — otherwise
+     *     change detection swallows the set_param(B) that would correct it. */
+    app_driver_param_val_t lvA; memset(&lvA, 0, sizeof(lvA)); lvA.u16 = 100;
+    s_race_armed = true;
+    s_race_value = 200;
+    app_driver_set_param(APP_DRIVER_PARAM_LEVEL, lvA, sol1);
+    app_driver_param_val_t lvNow;
+    app_driver_get_param(APP_DRIVER_PARAM_LEVEL, &lvNow);
+    CHECK(lvNow.u16 == 200, "racing writers: the later commit is the stored state");
+    CHECK(s_apply_last_id == APP_DRIVER_PARAM_LEVEL && s_apply_last_val.u16 == 200,
+          "racing writers: the hardware ends on the stored state, not the older apply");
 
     (void)sol1; (void)sol2;
     printf(s_failures ? "\nRESULT: FAIL (%d)\n" : "\nRESULT: PASS\n", s_failures);
