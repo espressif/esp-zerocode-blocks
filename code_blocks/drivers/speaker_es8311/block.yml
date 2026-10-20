@@ -30,7 +30,7 @@ description: >-
 # NOT yet hardware-verified.
 
 cmake_priv_requires:
-  app_driver: [esp_driver_i2s, esp_driver_gpio, espressif__esp_codec_dev]
+  app_driver: [esp_driver_i2s, esp_driver_gpio, esp_driver_i2c, espressif__esp_codec_dev]
 
 # This block TALKS on an I2C bus it does not configure: `audio_codec_new_i2c_ctrl`
 # attaches the codec to whatever bus already exists on `i2c_port`, and this block
@@ -83,8 +83,11 @@ params:
     description: I2C port the codec shares with the board's other sensors
   i2c_addr:
     type: int
-    default: 24
-    description: ES8311 7-bit address (0x19 = 24 on the Mosaico)
+    default: 25
+    description: >-
+      ES8311 7-bit address (0x18 or 0x19 by the CE pin; 0x19 = 25 on the
+      Mosaico). Given 7-bit here; the block shifts it to the 8-bit form
+      esp_codec_dev expects.
   sample_rate:
     type: int
     default: 16000
