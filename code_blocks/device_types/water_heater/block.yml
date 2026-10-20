@@ -1,4 +1,4 @@
-description: "Water Heater (Matter: water_heater — OnOff + Thermostat; RainMaker: esp.device.other — no standard water-heater type in this SDK)"
+description: "Water Heater (Matter: water_heater — Thermostat, heat-only, power = SystemMode Off/Heat, setpoints up to 80 °C; RainMaker: esp.device.other — no standard water-heater type in this SDK)"
 device_types:
   matter: water_heater
   rainmaker: esp.device.other
@@ -47,6 +47,7 @@ driver_params:
   power_param:
     type: bool
     required: true
+    description: Heater on/off (bool). On Matter it is Thermostat SystemMode (Off = 0, Heat = 4) — the water_heater device type has no OnOff cluster.
   setpoint_param:
     type: i16
     required: true
