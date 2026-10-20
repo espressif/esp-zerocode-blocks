@@ -1,7 +1,12 @@
-description: Switch ESP32-C6 from default Wi-Fi to Thread (802.15.4). Disables Wi-Fi
+description: Enable OpenThread (802.15.4) on an ESP32-C6. Does NOT remove Wi-Fi — for a Matter product, use matter_thread instead.
 
-# Original notes from the .defaults file:
-#   Switch ESP32-C6 from default Wi-Fi to Thread (802.15.4). Disables Wi-Fi
-#   entirely — saves ~300-400 KB binary by dropping the Wi-Fi stack.
-#   Applied by adding to product.yml:
+# Superseded by matter_thread; no product uses it. It used to set
+# CONFIG_ESP_WIFI_ENABLED="n" and promise a Thread-only build, but that symbol
+# has no prompt in IDF 6 (esp_wifi/Kconfig: `default y if SOC_WIFI_SUPPORTED`)
+# and a promptless symbol cannot be set from sdkconfig, so the key was ignored
+# and the build stayed Wi-Fi + Thread. Whether esp_wifi links in is decided by
+# component dependencies, not by a key. matter_thread carries the keys that DO
+# move a Matter product onto Thread (ENABLE_WIFI_STATION=n, IPv6-only lwIP).
+#
+# Applied by adding to product.yml:
 #   sdkconfig_fragments: [c6_thread_only]
