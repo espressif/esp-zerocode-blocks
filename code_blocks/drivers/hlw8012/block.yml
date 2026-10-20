@@ -1,4 +1,4 @@
-description: HLW8012 / BL0937 single-phase energy meter. Counts pulses on CF (active power) and CF1 (current/voltage) GPIOs. Depends on peripherals/pcnt_unit (one each).
+description: HLW8012 / BL0937 single-phase energy meter. Counts pulses on CF (active power) and CF1 (current/voltage) GPIOs. Creates its own PCNT unit for CF (no peripherals/pcnt_unit needed). PCNT hardware is not on esp32c2/c3/c61.
 
 # HLW8012 outputs two pulse trains:
 #   - CF  : pulse rate ∝ active power (W)

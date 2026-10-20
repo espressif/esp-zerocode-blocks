@@ -1,4 +1,20 @@
-description: Shared pulse-counter (PCNT) unit. Used by encoder, energy meter, flow sensor drivers.
+description: >-
+  Shared pulse-counter (PCNT) unit, CREATED but not enabled, for a block of
+  your own to attach channels to through <prefix>_pcnt_handle() and then
+  enable + start. No catalog driver uses it (encoder and hlw8012 make their
+  own unit). PCNT hardware is not on esp32c2/c3/c61.
+
+# Why the unit is left in the INIT state: ESP-IDF refuses pcnt_new_channel,
+# pcnt_unit_set_glitch_filter and pcnt_unit_register_event_callbacks once a
+# unit is enabled (ESP_ERR_INVALID_STATE, "unit not in init state"). A unit
+# this block enabled and started at boot could therefore never be given a
+# channel — it counted nothing, and no consumer could fix that. The consumer
+# owns the order: add channels (and a filter / callbacks), then
+#   pcnt_unit_enable(h); pcnt_unit_clear_count(h); pcnt_unit_start(h);
+#
+# accum_count is on, with watch points at both limits: without it the count
+# wraps to 0 at high_limit, so a meter totalling pulses silently loses every
+# 32768 of them. With it, pcnt_unit_get_count() keeps counting past the limit.
 
 params:
   high_limit: { type: int, default: 32767 }

@@ -1550,6 +1550,14 @@ ${collectSlot(rendered, 'zigbee_action_cases', 4)}
     ESP_LOGI(TAG, "Zigbee action 0x%x", callback_id);
 }
 
+/* The source zigbee_resync_cb hands zigbee_driver_cb. Never a registered
+ * solution handle (those are 1..APP_DRIVER_MAX_SOLUTIONS) nor LOCAL (0). A
+ * resync is "tell the hub the state it missed", which is right for a server
+ * endpoint (an attribute) and wrong for a client one: a remote's case turns the
+ * param into a COMMAND to every bound device, so replaying it after a reboot
+ * would switch the lights off. Controller cases skip this source. */
+#define ZB_SOURCE_RESYNC ((app_driver_handle_t)0xFF)
+
 /* Hardware/param bus → ZCL attributes. Runs OFF the Zigbee task, so every
  * Zigbee call MUST be wrapped in esp_zigbee_lock_acquire/release (compiles fine
  * without it, corrupts state at runtime). */
@@ -1559,7 +1567,7 @@ static void zigbee_driver_cb(
     app_driver_handle_t source,
     void *ctx)
 {
-    (void)source;
+    (void)source; /* read by controller cases (ZB_SOURCE_RESYNC) */
     (void)ctx;
     if (!s_zb_started) return;
 ${collectSlot(rendered, 'zigbee_driver_cb_cases', 4)}
@@ -1570,14 +1578,18 @@ ${collectSlot(rendered, 'zigbee_driver_cb_cases', 4)}
  * restore of a remembered brightness, a controller's boot-time decision — was
  * dropped by zigbee_driver_cb's started-gate, and the hub kept showing the
  * endpoint's creation-time defaults until the next change. Runs from the
- * esp_timer task, where the driver-cb cases' lock acquire is the normal path. */
+ * esp_timer task, where the driver-cb cases' lock acquire is the normal path.
+ * A param never written since boot is skipped: get_param returns the zeroed
+ * union for it, a default rather than state, and pushing it would overwrite
+ * the endpoint's own creation-time value with 0. */
 static void zigbee_resync_cb(void *arg)
 {
     (void)arg;
     for (int id = 0; id < (int)APP_DRIVER_PARAM_MAX; id++) {
+        if (!app_driver_param_seen((app_driver_param_id_t)id)) continue;
         app_driver_param_val_t val = {};
         if (app_driver_get_param((app_driver_param_id_t)id, &val) != ESP_OK) continue;
-        zigbee_driver_cb((app_driver_param_id_t)id, val, APP_DRIVER_SOURCE_LOCAL, NULL);
+        zigbee_driver_cb((app_driver_param_id_t)id, val, ZB_SOURCE_RESYNC, NULL);
     }
     ESP_LOGI(TAG, "Bus state pushed to the hub");
 }

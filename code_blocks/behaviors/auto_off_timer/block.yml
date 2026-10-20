@@ -1,11 +1,25 @@
-description: After target_param becomes true, automatically set it back to false after N seconds. Cancellable by setting it false manually.
+description: >-
+  After target_param becomes true, automatically set it back to false after N
+  seconds. Cancellable by setting it false manually. With retrigger_param (a
+  motion/occupancy boolean) it stays on while that input is active and goes off
+  N seconds after it was last active.
 
 # Common pattern for motion-triggered lights and exhaust fans:
 #  - Motion sensor or user toggles power ON
 #  - Timer counts down from `timeout_seconds`
 #  - On expiry, sets power back to OFF
 #  - If something else turns it OFF first, the timer is cancelled
-#  - If something extends it (sets ON again), the timer restarts
+#  - A change of target_param TO on (re)starts the timer
+#
+# Why retrigger_param exists: target_param is STATE, and the bus drops a write of
+# the value it already holds. A motion re-trigger while the light is on is
+# therefore "on" again — no notification, so this block never hears it and the
+# light went off timeout_seconds after the FIRST detection, room occupied or
+# not. A PIR that stays high while someone is there produces no new edge at all.
+# So the timer watches the motion param itself: every change of it while the
+# light is on restarts the countdown (the falling edge too, so "N seconds" is
+# measured from when motion ended), and an expiry while motion is still active
+# re-arms instead of switching off.
 
 params:
   timeout_seconds:
@@ -18,3 +32,10 @@ driver_params:
     type: bool
     required: true
     description: Boolean param to auto-clear (typically POWER)
+  retrigger_param:
+    type: bool
+    required: false
+    description: >-
+      Optional. A motion/occupancy boolean (e.g. APP_DRIVER_PARAM_OCCUPANCY).
+      While it is true the target stays on; it goes off timeout_seconds after
+      it last was. Set it whenever a sensor turns the target on (auto_on_motion).
