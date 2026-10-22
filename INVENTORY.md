@@ -266,12 +266,13 @@ generator workaround for an upstream NULL-deref in esp_agent_init (text
 mode with NULL audio configs crashes; dummy configs passed).
 
 `webui-room-node` — first `frameworks: [webui]` product: the device serves
-its OWN control page. Standalone SoftAP ("ZeroCode-<id>", password
-"zerocode") at http://192.168.4.1 — or shared-net when a Wi-Fi transport
-is co-selected (mDNS zerocode-<id>.local either way). Device types
-contribute `webui_entities` manifest rows; one embedded plain-ASCII page
-renders them (toggle/slider/value/binary) against GET /api/state +
-GET /api/set, params addressed BY NAME. esp32c3, dimmable pwm light +
+its OWN control page. Standalone SoftAP ("ZeroCode-<id>", a per-device
+password made on first boot, kept in NVS and printed in the boot log) at
+http://192.168.4.1 — or shared-net when a Wi-Fi transport is co-selected
+(mDNS zerocode-<id>.local either way). Device types contribute
+`webui_entities` manifest rows; one embedded plain-ASCII page renders them
+(toggle/slider/value/binary) against GET /api/state + POST /api/set (the
+page's own X-ZC-Request header required), params addressed BY NAME. esp32c3, dimmable pwm light +
 DHT22 temperature.
 
 ### BLE HID (1)

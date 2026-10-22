@@ -2,14 +2,16 @@ id: webui-room-node
 name: Web UI Room Node
 description: >-
   A room node that serves its OWN control page — no hub, no cloud, no app.
-  Power it up, join the "ZeroCode-XXXX" Wi-Fi it broadcasts, and open
+  Power it up, join the "ZeroCode-XXXX" Wi-Fi it broadcasts (its password
+  is printed in the boot log), and open
   http://192.168.4.1/ to toggle the light, drag the brightness slider, and
   watch the room temperature live.
 keywords: [web ui, http, softap, standalone, light, temperature, no hub]
 
 # First frameworks: [webui] product. Standalone mode: no Wi-Fi transport is
-# co-selected, so app_webui brings up its own SoftAP (SSID ZeroCode-<mac>,
-# password "zerocode") and serves at 192.168.4.1 (+ mDNS zerocode-<mac>.local
+# co-selected, so app_webui brings up its own SoftAP (SSID ZeroCode-<mac>, a
+# per-device password made on first boot and printed in the boot log) and
+# serves at 192.168.4.1 (+ mDNS zerocode-<mac>.local
 # for clients that keep their uplink). With matter/rainmaker/mqtt co-selected
 # it would instead serve on the transport's network and own nothing.
 frameworks: [webui]
