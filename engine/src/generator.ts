@@ -1810,7 +1810,16 @@ esp_err_t app_zigbee_init(void)
  *  - "am I provisioned" is always esp_ble_mesh_node_is_provisioned(), the
  *    stack's own answer restored from settings, never a local flag;
  *  - a factory reset re-enables provisioning from the reset event, so the node
- *    is joinable again without a reboot.
+ *    is joinable again without a reboot;
+ *  - a TOGGLE is the inverse of the last state heard (a Status) or sent, never
+ *    a constant — Generic OnOff has no toggle value — and the clients are
+ *    subscribed to the group they publish to, so the lights' Status arrives;
+ *  - dimming is a Generic DELTA Set relative to where the lights are, never an
+ *    absolute level from the switch's own guess;
+ *  - the framework owns every mesh callback registration and hands products
+ *    weak C-linkage hooks instead (status heard, provisioned/reset), because a
+ *    product registering its own callback silently replaces the framework's
+ *    or is replaced by it.
  */
 function genAppBleMeshCpp(rendered: RenderedInstance[]): string {
   return `#include "app_ble_mesh.h"
@@ -1820,6 +1829,7 @@ function genAppBleMeshCpp(rendered: RenderedInstance[]): string {
 
 #include <esp_log.h>
 #include <esp_console.h>
+#include <esp_timer.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1858,6 +1868,26 @@ static volatile bool s_mesh_ready = false;
  * subnet is the right answer both before that and after a reboot. */
 static uint16_t s_net_idx = ESP_BLE_MESH_KEY_PRIMARY;
 static uint8_t s_tid = 0;
+/* What zc_ble_mesh_publish_toggle inverts: the last OnOff state this node
+ * HEARD (a Status) or SENT, whichever came last. Off until then, so the
+ * first toggle after boot turns the lights on. */
+static volatile bool s_last_onoff = false;
+/* When this node last SENT an OnOff Set. A light answers a Set with a Status
+ * ~100 ms later (more than once with publish retransmits), so a Status heard
+ * just after a send may describe the PREVIOUS press: letting it overwrite
+ * s_last_onoff makes a quick double tap leave the next toggle doing nothing.
+ * Statuses inside this window still reach the hook; only the toggle state
+ * ignores them. */
+#define ZC_MESH_STATUS_HOLDOFF_US  (500LL * 1000)
+static volatile int64_t s_last_onoff_send_us = 0;
+/* The Delta gesture in progress (zc_ble_mesh_publish_delta). */
+#define ZC_MESH_DELTA_IDLE_US  (5LL * 1000 * 1000)   /* spec window is 6 s */
+#define ZC_MESH_DELTA_MAX      65535
+static bool s_delta_open = false;
+static uint8_t s_delta_tid = 0;
+static int32_t s_delta_total = 0;
+static uint16_t s_delta_dest = 0;
+static int64_t s_delta_last_us = 0;
 /* Bytes 0-1 are the ZeroCode marker a provisioner matches on; bytes 2-7 are
  * filled with this device's BLE address once the host has synchronised. */
 static uint8_t s_dev_uuid[16] = { ZC_MESH_UUID_B0, ZC_MESH_UUID_B1 };
@@ -2048,6 +2078,29 @@ uint8_t zc_ble_mesh_level_to_u8(int16_t level)
     return (uint8_t)((((int32_t)level + 32768) * 254 + 32767) / 65535);
 }
 
+/* ── Product hooks ─────────────────────────────────────────────────────
+ * Weak do-nothing defaults; a product defines the same signature anywhere it
+ * includes app_ble_mesh.h and its definition wins. The header declares them
+ * inside extern "C", and so are these: a default with one linkage and an
+ * override with the other are two different symbols, and the override would
+ * link and never run. */
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_onoff_status(uint16_t src, bool on)
+{
+    (void)src;
+    (void)on;
+}
+
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_level_status(uint16_t src, int16_t level)
+{
+    (void)src;
+    (void)level;
+}
+
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_provisioned(bool provisioned)
+{
+    (void)provisioned;
+}
+
 bool zc_ble_mesh_provisioned(void)
 {
     return esp_ble_mesh_node_is_provisioned();
@@ -2082,6 +2135,41 @@ static uint16_t client_dest(esp_ble_mesh_client_t *client, uint16_t addr)
         return client->model->pub->publish_addr;
     }
     return addr;
+}
+
+/* A client hears a Status only on an address one of its models is subscribed
+ * to, and nothing subscribes a CLIENT by default (a provisioner subscribes the
+ * servers). Subscribe it to the group it publishes to, which is where the
+ * lights publish their status, so zc_ble_mesh_publish_toggle has something to
+ * invert and the status hooks fire. Idempotent and cheap: the model's own
+ * subscription list is checked first, and the stack stores it in settings. */
+static void client_listen(esp_ble_mesh_client_t *client, uint16_t group)
+{
+    if (!client || !client->model || !ESP_BLE_MESH_ADDR_IS_GROUP(group)) {
+        return;
+    }
+    for (size_t i = 0; i < ZC_MESH_COUNT(client->model->groups); i++) {
+        if (client->model->groups[i] == group) {
+            return;
+        }
+    }
+    uint16_t elem = s_elements[0].element_addr;
+    if (!ESP_BLE_MESH_ADDR_IS_UNICAST(elem)) {
+        return;   /* not addressed yet — retried on the next send */
+    }
+    esp_err_t err = esp_ble_mesh_model_subscribe_group_addr(
+        elem, ESP_BLE_MESH_CID_NVAL, client->model->model_id, group);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "could not subscribe client 0x%04x to 0x%04x (%s) — "
+                      "status from the lights will not be heard",
+                 client->model->model_id, group, esp_err_to_name(err));
+    }
+}
+
+static void clients_listen(void)
+{
+    client_listen(&s_onoff_client, client_dest(&s_onoff_client, ZC_MESH_GROUP_ADDR));
+    client_listen(&s_level_client, client_dest(&s_level_client, ZC_MESH_GROUP_ADDR));
 }
 
 static esp_err_t client_msg_common(esp_ble_mesh_client_common_param_t *common,
@@ -2127,9 +2215,19 @@ esp_err_t zc_ble_mesh_publish_onoff(uint16_t addr, bool on)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OnOff Set to 0x%04x failed (%s)", addr, esp_err_to_name(err));
     } else {
+        s_last_onoff = on;
+        s_last_onoff_send_us = esp_timer_get_time();
+        client_listen(&s_onoff_client, addr);
         ESP_LOGI(TAG, "published OnOff %s to 0x%04x", on ? "ON" : "OFF", addr);
     }
     return err;
+}
+
+esp_err_t zc_ble_mesh_publish_toggle(uint16_t addr)
+{
+    /* Generic OnOff has no toggle value: send the inverse of what the lights
+     * last said (or what we last told them), off before either. */
+    return zc_ble_mesh_publish_onoff(addr, !s_last_onoff);
 }
 
 esp_err_t zc_ble_mesh_publish_level(uint16_t addr, int16_t level)
@@ -2152,7 +2250,69 @@ esp_err_t zc_ble_mesh_publish_level(uint16_t addr, int16_t level)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Level Set to 0x%04x failed (%s)", addr, esp_err_to_name(err));
     } else {
+        client_listen(&s_level_client, addr);
         ESP_LOGI(TAG, "published Level %d to 0x%04x", (int)level, addr);
+    }
+    return err;
+}
+
+static int32_t delta_clamp(int64_t v)
+{
+    if (v > ZC_MESH_DELTA_MAX) return ZC_MESH_DELTA_MAX;
+    if (v < -ZC_MESH_DELTA_MAX) return -ZC_MESH_DELTA_MAX;
+    return (int32_t)v;
+}
+
+/* Generic Delta Set Unacknowledged. \`delta\` is the caller's per-call step.
+ *
+ * The spec's transaction: Delta Sets sharing a TID (same source and
+ * destination, within 6 s) are each relative to the level at the START of the
+ * transaction, so a held gesture re-sends the running total under one TID.
+ * ESP-IDF's Generic Level server only tracks that for a UNICAST destination
+ * (bt_mesh_is_server_recv_last_msg); for a group it treats every message as a
+ * new transaction and adds the delta to the CURRENT level — so a running
+ * total sent to a group accelerates. To a group, therefore, each step goes
+ * out alone with a fresh TID, which is correct on every server. */
+esp_err_t zc_ble_mesh_publish_delta(uint16_t addr, int32_t delta, bool continue_hold)
+{
+    if (!s_mesh_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    addr = client_dest(&s_level_client, addr);
+    esp_ble_mesh_client_common_param_t common = {};
+    esp_err_t err = client_msg_common(&common, &s_level_client,
+                                      ESP_BLE_MESH_MODEL_OP_GEN_DELTA_SET_UNACK, addr);
+    if (err != ESP_OK) {
+        return err;
+    }
+    int64_t now = esp_timer_get_time();
+    bool unicast = ESP_BLE_MESH_ADDR_IS_UNICAST(addr);
+    bool same = continue_hold && unicast && s_delta_open && s_delta_dest == addr &&
+                (now - s_delta_last_us) < ZC_MESH_DELTA_IDLE_US;
+    int32_t send;
+    if (same) {
+        s_delta_total = delta_clamp((int64_t)s_delta_total + delta);
+        send = s_delta_total;
+    } else {
+        s_delta_tid = s_tid++;
+        s_delta_total = delta_clamp(delta);
+        send = s_delta_total;
+    }
+    s_delta_open = true;
+    s_delta_dest = addr;
+    s_delta_last_us = now;
+
+    esp_ble_mesh_generic_client_set_state_t set = {};
+    set.delta_set.op_en = false;
+    set.delta_set.level = send;
+    set.delta_set.tid = s_delta_tid;
+    err = esp_ble_mesh_generic_client_set_state(&common, &set);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Delta Set to 0x%04x failed (%s)", addr, esp_err_to_name(err));
+    } else {
+        client_listen(&s_level_client, addr);
+        ESP_LOGI(TAG, "published Delta %" PRId32 " (tid %u%s) to 0x%04x",
+                 send, (unsigned)s_delta_tid, same ? ", same gesture" : "", addr);
     }
     return err;
 }
@@ -2274,6 +2434,43 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
                  param->params->opcode, param->params->ctx.addr);
         return;
     }
+    /* A Status arrives as PUBLISH (unsolicited — a light publishing its state,
+     * opcode = the Status) or as the answer to our own Get/Set (opcode = the
+     * request). Either way it is the lights' state: remember it for the
+     * toggle and tell the product. */
+    if (param->error_code == 0 &&
+        (event == ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT ||
+         event == ESP_BLE_MESH_GENERIC_CLIENT_GET_STATE_EVT ||
+         event == ESP_BLE_MESH_GENERIC_CLIENT_SET_STATE_EVT)) {
+        uint16_t src = param->params->ctx.addr;
+        switch (param->params->opcode) {
+            case ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_STATUS:
+            case ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_GET:
+            case ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET: {
+                const esp_ble_mesh_gen_onoff_status_cb_t *st = &param->status_cb.onoff_status;
+                bool on = (st->op_en ? st->target_onoff : st->present_onoff) != 0;
+                if (esp_timer_get_time() - s_last_onoff_send_us > ZC_MESH_STATUS_HOLDOFF_US) {
+                    s_last_onoff = on;
+                }
+                ESP_LOGD(TAG, "OnOff status from 0x%04x: %s", src, on ? "ON" : "OFF");
+                zc_ble_mesh_on_onoff_status(src, on);
+                return;
+            }
+            case ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_STATUS:
+            case ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_GET:
+            case ESP_BLE_MESH_MODEL_OP_GEN_LEVEL_SET:
+            case ESP_BLE_MESH_MODEL_OP_GEN_DELTA_SET:
+            case ESP_BLE_MESH_MODEL_OP_GEN_MOVE_SET: {
+                const esp_ble_mesh_gen_level_status_cb_t *st = &param->status_cb.level_status;
+                int16_t level = st->op_en ? st->target_level : st->present_level;
+                ESP_LOGD(TAG, "Level status from 0x%04x: %d", src, (int)level);
+                zc_ble_mesh_on_level_status(src, level);
+                return;
+            }
+            default:
+                break;
+        }
+    }
     ESP_LOGD(TAG, "generic client event %u, opcode 0x%04" PRIx32 ", err %d",
              event, param->params->opcode, param->error_code);
 }
@@ -2345,15 +2542,20 @@ static void provisioning_cb(esp_ble_mesh_prov_cb_event_t event,
             s_net_idx = param->node_prov_complete.net_idx;
             ESP_LOGI(TAG, "provisioned: address 0x%04x, net_idx 0x%04x",
                      param->node_prov_complete.addr, param->node_prov_complete.net_idx);
+            clients_listen();
+            zc_ble_mesh_on_provisioned(true);
             break;
         case ESP_BLE_MESH_NODE_PROV_RESET_EVT:
             /* Settings are erased by now. Go straight back to advertising so
              * the node can be re-added without a power cycle. */
             s_net_idx = ESP_BLE_MESH_KEY_PRIMARY;
+            s_last_onoff = false;
+            s_delta_open = false;
             if (s_advertise_unprovisioned) {
                 (void)esp_ble_mesh_node_prov_enable(ZC_MESH_BEARERS);
             }
             ESP_LOGW(TAG, "node reset — advertising as unprovisioned again");
+            zc_ble_mesh_on_provisioned(false);
             break;
         default:
             break;
@@ -2387,7 +2589,10 @@ static int mesh_console_cmd(int argc, char **argv)
     if (!strcmp(sub, "on") || !strcmp(sub, "off")) {
         return zc_ble_mesh_publish_onoff(ZC_MESH_GROUP_ADDR, !strcmp(sub, "on")) == ESP_OK ? 0 : 1;
     }
-    printf("usage: mesh <status|join|reset|on|off>\\n");
+    if (!strcmp(sub, "toggle")) {
+        return zc_ble_mesh_publish_toggle(ZC_MESH_GROUP_ADDR) == ESP_OK ? 0 : 1;
+    }
+    printf("usage: mesh <status|join|reset|on|off|toggle>\\n");
     return 1;
 }
 
@@ -2397,7 +2602,7 @@ esp_err_t app_ble_mesh_init(void)
 
     esp_console_cmd_t mesh_cmd = {};
     mesh_cmd.command = "mesh";
-    mesh_cmd.help = "BLE Mesh: mesh <status|join|reset|on|off>";
+    mesh_cmd.help = "BLE Mesh: mesh <status|join|reset|on|off|toggle>";
     mesh_cmd.func = &mesh_console_cmd;
     app_console_register_cmd(&mesh_cmd);
 
@@ -2428,6 +2633,8 @@ ${collectSlot(rendered, 'ble_mesh_node_init', 4)}
     if (zc_ble_mesh_provisioned()) {
         ESP_LOGI(TAG, "BLE Mesh node ready — already provisioned, address 0x%04x",
                  esp_ble_mesh_get_primary_element_address());
+        clients_listen();
+        zc_ble_mesh_on_provisioned(true);
     } else if (s_advertise_unprovisioned) {
         err = esp_ble_mesh_node_prov_enable(ZC_MESH_BEARERS);
         if (err != ESP_OK) {

@@ -32,7 +32,40 @@ radio: true
 #   - Set Unacknowledged messages sent through the client model with a proper
 #     message context (address, app key index, TTL) and an incrementing TID —
 #     a repeated command without a fresh TID is discarded as a retransmission;
-#   - a `mesh` console command (status | join | reset | on | off).
+#   - a `mesh` console command (status | join | reset | on | off | toggle).
+#
+# ── The C API (components/app_ble_mesh/include/app_ble_mesh.h) ───────
+# All C linkage. What a product calls:
+#   zc_ble_mesh_publish_onoff(addr, on)    an ABSOLUTE on/off command.
+#   zc_ble_mesh_publish_toggle(addr)       a TOGGLE. Generic OnOff has no
+#                                          toggle value — this sends the inverse
+#                                          of the last Status the node heard (or
+#                                          the last value it sent; off before
+#                                          either, so the first press turns the
+#                                          lights on). Never toggle a private
+#                                          flag, never send a constant.
+#   zc_ble_mesh_publish_level(addr, lvl)   an ABSOLUTE level (int16).
+#   zc_ble_mesh_publish_delta(addr, step, continue_hold)
+#                                          DIM/BRIGHTEN relative to where the
+#                                          lights are (Generic Delta Set). `step`
+#                                          per call in Generic Level units (the
+#                                          range is 65535; 10% is ~6553);
+#                                          continue_hold=false on the first tick
+#                                          of a long press, true on the rest.
+#                                          Never compute an absolute level from
+#                                          the switch's own guess.
+#   zc_ble_mesh_set_onoff_state / zc_ble_mesh_set_level_state
+#                                          THIS node's own state (an actuator).
+#   zc_ble_mesh_level_from_u8 / _to_u8, zc_ble_mesh_provisioned,
+#   zc_ble_mesh_join_mode, zc_ble_mesh_factory_reset.
+# What a product DEFINES (weak no-op defaults in the framework):
+#   zc_ble_mesh_on_onoff_status(src, on)   a light's OnOff Status was heard.
+#   zc_ble_mesh_on_level_status(src, lvl)  a light's Level Status was heard.
+#   zc_ble_mesh_on_provisioned(bool)       joined / left the network (and once
+#                                          at boot when already provisioned).
+# A product must NOT call esp_ble_mesh_register_*_callback itself: the
+# framework owns each callback slot, and a second registration replaces one
+# side or the other. Use the hooks.
 #
 # NOTE (platform registry): the ZeroCode AI repo carries the matching framework
 # profile — chip support and incompatibilities must say the same thing as the
@@ -57,7 +90,8 @@ radio: true
 #                            An actuator calls zc_ble_mesh_set_onoff_state /
 #                            zc_ble_mesh_set_level_state (its own state); a
 #                            controller calls zc_ble_mesh_publish_onoff /
-#                            zc_ble_mesh_publish_level (a command to others).
+#                            zc_ble_mesh_publish_toggle / zc_ble_mesh_publish_level
+#                            / zc_ble_mesh_publish_delta (a command to others).
 #                            Runs OFF the mesh task, which is why it goes
 #                            through those helpers rather than the stack.
 #   ble_mesh_onoff_set_cases MESH → HARDWARE. Statements run when a controller
