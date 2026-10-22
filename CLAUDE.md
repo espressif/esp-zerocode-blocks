@@ -150,6 +150,13 @@ code is its boot behaviour**, and no later code can undo it:
   never from the middle of travel (`drivers/servo_pwm` has `rest_deg`, default
   0). A cat feeder shipped with that channel hardcoded at the 90° centre and
   dispensed a portion on every power event, silently.
+- A block whose PWM frequency is a param configures its LEDC timer with
+  `app_utils_ledc_timer_config()` (base `app_utils`), never a fixed
+  `duty_resolution`: it picks the widest resolution the clock reaches at that
+  frequency and returns the full-scale duty, which every duty computation must
+  use. 13-bit at 20 kHz is out of reach on the H2 and S3, and the fixed value
+  aborted the boot through `ESP_ERROR_CHECK`. An unreachable frequency logs and
+  leaves the output off instead.
 
 ## Block slots
 

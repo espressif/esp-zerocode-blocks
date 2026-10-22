@@ -2,6 +2,9 @@ static bool s_{{prefix_lc}}_on = false;
 static uint8_t s_{{prefix_lc}}_brightness = 254;
 static uint8_t s_{{prefix_lc}}_hue = 0;
 static uint8_t s_{{prefix_lc}}_sat = 254;
+/* Full-scale duty at the resolution init chose for the frequency. */
+static uint32_t s_{{prefix_lc}}_max_duty = 0;
+static bool s_{{prefix_lc}}_ready = false;
 
 /* HSB→RGB, hue/sat 0-254 (Matter encoding), value 0-254 → out 0-255 each */
 static void {{prefix_lc}}_hsb_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_t *b)
@@ -27,13 +30,17 @@ static void {{prefix_lc}}_hsb_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t *r
 
 static void {{prefix_lc}}_apply(void)
 {
+    if (!s_{{prefix_lc}}_ready) {
+        return;
+    }
     uint8_t r = 0, g = 0, b = 0;
     if (s_{{prefix_lc}}_on) {
         {{prefix_lc}}_hsb_to_rgb(s_{{prefix_lc}}_hue, s_{{prefix_lc}}_sat, s_{{prefix_lc}}_brightness, &r, &g, &b);
     }
-    uint32_t rd = ((uint32_t)r * 8191U) / 255U;
-    uint32_t gd = ((uint32_t)g * 8191U) / 255U;
-    uint32_t bd = ((uint32_t)b * 8191U) / 255U;
+    const uint64_t max_duty = s_{{prefix_lc}}_max_duty;
+    uint32_t rd = (uint32_t)(((uint64_t)r * max_duty) / 255U);
+    uint32_t gd = (uint32_t)(((uint64_t)g * max_duty) / 255U);
+    uint32_t bd = (uint32_t)(((uint64_t)b * max_duty) / 255U);
     ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_R_CH, rd);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_R_CH);
     ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_G_CH, gd);
