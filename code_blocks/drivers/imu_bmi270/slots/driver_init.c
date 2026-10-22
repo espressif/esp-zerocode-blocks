@@ -19,6 +19,14 @@
                is what would need the licensed firmware blob, and nothing here reads
                it. Leaving it off also saves the power an always-on panel cares
                about. */
+            /* Advanced power save OFF first. PWR_CONF resets to 0x03, and with
+               adv_power_save set the part needs >= 450 us between register
+               writes — the back-to-back ACC_CONF/ACC_RANGE pair below could
+               drop the range write and leave the reset +/-8 g, against a
+               16384 LSB/g scale: |a| ~250 mg, motion stuck true. A busy-wait,
+               not vTaskDelay: 1 ms is under one tick at 100 Hz. */
+            {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_CONF, 0x00);
+            esp_rom_delay_us(1000);
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_CTRL, 0x04);
             /* 10 ms, not 5: pdMS_TO_TICKS() rounds DOWN, and under one tick
                (10 ms at the default 100 Hz) it is 0 — no wait at all. */
@@ -28,23 +36,34 @@
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_CONF, 0xA8);
             {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_RANGE, 0x00);  /* +/-2 g */
             vTaskDelay(pdMS_TO_TICKS(10));
-            s_{{prefix_lc}}_present = true;
+            /* Read the range back: every mg figure below assumes +/-2 g, and a
+               write that did not land would read as motion forever with
+               nothing in the log. Refusing to start is the honest degraded
+               state. */
+            uint8_t {{prefix_lc}}_range = 0xFF;
+            if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_ACC_RANGE, &{{prefix_lc}}_range, 1) != ESP_OK ||
+                ({{prefix_lc}}_range & 0x03) != 0x00) {
+                ESP_LOGE(TAG, "{{prefix_lc}}: BMI270 ACC_RANGE reads 0x%02x, not +/-2 g — motion disabled",
+                         {{prefix_lc}}_range);
+            } else {
+                s_{{prefix_lc}}_present = true;
 
-            const esp_timer_create_args_t {{prefix_lc}}_args = {
-                .callback = &{{prefix_lc}}_poll_cb,
-                .arg = NULL,
-                .dispatch_method = ESP_TIMER_TASK,
-                .name = "{{prefix_lc}}_imu",
-                /* skip_unhandled_events: if the timer task is busy, drop the tick
-                   rather than queue a burst of stale samples. */
-                .skip_unhandled_events = true,
-            };
-            esp_timer_handle_t {{prefix_lc}}_timer = NULL;
-            ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_args, &{{prefix_lc}}_timer));
-            ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_timer,
-                            (uint64_t){{prefix}}_IMU_POLL_MS * 1000ULL));
-            ESP_LOGI(TAG, "BMI270 {{prefix_lc}}: I2C port %d addr 0x%02x, %d ms poll",
-                     {{prefix}}_IMU_PORT, {{prefix}}_IMU_ADDR, {{prefix}}_IMU_POLL_MS);
+                const esp_timer_create_args_t {{prefix_lc}}_args = {
+                    .callback = &{{prefix_lc}}_poll_cb,
+                    .arg = NULL,
+                    .dispatch_method = ESP_TIMER_TASK,
+                    .name = "{{prefix_lc}}_imu",
+                    /* skip_unhandled_events: if the timer task is busy, drop the tick
+                       rather than queue a burst of stale samples. */
+                    .skip_unhandled_events = true,
+                };
+                esp_timer_handle_t {{prefix_lc}}_timer = NULL;
+                ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_args, &{{prefix_lc}}_timer));
+                ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_timer,
+                                (uint64_t){{prefix}}_IMU_POLL_MS * 1000ULL));
+                ESP_LOGI(TAG, "BMI270 {{prefix_lc}}: I2C port %d addr 0x%02x, %d ms poll",
+                         {{prefix}}_IMU_PORT, {{prefix}}_IMU_ADDR, {{prefix}}_IMU_POLL_MS);
+            }
         }
     }
 }

@@ -10,7 +10,11 @@ params:
   adc_unit:
     type: int
     default: 0
-    description: ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2)
+    description: >-
+      ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2). Shared: several photodiodes
+      (and peripherals/adc_unit) on one unit adopt the same handle. Prefer
+      unit 0 — on ESP32/S2/S3 ADC2 is arbitrated with Wi-Fi and its reads fail
+      while Wi-Fi is up; ESP32-C2/C5/C6/H2 have no ADC2 at all.
   adc_channel:
     type: int
     required: true

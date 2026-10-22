@@ -7,6 +7,12 @@ static volatile bool s_{{prefix_lc}}_cmd_locked = false;
 static volatile bool s_{{prefix_lc}}_reporting = false;
 static TaskHandle_t s_{{prefix_lc}}_report_task = NULL;
 static int s_{{prefix_lc}}_last_sensed = -1;
+/* apply_param runs OUTSIDE the param bus's lock, on whichever task wrote the
+   param (Matter, a button, the console). Two commands at once used to be able
+   to interleave their "this line low, that line high" pairs and leave BOTH
+   H-bridge inputs high — a shoot-through on many bridges. Every write of the
+   pair holds this spinlock (a few register writes; ISR-safe). */
+static portMUX_TYPE s_{{prefix_lc}}_hb_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static bool {{prefix_lc}}_sensed_locked(void)
 {
@@ -27,8 +33,10 @@ static void {{prefix_lc}}_report(bool locked)
 static void {{prefix_lc}}_pulse_end_cb(void *arg)
 {
     (void)arg;
+    portENTER_CRITICAL(&s_{{prefix_lc}}_hb_lock);
     gpio_set_level((gpio_num_t){{prefix}}_LOCK_GPIO, 0);
     gpio_set_level((gpio_num_t){{prefix}}_UNLOCK_GPIO, 0);
+    portEXIT_CRITICAL(&s_{{prefix_lc}}_hb_lock);
     bool sensed = {{prefix_lc}}_sensed_locked();
     bool cmd = s_{{prefix_lc}}_cmd_locked;
     s_{{prefix_lc}}_last_sensed = sensed;

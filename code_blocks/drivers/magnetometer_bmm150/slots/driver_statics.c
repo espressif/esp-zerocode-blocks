@@ -49,20 +49,20 @@ static esp_err_t {{prefix_lc}}_wr(uint8_t reg, uint8_t val)
     return i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, b, sizeof(b), 50);
 }
 
-/* Integer hypotenuse of three axes. The exact microtesla figure does not
- * matter for "is a magnet near"; a monotonic magnitude does, and this avoids
- * pulling float maths into a driver that runs every 200 ms. */
+/* Integer hypotenuse of three axes, so no float maths runs every 200 ms.
+ * 64-bit throughout: the inputs below are in 1/32 uT and reach ~82k, whose
+ * square overflows int32 and whose sum passes 2^32. */
 static uint32_t {{prefix_lc}}_mag3(int32_t x, int32_t y, int32_t z)
 {
-    uint64_t sq = (uint64_t)(x * x) + (uint64_t)(y * y) + (uint64_t)(z * z);
-    uint32_t r = 0, bit = 1u << 30;
+    uint64_t sq = (uint64_t)((int64_t)x * x) + (uint64_t)((int64_t)y * y) + (uint64_t)((int64_t)z * z);
+    uint64_t r = 0, bit = 1ULL << 62;
     while (bit > sq) bit >>= 2;
     while (bit) {
-        if (sq >= (uint64_t)r + bit) { sq -= r + bit; r = (r >> 1) + bit; }
+        if (sq >= r + bit) { sq -= r + bit; r = (r >> 1) + bit; }
         else r >>= 1;
         bit >>= 2;
     }
-    return r;
+    return (uint32_t)r;
 }
 
 static void {{prefix_lc}}_poll_cb(void *arg)
@@ -75,14 +75,20 @@ static void {{prefix_lc}}_poll_cb(void *arg)
 
     /* X and Y are 13-bit, Z is 15-bit, each left-aligned in its pair with the
      * low bits used for other flags — shifting back down is what recovers the
-     * sign. Raw LSBs are close enough to microtesla for a threshold; the
-     * datasheet's full compensation needs per-part trim registers this block
-     * deliberately does not read. */
+     * sign. */
     int16_t x = (int16_t)(((int16_t)((uint16_t)d[1] << 8 | (d[0] & 0xF8))) >> 3);
     int16_t y = (int16_t)(((int16_t)((uint16_t)d[3] << 8 | (d[2] & 0xF8))) >> 3);
     int16_t z = (int16_t)(((int16_t)((uint16_t)d[5] << 8 | (d[4] & 0xFE))) >> 1);
 
-    uint32_t ut = {{prefix_lc}}_mag3(x, y, z);
+    /* Raw counts are NOT microtesla. X/Y span +/-1300 uT over 13 bits
+     * (~0.3125 uT/LSB) and Z +/-2500 uT over 15 bits (~0.156 uT/LSB), so raw
+     * counts read 3-6x high and weight Z differently — Earth's field alone
+     * could reach a 300-count threshold. Scale each axis to 1/32 uT (X/Y x10,
+     * Z x5), take the magnitude, divide by 32. Nominal scale only: the
+     * datasheet's full compensation needs per-part trim registers this block
+     * does not read, so expect ~10% and a small offset — fine for "is a
+     * magnet near", not for a compass. */
+    uint32_t ut = ({{prefix_lc}}_mag3((int32_t)x * 10, (int32_t)y * 10, (int32_t)z * 5) + 16) / 32;
     if (ut > 65535) ut = 65535;
 
     app_driver_param_val_t v = { .u16 = (uint16_t)ut };

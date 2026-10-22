@@ -67,7 +67,9 @@ driver_params:
   field_param:
     type: u16
     required: true
-    description: field magnitude in microtesla
+    description: >-
+      field magnitude in microtesla — raw counts scaled by the datasheet's
+      nominal resolution (X/Y ~0.31, Z ~0.16 uT/LSB), without per-part trim
   magnet_param:
     type: bool
     required: false

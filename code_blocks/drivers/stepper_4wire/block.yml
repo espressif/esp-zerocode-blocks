@@ -1,7 +1,12 @@
 description: 4-wire unipolar stepper motor (28BYJ-48 with ULN2003 driver). 8-step half-step sequence.
 
 # Drives 4 GPIOs in a half-step sequence. The position_param sets a target step
-# count (signed). A FreeRTOS task ramps the actual position toward the target.
+# count (signed). A periodic esp_timer (one half-step per step_delay_us) walks
+# the actual position toward the target, then stops and de-energizes the coils.
+# A step_delay_us below esp_timer's minimum period (~50 us) is raised to it, not refused.
+
+cmake_priv_requires:
+  app_driver: [esp_timer, esp_driver_gpio]
 
 params:
   in1_gpio: { type: int, required: true }

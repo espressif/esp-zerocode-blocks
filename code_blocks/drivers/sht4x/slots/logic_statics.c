@@ -39,7 +39,12 @@ static esp_err_t {{prefix_lc}}_sht4x_read(int16_t *t_x100, int16_t *rh_x100)
     uint8_t cmd = {{prefix}}_SHT4X_CMD_MEAS;
     esp_err_t err = i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, &cmd, 1, 50);
     if (err != ESP_OK) return err;
-    vTaskDelay(pdMS_TO_TICKS(10));
+    /* +1 tick: vTaskDelay(n) ends at the n-th tick BOUNDARY, so it waits
+       anywhere in (n-1, n] ticks. At the default 100 Hz pdMS_TO_TICKS(10) is
+       ONE tick — 0 to 10 ms — against the 0xFD measurement's 8.3 ms maximum,
+       and an early read is NACKed. One extra tick makes the floor 10 ms at any
+       tick rate. */
+    vTaskDelay(pdMS_TO_TICKS(10) + 1);
     uint8_t buf[6] = {0};
     err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) return err;

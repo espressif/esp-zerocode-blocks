@@ -10,6 +10,7 @@ case {{cfg.locked_param}}: {
     /* A new command during a pulse restarts the window toward the new end;
        stopping an idle timer returns INVALID_STATE, which is expected. */
     esp_timer_stop(s_{{prefix_lc}}_pulse_timer);
+    portENTER_CRITICAL(&s_{{prefix_lc}}_hb_lock);
     if (val.b) {
         gpio_set_level((gpio_num_t){{prefix}}_UNLOCK_GPIO, 0);
         gpio_set_level((gpio_num_t){{prefix}}_LOCK_GPIO, 1);
@@ -17,6 +18,7 @@ case {{cfg.locked_param}}: {
         gpio_set_level((gpio_num_t){{prefix}}_LOCK_GPIO, 0);
         gpio_set_level((gpio_num_t){{prefix}}_UNLOCK_GPIO, 1);
     }
+    portEXIT_CRITICAL(&s_{{prefix_lc}}_hb_lock);
     esp_timer_start_once(s_{{prefix_lc}}_pulse_timer, (uint64_t){{prefix}}_PULSE_MS * 1000ULL);
     ESP_LOGI(TAG, "Lock {{prefix_lc}}: driving to %s (%d ms)", val.b ? "LOCKED" : "UNLOCKED", {{prefix}}_PULSE_MS);
     return ESP_OK;
