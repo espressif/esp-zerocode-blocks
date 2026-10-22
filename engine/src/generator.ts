@@ -2526,9 +2526,9 @@ export function genAppAgentsCpp(rendered: RenderedInstance[]): string {
 export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
   // An empty manifest is a DEGENERATE page: the server comes up and serves a
   // control page with no controls, which reads as "working" and is not.
-  // Observed live on hallway-web-panel-msmz4sqr — smart_plug had no
-  // webui_entities slot, s_entities[] rendered empty, and code_writing quietly
-  // replaced the whole generated component with a hand-rolled one. Fail here
+  // Seen in practice: a device type with no webui_entities slot rendered an
+  // empty s_entities[], and the generated component was replaced by a
+  // hand-written one. Fail here
   // instead, naming the device types that need the binding.
   const entities = collectSlot(rendered, 'webui_entities', 4)
   const deviceTypes = rendered
