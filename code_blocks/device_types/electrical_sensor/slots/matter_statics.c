@@ -1,18 +1,21 @@
 static uint16_t s_{{prefix_lc}}_endpoint_id = 0;
 
-/* ElectricalPowerMeasurement::ActivePower is ATTRIBUTE_FLAG_MANAGED_INTERNALLY
- * in esp_matter 1.4.2: the cluster has no server-side storage for it, so
- * esp_matter::attribute::update() -> emberAfWriteAttribute() fails and crashes
- * at boot. The value MUST be supplied on demand by a cluster Delegate; the EPM
- * server plugin calls GetActivePower() whenever an Attribute read/report happens.
- * The delegate caches the latest reading (fed from the driver param) and returns
- * it. All other measurement getters are null (only active power is measured);
- * the accuracy/ranges/harmonics list iterators report "no entries". */
+/* ElectricalPowerMeasurement is code-driven (esp_matter 1.6): every read is
+ * served by CHIP's ElectricalPowerMeasurementCluster, which asks this Delegate
+ * (GetActivePower(), GetVoltage(), …) — esp_matter::attribute::update() has no
+ * storage to write. The delegate caches the latest readings (fed from the
+ * driver params) and returns them. Voltage / ActiveCurrent are null until
+ * their first reading (and unused unless the product wires voltage_param /
+ * current_param, which also adds the attributes); every other measurement is
+ * null; the accuracy/ranges/harmonics list iterators report "no entries". */
 class {{prefix_lc}}_EPMDelegate : public chip::app::Clusters::ElectricalPowerMeasurement::Delegate
 {
 public:
     /* Latest active-power reading in mW, fed from the driver callback. */
     int64_t active_power_mw = 0;
+    /* Latest RMS voltage (mV) / current (mA), null until first read. */
+    chip::app::DataModel::Nullable<int64_t> voltage_mv;
+    chip::app::DataModel::Nullable<int64_t> current_ma;
 
     chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum GetPowerMode() override
         { return chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum::kAc; }
@@ -39,9 +42,10 @@ public:
         { return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED; }
     CHIP_ERROR EndHarmonicPhasesRead() override { return CHIP_NO_ERROR; }
 
-    /* Measurement getters — only ActivePower is real, the rest are null. */
-    chip::app::DataModel::Nullable<int64_t> GetVoltage() override         { return chip::app::DataModel::NullNullable; }
-    chip::app::DataModel::Nullable<int64_t> GetActiveCurrent() override   { return chip::app::DataModel::NullNullable; }
+    /* Measurement getters — ActivePower, Voltage and ActiveCurrent are real,
+     * the rest are null. */
+    chip::app::DataModel::Nullable<int64_t> GetVoltage() override         { return voltage_mv; }
+    chip::app::DataModel::Nullable<int64_t> GetActiveCurrent() override   { return current_ma; }
     chip::app::DataModel::Nullable<int64_t> GetReactiveCurrent() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetApparentCurrent() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetActivePower() override     { return chip::app::DataModel::Nullable<int64_t>(active_power_mw); }
@@ -55,3 +59,15 @@ public:
     chip::app::DataModel::Nullable<int64_t> GetNeutralCurrent() override  { return chip::app::DataModel::NullNullable; }
 };
 static {{prefix_lc}}_EPMDelegate s_{{prefix_lc}}_epm_delegate;
+
+/* Tell the stack an EPM attribute changed so it re-reads the delegate and
+ * reports. MatterReportingAttributeChangeCallback asserts the CHIP stack lock,
+ * and driver callbacks can run off the Matter thread (e.g. an esp_timer poll),
+ * so take the lock (a no-op when already held). esp_matter 1.6 has no free
+ * chip_stack_lock()/unlock() any more — the scoped lock is the API. */
+__attribute__((unused)) static void {{prefix_lc}}_epm_report(chip::AttributeId attr)
+{
+    esp_matter::lock::ScopedChipStackLock lk(portMAX_DELAY);
+    MatterReportingAttributeChangeCallback(s_{{prefix_lc}}_endpoint_id,
+        chip::app::Clusters::ElectricalPowerMeasurement::Id, attr);
+}

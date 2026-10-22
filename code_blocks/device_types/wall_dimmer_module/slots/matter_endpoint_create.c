@@ -1,5 +1,11 @@
 {
     esp_matter::endpoint::mounted_dimmable_load_control::config_t {{prefix_lc}}_cfg;
+    /* esp_matter defaults StartUpCurrentLevel to 0, which the spec defines as
+       "MinLevel at power-up": the load came back at level 1 and looked off. Null
+       restores the previous level; the initial level matches the drivers'
+       (same fix as dimmable_light). */
+    {{prefix_lc}}_cfg.level_control.current_level = 254;
+    {{prefix_lc}}_cfg.level_control_lighting.start_up_current_level = nullable<uint8_t>();
     esp_matter::endpoint_t *ep = esp_matter::endpoint::mounted_dimmable_load_control::create(
         node, &{{prefix_lc}}_cfg, ENDPOINT_FLAG_NONE, NULL);
     if (!ep) { ESP_LOGE(TAG, "Failed to create {{prefix_lc}} endpoint"); return ESP_FAIL; }
