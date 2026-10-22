@@ -172,3 +172,69 @@ test('the provisioner configures a node it added, clients included', async (t) =
   assert.match(app, /zc_ble_mesh_publish_onoff\(ZC_MESH_GROUP_ADDR/, 'the remote publishes OnOff to the group')
   assert.match(app, /zc_ble_mesh_publish_level\(ZC_MESH_GROUP_ADDR/, 'the remote publishes Level to the group')
 })
+
+test('a switch toggles and dims relative to the lights, and products get hooks instead of callbacks', async (t) => {
+  const tpl = assembled()
+  t.after(() => rmSync(dirname(tpl), { recursive: true, force: true }))
+  const out = await generateProduct(tpl, 'ble-mesh-switch')
+  t.after(() => rmSync(out, { recursive: true, force: true }))
+
+  const app = readAll(out, 'components/app_ble_mesh/app_ble_mesh.cpp')
+
+  // The hooks: weak, C linkage (the header declares them inside extern "C";
+  // a default with the other linkage is a different symbol and an override
+  // would never bind), and each one actually called by the framework.
+  for (const [hook, sig] of [
+    ['zc_ble_mesh_on_onoff_status', 'uint16_t src, bool on'],
+    ['zc_ble_mesh_on_level_status', 'uint16_t src, int16_t level'],
+    ['zc_ble_mesh_on_provisioned', 'bool provisioned'],
+  ]) {
+    assert.ok(app.includes(`extern "C" __attribute__((weak)) void ${hook}(${sig})`),
+      `${hook} has a weak extern "C" default`)
+    const calls = app.split(`${hook}(`).length - 2   // minus the definition
+    assert.ok(calls >= 1, `${hook} is called by the framework`)
+  }
+  assert.match(app, /case ESP_BLE_MESH_NODE_PROV_COMPLETE_EVT:[\s\S]{0,400}zc_ble_mesh_on_provisioned\(true\)/,
+    'provisioning complete reaches the hook')
+  assert.match(app, /case ESP_BLE_MESH_NODE_PROV_RESET_EVT:[\s\S]{0,600}zc_ble_mesh_on_provisioned\(false\)/,
+    'a node reset reaches the hook')
+  assert.match(app, /already provisioned, address[\s\S]{0,200}zc_ble_mesh_on_provisioned\(true\)/,
+    'a node that boots provisioned reports it once')
+
+  // Toggle = inverse of the last state heard or sent; a Status updates it.
+  assert.match(app, /esp_err_t zc_ble_mesh_publish_toggle\(uint16_t addr\)\s*\{[\s\S]{0,300}zc_ble_mesh_publish_onoff\(addr, !s_last_onoff\)/,
+    'toggle inverts the remembered state')
+  assert.match(app, /static volatile bool s_last_onoff = false;/, 'first toggle after boot turns the lights on')
+  assert.match(app, /ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT[\s\S]{0,1200}s_last_onoff = on;[\s\S]{0,200}zc_ble_mesh_on_onoff_status\(src, on\)/,
+    'a received OnOff Status updates the toggle state and fires the hook')
+  assert.match(app, /esp_ble_mesh_model_subscribe_group_addr\(/, 'clients subscribe to hear the lights')
+
+  // Delta: Generic Delta Set Unack, TID reused only within a unicast gesture.
+  assert.match(app, /esp_err_t zc_ble_mesh_publish_delta\(uint16_t addr, int32_t delta, bool continue_hold\)/)
+  assert.match(app, /ESP_BLE_MESH_MODEL_OP_GEN_DELTA_SET_UNACK/, 'dimming is a Delta Set')
+  assert.match(app, /bool same = continue_hold && unicast && s_delta_open/, 'continue_hold continues a unicast transaction')
+  assert.match(app, /s_delta_tid = s_tid\+\+;/, 'a new gesture takes a fresh TID')
+  assert.match(app, /set\.delta_set\.tid = s_delta_tid;/)
+
+  // The framework is still the only place callbacks are registered.
+  assert.equal(app.split('esp_ble_mesh_register_generic_client_callback(').length - 1, 1)
+
+  // The scene button toggles through the framework, not a private flag.
+  assert.match(app, /zc_ble_mesh_publish_toggle\(ZC_MESH_GROUP_ADDR\)/)
+  assert.doesNotMatch(app, /_mesh_on = !/, 'no private toggle flag')
+
+  // The provisioner points the lights' status at the group.
+  const steps = app.slice(app.indexOf('s_prov_steps[] ='), app.indexOf('zc_prov_parse_app_key'))
+  assert.ok(steps.includes('ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET,  ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV'))
+
+  // The contract both implementations honour.
+  const h = readAll(out, 'components/app_ble_mesh/include/app_ble_mesh.h')
+  const cBlock = h.slice(h.indexOf('extern "C" {'), h.lastIndexOf('#ifdef __cplusplus'))
+  for (const decl of ['esp_err_t zc_ble_mesh_publish_toggle(uint16_t addr);',
+    'esp_err_t zc_ble_mesh_publish_delta(uint16_t addr, int32_t delta, bool continue_hold);',
+    'void zc_ble_mesh_on_onoff_status(uint16_t src, bool on);',
+    'void zc_ble_mesh_on_level_status(uint16_t src, int16_t level);',
+    'void zc_ble_mesh_on_provisioned(bool provisioned);']) {
+    assert.ok(cBlock.includes(decl), `${decl} declared inside extern "C"`)
+  }
+})
