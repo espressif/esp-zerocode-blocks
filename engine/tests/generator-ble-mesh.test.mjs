@@ -238,3 +238,23 @@ test('a switch toggles and dims relative to the lights, and products get hooks i
     assert.ok(cBlock.includes(decl), `${decl} declared inside extern "C"`)
   }
 })
+
+test('app_logic can include app_ble_mesh.h to define the hooks, and only on a mesh product', async (t) => {
+  const tpl = assembled()
+  t.after(() => rmSync(dirname(tpl), { recursive: true, force: true }))
+  const privRequires = (dir) => {
+    const cmake = readAll(dir, 'components/app_logic/CMakeLists.txt')
+    const m = cmake.match(/PRIV_REQUIRES([^)]*)\)/)
+    assert.ok(m, 'app_logic has PRIV_REQUIRES')
+    return m[1].split(/\s+/).filter(Boolean)
+  }
+  const mesh = await generateProduct(tpl, 'ble-mesh-switch')
+  t.after(() => rmSync(mesh, { recursive: true, force: true }))
+  assert.ok(privRequires(mesh).includes('app_ble_mesh'), 'mesh product: app_logic requires app_ble_mesh')
+  // No cycle: the framework component never needs the product's logic.
+  assert.ok(!readAll(mesh, 'components/app_ble_mesh/CMakeLists.txt').includes('app_logic'))
+
+  const plain = await generateProduct(tpl, 'smart-plug')
+  t.after(() => rmSync(plain, { recursive: true, force: true }))
+  assert.ok(!privRequires(plain).includes('app_ble_mesh'), 'non-mesh product: no app_ble_mesh')
+})
