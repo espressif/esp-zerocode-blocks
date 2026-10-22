@@ -14,7 +14,15 @@ params:
   intr_type:
     type: string
     default: GPIO_INTR_ANYEDGE
-    description: One of GPIO_INTR_POSEDGE / GPIO_INTR_NEGEDGE / GPIO_INTR_ANYEDGE
+    enum: [GPIO_INTR_ANYEDGE, GPIO_INTR_POSEDGE, GPIO_INTR_NEGEDGE]
+    description: >-
+      GPIO_INTR_ANYEDGE: the param is the input's settled level (state, e.g. a
+      contact or PIR). GPIO_INTR_POSEDGE / GPIO_INTR_NEGEDGE: a momentary
+      input whose PRESS is that edge (rising = pressed high, falling = pressed
+      low; this decides the active level) — each press is fired as an event,
+      so a repeat is never swallowed, and the release sets the param back to
+      false. Both edges are watched in every mode: a level param that only
+      ever saw its press edge would latch true.
   debounce_ms:
     type: int
     default: 20

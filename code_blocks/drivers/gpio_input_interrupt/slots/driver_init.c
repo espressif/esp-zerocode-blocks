@@ -2,7 +2,7 @@
     gpio_config_t {{prefix_lc}}_in_cfg = {};
     {{prefix_lc}}_in_cfg.pin_bit_mask = (1ULL << {{prefix}}_INTR_GPIO);
     {{prefix_lc}}_in_cfg.mode = GPIO_MODE_INPUT;
-    /* cfg.pull wins when named; auto pulls toward the inactive level. */
+    /* cfg.pull wins when named; auto pulls toward the inactive (not pressed) level. */
 #if defined({{prefix}}_INTR_PULL_pullup)
     {{prefix_lc}}_in_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
     {{prefix_lc}}_in_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
@@ -13,10 +13,13 @@
     {{prefix_lc}}_in_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
     {{prefix_lc}}_in_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
 #else
-    {{prefix_lc}}_in_cfg.pull_up_en = ({{prefix}}_INTR_ACTIVE_LEVEL == 0) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-    {{prefix_lc}}_in_cfg.pull_down_en = ({{prefix}}_INTR_ACTIVE_LEVEL == 1) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE;
+    {{prefix_lc}}_in_cfg.pull_up_en = ({{prefix}}_INTR_PRESS_LEVEL == 0) ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+    {{prefix_lc}}_in_cfg.pull_down_en = ({{prefix}}_INTR_PRESS_LEVEL == 1) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE;
 #endif
-    {{prefix_lc}}_in_cfg.intr_type = {{cfg.intr_type}};
+    /* Both edges in every mode: the param is a level, and a level that only
+       sees its press edge latches true (the release is never read).
+       cfg.intr_type decides what is PUBLISHED — see {{prefix_lc}}_intr_publish. */
+    {{prefix_lc}}_in_cfg.intr_type = GPIO_INTR_ANYEDGE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_in_cfg));
     s_{{prefix_lc}}_intr_q = xQueueCreate(8, sizeof(uint32_t));
     xTaskCreate({{prefix_lc}}_intr_task, "{{prefix_lc}}_intr", 2048, NULL, 5, NULL);
@@ -35,7 +38,14 @@
             ESP_LOGE(TAG, "Interrupt input {{prefix_lc}}: gpio_isr_handler_add(GPIO %d) failed (%s) — edges will not be seen",
                      {{prefix}}_INTR_GPIO, esp_err_to_name({{prefix_lc}}_isr_err));
         } else {
-            ESP_LOGI(TAG, "Interrupt input {{prefix_lc}}: GPIO %d", {{prefix}}_INTR_GPIO);
+            ESP_LOGI(TAG, "Interrupt input {{prefix_lc}}: GPIO %d, %s, pressed=%d", {{prefix}}_INTR_GPIO,
+                     {{prefix}}_INTR_MOMENTARY ? "momentary (press = event)" : "level (state)", {{prefix}}_INTR_PRESS_LEVEL);
+#if {{prefix}}_INTR_MOMENTARY
+            if ({{prefix}}_INTR_PRESS_LEVEL != {{prefix}}_INTR_ACTIVE_LEVEL) {
+                ESP_LOGW(TAG, "Interrupt input {{prefix_lc}}: active_level %d disagrees with {{cfg.intr_type}}; the edge decides (pressed=%d)",
+                         {{prefix}}_INTR_ACTIVE_LEVEL, {{prefix}}_INTR_PRESS_LEVEL);
+            }
+#endif
         }
     }
 
