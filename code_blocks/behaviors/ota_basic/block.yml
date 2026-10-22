@@ -27,5 +27,16 @@ params:
     required: false
     default: 80
     description: Zigbee endpoint number for the dedicated OTA Upgrade client endpoint (Zigbee products only)
+  zb_ota_file_version:
+    type: int
+    required: false
+    default: 0x01010100
+    description: >-
+      Zigbee OTA file version THIS image reports (Current File Version attribute
+      and every QueryNextImage). Must be raised for every release and match the
+      file version in the .ota header the hub serves: a server offers any image
+      newer than what the client reports, so an image that still reports the old
+      number after installing is offered — downloaded and rebooted into — again
+      at every daily query. Zigbee products only.
 
 param_refs: {}

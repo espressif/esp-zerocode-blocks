@@ -1,4 +1,4 @@
-description: Drives a u8 LED pattern_param from onboarding + connectivity state (Matter commissioning / RainMaker provisioning) — the user-visible signal of "what is this device doing right now"
+description: Drives a u8 LED pattern_param from onboarding + connectivity state (Matter commissioning / RainMaker provisioning / Zigbee joining / BLE Mesh provisioning / MQTT broker session) — the user-visible signal of "what is this device doing right now"
 
 # SINGLE-OWNER CONTRACT: the status LED is owned solely by drivers/status_led.
 # This block never touches the pin — it only pushes a u8 onto the shared
@@ -6,8 +6,11 @@ description: Drives a u8 LED pattern_param from onboarding + connectivity state 
 # one led_indicator handle. Never gpio_set_level() the LED pin from here.
 #
 # Same-block multi-framework behavior: the Matter side lives in
-# matter_event_cases, the RainMaker side in rainmaker_event_cases — only the
-# selected frameworks' code is generated.
+# matter_event_cases, the RainMaker side in rainmaker_event_cases, Zigbee in
+# zigbee_signal_cases, BLE Mesh in ble_mesh_prov_cases, MQTT in
+# mqtt_event_cases — only the selected frameworks' code is generated. A
+# framework with none of these (aws_iot, espnow, webui alone) leaves the LED on
+# logic_init's slow blink: compose this block only with one of the five.
 #
 # Standard mapping (shared vocabulary with drivers/status_led):
 #   - Boot, unprovisioned:     slow blink (2)  — "I'm waiting to be set up"
