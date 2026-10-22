@@ -1834,6 +1834,14 @@ static uint8_t s_tid = 0;
  * HEARD (a Status) or SENT, whichever came last. Off until then, so the
  * first toggle after boot turns the lights on. */
 static volatile bool s_last_onoff = false;
+/* When this node last SENT an OnOff Set. A light answers a Set with a Status
+ * ~100 ms later (more than once with publish retransmits), so a Status heard
+ * just after a send may describe the PREVIOUS press: letting it overwrite
+ * s_last_onoff makes a quick double tap leave the next toggle doing nothing.
+ * Statuses inside this window still reach the hook; only the toggle state
+ * ignores them. */
+#define ZC_MESH_STATUS_HOLDOFF_US  (500LL * 1000)
+static volatile int64_t s_last_onoff_send_us = 0;
 /* The Delta gesture in progress (zc_ble_mesh_publish_delta). */
 #define ZC_MESH_DELTA_IDLE_US  (5LL * 1000 * 1000)   /* spec window is 6 s */
 #define ZC_MESH_DELTA_MAX      65535
@@ -2165,6 +2173,7 @@ esp_err_t zc_ble_mesh_publish_onoff(uint16_t addr, bool on)
         ESP_LOGW(TAG, "OnOff Set to 0x%04x failed (%s)", addr, esp_err_to_name(err));
     } else {
         s_last_onoff = on;
+        s_last_onoff_send_us = esp_timer_get_time();
         client_listen(&s_onoff_client, addr);
         ESP_LOGI(TAG, "published OnOff %s to 0x%04x", on ? "ON" : "OFF", addr);
     }
@@ -2397,7 +2406,9 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
             case ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET: {
                 const esp_ble_mesh_gen_onoff_status_cb_t *st = &param->status_cb.onoff_status;
                 bool on = (st->op_en ? st->target_onoff : st->present_onoff) != 0;
-                s_last_onoff = on;
+                if (esp_timer_get_time() - s_last_onoff_send_us > ZC_MESH_STATUS_HOLDOFF_US) {
+                    s_last_onoff = on;
+                }
                 ESP_LOGD(TAG, "OnOff status from 0x%04x: %s", src, on ? "ON" : "OFF");
                 zc_ble_mesh_on_onoff_status(src, on);
                 return;

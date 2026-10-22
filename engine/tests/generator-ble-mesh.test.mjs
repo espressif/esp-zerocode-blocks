@@ -207,6 +207,11 @@ test('a switch toggles and dims relative to the lights, and products get hooks i
   assert.match(app, /static volatile bool s_last_onoff = false;/, 'first toggle after boot turns the lights on')
   assert.match(app, /ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT[\s\S]{0,1200}s_last_onoff = on;[\s\S]{0,200}zc_ble_mesh_on_onoff_status\(src, on\)/,
     'a received OnOff Status updates the toggle state and fires the hook')
+  // ...but not one heard right after a send: it may answer the previous press.
+  assert.match(app, /s_last_onoff = on;\s*s_last_onoff_send_us = esp_timer_get_time\(\);/,
+    'a send records its time')
+  assert.match(app, /if \(esp_timer_get_time\(\) - s_last_onoff_send_us > ZC_MESH_STATUS_HOLDOFF_US\) \{\s*s_last_onoff = on;\s*\}/,
+    'a Status inside the holdoff does not overwrite the toggle state')
   assert.match(app, /esp_ble_mesh_model_subscribe_group_addr\(/, 'clients subscribe to hear the lights')
 
   // Delta: Generic Delta Set Unack, TID reused only within a unicast gesture.
