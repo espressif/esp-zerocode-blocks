@@ -56,7 +56,15 @@ static void {{prefix_lc}}_play_task(void *arg)
             {{prefix_lc}}_play_note(n->freq, n->ms);
         }
         {{prefix_lc}}_play_note(0, 0);
-        /* Looping pattern (alarm) repeats; one-shot patterns reset to 0 */
-        if (cur != 3) s_{{prefix_lc}}_pattern = 0;
+        /* Looping pattern (alarm) repeats; a one-shot clears itself — ON THE
+           BUS, not just here. Clearing only the local copy left the bus
+           holding the pattern, so the next set_param of the same pattern was
+           deduped (a "chirp on X" chirped once per boot) and get_param
+           reported a pattern that was not playing. Compare-and-clear: a
+           different pattern that arrived while this one played is kept. */
+        if (cur != 3 && s_{{prefix_lc}}_pattern == cur) {
+            app_driver_param_val_t zero = { .u8 = 0 };
+            app_driver_set_param({{cfg.pattern_param}}, zero, APP_DRIVER_SOURCE_LOCAL);
+        }
     }
 }

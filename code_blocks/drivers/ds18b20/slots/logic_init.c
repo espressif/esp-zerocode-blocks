@@ -28,14 +28,10 @@
         }
         onewire_del_device_iter({{prefix_lc}}_iter);
     }
-    const esp_timer_create_args_t {{prefix_lc}}_args = {
-        .callback = &{{prefix_lc}}_ds_poll_cb,
-        .arg = NULL,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "{{prefix_lc}}_ds",
-        .skip_unhandled_events = true,
-    };
-    esp_timer_handle_t {{prefix_lc}}_timer = NULL;
-    ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_args, &{{prefix_lc}}_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_timer, (uint64_t){{prefix}}_DS_POLL_MS * 1000ULL));
+    /* Its own task, NOT an esp_timer callback: a conversion takes 800 ms at
+       12-bit and espressif/ds18b20 waits it out inside
+       ds18b20_trigger_temperature_conversion(). On the shared esp_timer task
+       that stalled every other timer in the product (button scanning, LED
+       blinks, other sensors) for the whole conversion, every poll. */
+    xTaskCreate({{prefix_lc}}_ds_task, "{{prefix_lc}}_ds", 3072, NULL, 3, NULL);
 }

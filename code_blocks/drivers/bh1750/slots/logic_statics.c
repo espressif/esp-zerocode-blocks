@@ -34,14 +34,50 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
     return {{prefix_lc}}_err;
 }
 
+/* Continuous high-resolution mode (0x10). The part powers up in power-down
+ * and forgets the mode on a brown-out, so this is sent at start AND after any
+ * failed read — sent once and never again, one missed command left the
+ * product at a stale or zero lux forever. */
+static esp_err_t {{prefix_lc}}_bh_arm(void)
+{
+    uint8_t cmd = 0x10;
+    return i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, &cmd, 1, 50);
+}
+
+static uint32_t s_{{prefix_lc}}_bh_failures = 0;
+
 static void {{prefix_lc}}_bh_poll_cb(void *arg)
 {
     uint8_t buf[2] = {0};
-    if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) return;
+    esp_err_t err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
+    if (err != ESP_OK) {
+        /* First failure at WARN, then once a minute (aht21's contract); re-arm
+           so the next poll reads a live conversion. */
+        s_{{prefix_lc}}_bh_failures++;
+        uint32_t per_minute = 60000UL / (uint32_t){{prefix}}_BH_POLL_MS;
+        if (per_minute == 0) per_minute = 1;
+        if (s_{{prefix_lc}}_bh_failures == 1 || (s_{{prefix_lc}}_bh_failures % per_minute) == 0) {
+            ESP_LOGW(TAG, "BH1750 {{prefix_lc}}: read failed (%s), %lu consecutive", esp_err_to_name(err), (unsigned long)s_{{prefix_lc}}_bh_failures);
+        }
+        (void){{prefix_lc}}_bh_arm();
+{{#if cfg.status_param}}
+        app_driver_param_val_t bad = { .b = false };
+        app_driver_set_param({{cfg.status_param}}, bad, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+        return;
+    }
+    if (s_{{prefix_lc}}_bh_failures) {
+        ESP_LOGI(TAG, "BH1750 {{prefix_lc}}: reading again after %lu failed poll(s)", (unsigned long)s_{{prefix_lc}}_bh_failures);
+        s_{{prefix_lc}}_bh_failures = 0;
+    }
     uint16_t raw = ((uint16_t)buf[0] << 8) | buf[1];
     /* lux = raw / 1.2 = raw * 5 / 6 */
     uint32_t lux = ((uint32_t)raw * 5U) / 6U;
     if (lux > 0xFFFF) lux = 0xFFFF;
     app_driver_param_val_t v = { .u16 = (uint16_t)lux };
     app_driver_set_param({{cfg.value_param}}, v, APP_DRIVER_SOURCE_LOCAL);
+{{#if cfg.status_param}}
+    app_driver_param_val_t ok = { .b = true };
+    app_driver_set_param({{cfg.status_param}}, ok, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
 }

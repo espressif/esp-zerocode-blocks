@@ -1,16 +1,27 @@
-description: Interrupt-driven GPIO binary input — same idea as gpio_input_sensor but uses ISR + queue, low-latency. Depends on peripherals/gpio_isr_service.
+description: Interrupt-driven GPIO binary input — same idea as gpio_input_sensor but uses ISR + queue, low-latency. Installs the shared GPIO ISR service itself if nothing has (peripherals/gpio_isr_service is optional).
 
 # For PIRs and contact sensors that need sub-millisecond response. Polls feel sluggish
 # at 250 ms; ISR delivers the edge to a FreeRTOS task that publishes the param.
 
 params:
   gpio: { type: int, required: true }
-  pull: { type: string, default: pullup, enum: [pullup, pulldown, none] }
+  pull:
+    type: string
+    default: auto
+    enum: [auto, pullup, pulldown, none]
+    description: Internal pull resistor; auto pulls toward the INACTIVE level (see gpio_input_sensor)
   active_level: { type: int, default: 1 }
   intr_type:
     type: string
     default: GPIO_INTR_ANYEDGE
     description: One of GPIO_INTR_POSEDGE / GPIO_INTR_NEGEDGE / GPIO_INTR_ANYEDGE
+  debounce_ms:
+    type: int
+    default: 20
+    description: >-
+      After an edge, wait this long for the contact to settle, then read the
+      level once and publish it if it changed. Contact bounce otherwise becomes
+      a burst of set_param writes. 0 disables (read immediately).
 
 driver_params:
   target_param: { type: bool, required: true }

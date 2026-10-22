@@ -21,3 +21,7 @@ driver_params:
     type: i16
     required: true
     description: i16, hundredths of °C
+  status_param:
+    type: bool
+    required: false
+    description: "Optional sensor-health bool: true after a successful read, false after a failed one (or no probe). Without it a dead probe keeps its last reading on the bus."

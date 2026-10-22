@@ -165,7 +165,10 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
     # driver_init, so blessing them as providers would bless a race — they are
     # deliberately outside the bus contract in both directions.
     # See CLAUDE.md → Shared buses ("Two things this deliberately does NOT do").
-    BUS_EXEMPT = {'drivers/display_touch_cst9220', 'drivers/display_touch_ft5x06'}
+    # camera_motion_v4l2 is the same shape in a vision node-init slot: it adopts
+    # an existing bus on its SCCB port, else esp_video creates one.
+    BUS_EXEMPT = {'drivers/display_touch_cst9220', 'drivers/display_touch_ft5x06',
+                  'drivers/camera_motion_v4l2'}
     bus_users = sorted(n for n in slot_names if BUS_CALLS.search(slot_text[n]))
     if bus_users and bid not in BUS_EXEMPT and not (d.get('requires_bus') or d.get('provides_bus')):
         err(bid, f'slots/{bus_users[0]} performs bus transactions but the block declares '

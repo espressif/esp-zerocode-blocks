@@ -17,8 +17,8 @@
     {{prefix_lc}}_cam.pin_href = {{prefix}}_CAM_HREF;
     {{prefix_lc}}_cam.pin_pclk = {{prefix}}_CAM_PCLK;
     {{prefix_lc}}_cam.xclk_freq_hz = {{prefix}}_CAM_XCLK_HZ;
-    {{prefix_lc}}_cam.ledc_timer = LEDC_TIMER_3;
-    {{prefix_lc}}_cam.ledc_channel = LEDC_CHANNEL_7;
+    {{prefix_lc}}_cam.ledc_timer = (ledc_timer_t){{prefix}}_CAM_LEDC_TIMER;
+    {{prefix_lc}}_cam.ledc_channel = (ledc_channel_t){{prefix}}_CAM_LEDC_CHANNEL;
     {{prefix_lc}}_cam.pixel_format = PIXFORMAT_GRAYSCALE;
     {{prefix_lc}}_cam.frame_size = FRAMESIZE_QQVGA;
     {{prefix_lc}}_cam.fb_count = 1;

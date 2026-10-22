@@ -1,17 +1,18 @@
 /* {{prefix_lc}}: bit-banged DHT single-wire driver (self-contained). */
 
 /* Busy-wait until the line reaches `level`, or timeout. Returns elapsed us,
- * or -1 on timeout. Uses esp_rom_delay_us — NOT the deprecated
- * <ets_sys.h>/ets_delay_us that broke the hand-vendored version. */
+ * or -1 on timeout. Elapsed time comes from esp_timer_get_time() (the
+ * systimer, readable with interrupts masked): counting esp_rom_delay_us(1)
+ * iterations under-counted every pulse by the loop's own overhead, which
+ * pushed the 0/1 threshold around with the CPU clock. */
 static inline int {{prefix_lc}}_dht_wait_level(int level, int timeout_us)
 {
-    int us = 0;
-    while (gpio_get_level((gpio_num_t){{prefix}}_DHT_GPIO) != level) {
+    int64_t t0 = esp_timer_get_time();
+    for (;;) {
+        int us = (int)(esp_timer_get_time() - t0);
+        if (gpio_get_level((gpio_num_t){{prefix}}_DHT_GPIO) == level) return us;
         if (us > timeout_us) return -1;
-        esp_rom_delay_us(1);
-        us++;
     }
-    return us;
 }
 
 /* Read one 40-bit frame into out[5]. Returns ESP_OK on a valid checksum.
@@ -23,7 +24,10 @@ static esp_err_t {{prefix_lc}}_dht_read_frame(uint8_t out[5])
     /* --- Start signal (interrupts still enabled; coarse ms-scale delays) --- */
     gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     gpio_set_level(pin, 0);
-    esp_rom_delay_us({{prefix}}_DHT_IS_DHT11 ? 20000 : 2000);  /* DHT11 >=18 ms; DHT22 >=1 ms */
+    /* DHT11 >=18 ms; DHT22 >=1 ms. The DHT11's long low sleeps (this is the
+       block's own task); the DHT22's 2 ms is short enough to spin. */
+    if ({{prefix}}_DHT_IS_DHT11) vTaskDelay(pdMS_TO_TICKS(20) + 1);   /* +1: a partial first tick never counts short */
+    else esp_rom_delay_us(2000);
     gpio_set_level(pin, 1);
     esp_rom_delay_us(30);
     gpio_set_direction(pin, GPIO_MODE_INPUT);  /* external pull-up holds high */
@@ -94,16 +98,52 @@ static esp_err_t {{prefix_lc}}_dht_read(int16_t *t_x100, int16_t *rh_x100)
     return ESP_OK;
 }
 
-static void {{prefix_lc}}_dht_poll_cb(void *arg)
+static uint32_t s_{{prefix_lc}}_dht_failures = 0;
+
+static void {{prefix_lc}}_dht_poll(void)
 {
     int16_t t = 0, h = 0;
     esp_err_t err = {{prefix_lc}}_dht_read(&t, &h);
     if (err == ESP_OK) {
+        if (s_{{prefix_lc}}_dht_failures) {
+            ESP_LOGI(TAG, "{{prefix_lc}}: DHT reading again after %lu failed poll(s)", (unsigned long)s_{{prefix_lc}}_dht_failures);
+            s_{{prefix_lc}}_dht_failures = 0;
+        }
         app_driver_param_val_t tv = { .i16 = t };
         app_driver_set_param({{cfg.temp_param}}, tv, APP_DRIVER_SOURCE_LOCAL);
         app_driver_param_val_t hv = { .i16 = h };
         app_driver_set_param({{cfg.humidity_param}}, hv, APP_DRIVER_SOURCE_LOCAL);
-    } else {
-        ESP_LOGW(TAG, "{{prefix_lc}}: DHT read failed: %s", esp_err_to_name(err));
+{{#if cfg.status_param}}
+        app_driver_param_val_t ok = { .b = true };
+        app_driver_set_param({{cfg.status_param}}, ok, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+        return;
+    }
+    /* First failure at WARN, then once a minute — a dead sensor used to WARN
+       every poll. status_param (when composed) says "no data" instead of
+       leaving a stale reading looking current. Same contract as aht21. */
+    s_{{prefix_lc}}_dht_failures++;
+    uint32_t per_minute = 60000UL / {{prefix}}_DHT_PERIOD_MS;
+    if (per_minute == 0) per_minute = 1;
+    if (s_{{prefix_lc}}_dht_failures == 1 || (s_{{prefix_lc}}_dht_failures % per_minute) == 0) {
+        ESP_LOGW(TAG, "{{prefix_lc}}: DHT read failed (%s), %lu consecutive", esp_err_to_name(err), (unsigned long)s_{{prefix_lc}}_dht_failures);
+    }
+{{#if cfg.status_param}}
+    app_driver_param_val_t bad = { .b = false };
+    app_driver_set_param({{cfg.status_param}}, bad, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+}
+
+/* Its own task, not an esp_timer callback: the start pulse holds the line low
+ * for 2 ms (20 ms on a DHT11) and the frame takes ~5 ms. On the shared
+ * esp_timer task that delayed every other timer callback in the product. */
+static void {{prefix_lc}}_dht_task(void *arg)
+{
+    TickType_t last = xTaskGetTickCount();
+    /* Wait one period (at least 2 s) first: the sensor does not answer
+     * within ~1-2 s of power-up. */
+    for (;;) {
+        vTaskDelayUntil(&last, pdMS_TO_TICKS({{prefix}}_DHT_PERIOD_MS));
+        {{prefix_lc}}_dht_poll();
     }
 }

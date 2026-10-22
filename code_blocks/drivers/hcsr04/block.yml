@@ -2,7 +2,10 @@ description: HC-SR04 ultrasonic distance sensor (trigger pulse + echo timing). U
 
 # Sends a 10 µs HIGH pulse on TRIG, then measures the duration of the resulting
 # HIGH pulse on ECHO. distance_mm = duration_us * 343 / 2000 (speed of sound = 343 m/s).
-# Polled — for a non-blocking version, use a state machine + GPIO ISR.
+# The echo is timed by a GPIO any-edge ISR (esp_timer_get_time at each edge)
+# from the block's own task, which sleeps until the falling edge or a 40 ms
+# timeout. It used to busy-wait both edges inside an esp_timer callback, which
+# stalled every other esp_timer user in the product up to 60 ms per poll.
 
 params:
   trig_gpio: { type: int, required: true }
@@ -14,3 +17,7 @@ driver_params:
     type: u16
     required: true
     description: u16 distance in mm (clamped to 0xFFFF)
+  status_param:
+    type: bool
+    required: false
+    description: "Optional sensor-health bool: true after an echo, false after a timeout (nothing in range, or no sensor). Without it a disconnected sensor keeps its last distance on the bus."

@@ -4,10 +4,22 @@
        publishes the result as a V4L2 device. That is why there is no sensor
        model named anywhere here — the probe decides. */
     esp_video_init_dvp_config_t {{prefix_lc}}_dvp = {};
-    {{prefix_lc}}_dvp.sccb_config.init_sccb = true;
-    {{prefix_lc}}_dvp.sccb_config.i2c_config.port = 0;
-    {{prefix_lc}}_dvp.sccb_config.i2c_config.scl_pin = (gpio_num_t){{prefix}}_CAM_SCL;
-    {{prefix_lc}}_dvp.sccb_config.i2c_config.sda_pin = (gpio_num_t){{prefix}}_CAM_SDA;
+    /* ADOPT, THEN CREATE — the I2C blocks' rule. If something already owns
+       the SCCB port (peripherals/i2c_bus, a board, a display's touch), hand
+       esp_video that bus: asking it to create one fails on an occupied port,
+       and the camera came up dead in any product with I2C on port 0. The
+       sensor then sits on that bus's pins, so pin_sda/pin_scl go unused. */
+    i2c_master_bus_handle_t {{prefix_lc}}_sccb_bus = NULL;
+    if (i2c_master_get_bus_handle((i2c_port_num_t){{prefix}}_CAM_SCCB_PORT, &{{prefix_lc}}_sccb_bus) == ESP_OK) {
+        {{prefix_lc}}_dvp.sccb_config.init_sccb = false;
+        {{prefix_lc}}_dvp.sccb_config.i2c_handle = {{prefix_lc}}_sccb_bus;
+        ESP_LOGI(TAG, "{{prefix_lc}}: SCCB on the existing I2C%d bus", {{prefix}}_CAM_SCCB_PORT);
+    } else {
+        {{prefix_lc}}_dvp.sccb_config.init_sccb = true;
+        {{prefix_lc}}_dvp.sccb_config.i2c_config.port = {{prefix}}_CAM_SCCB_PORT;
+        {{prefix_lc}}_dvp.sccb_config.i2c_config.scl_pin = (gpio_num_t){{prefix}}_CAM_SCL;
+        {{prefix_lc}}_dvp.sccb_config.i2c_config.sda_pin = (gpio_num_t){{prefix}}_CAM_SDA;
+    }
     {{prefix_lc}}_dvp.sccb_config.freq = {{prefix}}_CAM_SCCB_HZ;
     {{prefix_lc}}_dvp.reset_pin = (gpio_num_t){{prefix}}_CAM_RESET;
     {{prefix_lc}}_dvp.pwdn_pin = (gpio_num_t){{prefix}}_CAM_PWDN;

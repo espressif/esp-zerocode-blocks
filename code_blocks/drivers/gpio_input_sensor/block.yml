@@ -14,9 +14,14 @@ params:
     description: GPIO to read
   pull:
     type: string
-    default: pullup
-    enum: [pullup, pulldown, none]
-    description: Internal pull resistor direction
+    default: auto
+    enum: [auto, pullup, pulldown, none]
+    description: >-
+      Internal pull resistor. auto pulls toward the INACTIVE level (pull-up for
+      active_level 0, pull-down for 1), which suits a contact that only drives
+      the line when asserted. Name it explicitly when that is wrong — a
+      normally-closed contact to GND reads active-HIGH when it opens and needs
+      pullup; a sensor with its own output stage or divider wants none.
   active_level:
     type: int
     default: 1
