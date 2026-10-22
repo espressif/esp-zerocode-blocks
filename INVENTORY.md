@@ -615,7 +615,7 @@ Touch eFuses; **irreversible**. Not applied during dev. A future
 ### Power profiles
 | Fragment | Description |
 |---|---|
-| `power_management` | IDF PM with DFS at startup + tickless idle + sleep IRAM. Automatic light sleep stays off (it stops PWM/console/GPIO a product relies on) — call `esp_pm_configure` to opt in. |
+| `power_management` | IDF PM with DFS at startup + tickless idle + sleep IRAM. Automatic light sleep stays off (it stops PWM/console/GPIO a product relies on) — call `esp_pm_configure` to opt in. DFS lowers APB when idle: LEDC PWM blocks (`LEDC_AUTO_CLK` picks APB first on ESP32/C2/C3/S2/S3) and `uart_bus` (`UART_SCLK_DEFAULT`) drift unless given a DFS-safe clock (XTAL / RC_FAST / REF_TICK); the console UART is moved by IDF. |
 | `wifi_min_memory` | Reduce Wi-Fi RX/TX buffer pools. ~10-15 KB RAM saved at cost of latency. |
 
 ### Diagnostics & I/O
