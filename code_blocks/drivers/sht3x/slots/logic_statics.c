@@ -45,10 +45,12 @@ static esp_err_t {{prefix_lc}}_sht3_read(int16_t *t_x100, int16_t *rh_x100)
     uint8_t cmd[2] = { 0x24, 0x00 };
     esp_err_t err = i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, cmd, sizeof(cmd), 50);
     if (err != ESP_OK) return err;
-    /* +1 tick: vTaskDelay(n) waits (n-1, n] ticks, and at the default 100 Hz
-       pdMS_TO_TICKS(15) is ONE tick (0-10 ms) against a 15 ms maximum
-       measurement time. One extra tick floors the wait at 15 ms. */
-    vTaskDelay(pdMS_TO_TICKS(15) + 1);
+    /* vTaskDelay(n) waits (n-1, n] ticks, so the floor is n-1 ticks. That
+       must cover the 15 ms maximum measurement time: 15 ms ROUNDED UP to
+       whole ticks, plus one. pdMS_TO_TICKS rounds down — at the default
+       100 Hz pdMS_TO_TICKS(15) + 1 is 2 ticks, a 10 ms floor, and the early
+       read is NACKed. This is 3 ticks at 100 Hz, 16 at 1000 Hz. */
+    vTaskDelay((15 * configTICK_RATE_HZ + 999) / 1000 + 1);
     uint8_t buf[6] = {0};
     err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) return err;

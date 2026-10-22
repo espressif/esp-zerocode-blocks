@@ -4,7 +4,7 @@ description: Sensirion SHT3x I2C temp+humidity sensor (predecessor to SHT4x — 
 #   - I2C addr 0x44 (or 0x45 with ADDR pin high)
 #   - Single-shot high-repeatability, NO clock stretching: 0x24 0x00
 #     (the stretching form, 0x2C 0x06, outlasts the I2C master's ~2 ms SCL wait)
-#   - Wait >= 15 ms (one tick more than pdMS_TO_TICKS(15) — see logic_statics.c)
+#   - Wait >= 15 ms (15 ms rounded up to whole ticks, plus one — see logic_statics.c)
 #   - Read 6 bytes: t_msb, t_lsb, t_crc, h_msb, h_lsb, h_crc
 #   - T_C = -45 + 175 * t_raw / 65535
 #   - RH = 100 * h_raw / 65535
