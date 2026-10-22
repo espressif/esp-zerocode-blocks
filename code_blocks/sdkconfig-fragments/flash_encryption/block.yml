@@ -1,11 +1,17 @@
-description: Enables Flash Encryption (release mode). Bootloader and app are
+description: Flash Encryption, release mode — for a future production phase only. Under this platform's mandatory CONFIG_EFUSE_VIRTUAL=y it encrypts NOTHING (IDF falls back to development mode and only logs the flow).
 
-# Original notes from the .defaults file:
-#   Enables Flash Encryption (release mode). Bootloader and app are
-#   encrypted on flash with a per-device key burned into eFuse. Reads
-#   from flash by external means (e.g. another device, debugger) yield
-#   ciphertext. ONE-WAY: enabling release mode cannot be undone.
-#   Combine with secure_boot for full chain-of-trust hardening.
+# What it does TODAY: every generated image keeps CONFIG_EFUSE_VIRTUAL=y (the
+# write guard and the build both enforce it, so no image can burn a one-time
+# eFuse). Release mode `depends on !EFUSE_VIRTUAL` (bootloader
+# Kconfig.projbuild), so the mode choice silently falls back to Development;
+# and with virtual eFuses the bootloader logs that it encrypts while writing
+# plaintext ("does not encrypt anything in the flash, even though the logs
+# indicates that encryption happens" — IDF api-reference/system/efuse.rst).
+# So under the current policy this fragment is a dry run of the first-boot
+# flow, with no protection at all. Never present it as protecting a device.
+#
+# What it is FOR: the production phase, where virtual eFuses are switched off
+# deliberately — then the bootloader and app are encrypted on flash with a
+# per-device key burned into eFuse, and release mode is ONE-WAY. Combine with
+# secure_boot for a chain of trust:
 #   sdkconfig_fragments: [secure_boot, flash_encryption]
-#   First-boot flow burns the key automatically (development mode is
-#   explicitly disabled here — production-only).

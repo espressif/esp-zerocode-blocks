@@ -266,12 +266,13 @@ generator workaround for an upstream NULL-deref in esp_agent_init (text
 mode with NULL audio configs crashes; dummy configs passed).
 
 `webui-room-node` — first `frameworks: [webui]` product: the device serves
-its OWN control page. Standalone SoftAP ("ZeroCode-<id>", password
-"zerocode") at http://192.168.4.1 — or shared-net when a Wi-Fi transport
-is co-selected (mDNS zerocode-<id>.local either way). Device types
-contribute `webui_entities` manifest rows; one embedded plain-ASCII page
-renders them (toggle/slider/value/binary) against GET /api/state +
-GET /api/set, params addressed BY NAME. esp32c3, dimmable pwm light +
+its OWN control page. Standalone SoftAP ("ZeroCode-<id>", a per-device
+password made on first boot, kept in NVS and printed in the boot log) at
+http://192.168.4.1 — or shared-net when a Wi-Fi transport is co-selected
+(mDNS zerocode-<id>.local either way). Device types contribute
+`webui_entities` manifest rows; one embedded plain-ASCII page renders them
+(toggle/slider/value/binary) against GET /api/state + POST /api/set (the
+page's own X-ZC-Request header required), params addressed BY NAME. esp32c3, dimmable pwm light +
 DHT22 temperature.
 
 ### BLE HID (1)
@@ -593,7 +594,7 @@ with a `sdkconfig:` map.
 | Fragment | Description |
 |---|---|
 | `matter_thread` | Matter over Thread (802.15.4) instead of Wi-Fi. esp32c5 / esp32c6 / esp32h2. |
-| `c6_thread_only` | Superseded by `matter_thread`; no product uses it. Its `CONFIG_ESP_WIFI_ENABLED="n"` is inert — that symbol is promptless in IDF 6.x and cannot be set from sdkconfig. |
+| `c6_thread_only` | Superseded by `matter_thread`; no product uses it. Enables OpenThread only — Wi-Fi stays (`CONFIG_ESP_WIFI_ENABLED` is promptless in IDF 6.x and cannot be set from sdkconfig, so the key was dropped). |
 
 ### Build modes
 | Fragment | Description |
@@ -607,20 +608,20 @@ Touch eFuses; **irreversible**. Not applied during dev. A future
 
 | Fragment | Description |
 |---|---|
-| `secure_boot` | Secure Boot v2 — bootloader verifies app signature against eFuse-burned key. ONE-WAY. |
-| `flash_encryption` | Flash Encryption (release mode) — bootloader + app encrypted on flash. ONE-WAY. Combine with secure_boot. |
+| `secure_boot` | Secure Boot v2 — bootloader verifies app signature against eFuse-burned key. ONE-WAY once virtual eFuses are off; under today's mandatory `CONFIG_EFUSE_VIRTUAL=y` nothing is burned and there is no chain of trust. Needs a signing key at build time. |
+| `flash_encryption` | Flash Encryption (release mode) — bootloader + app encrypted on flash. ONE-WAY once virtual eFuses are off; under today's mandatory `CONFIG_EFUSE_VIRTUAL=y` it falls back to development mode and encrypts nothing. Combine with secure_boot. |
 | `nvs_encryption` | Encrypt NVS partition (Wi-Fi creds, fabric keys, persisted params). Pair with flash_encryption. |
 
 ### Power profiles
 | Fragment | Description |
 |---|---|
-| `power_management` | IDF PM + tickless idle + Wi-Fi sleep IRAM. ~50-70% idle power reduction. |
+| `power_management` | IDF PM with DFS at startup + tickless idle + sleep IRAM. Automatic light sleep stays off (it stops PWM/console/GPIO a product relies on) — call `esp_pm_configure` to opt in. DFS lowers APB when idle: LEDC PWM blocks (`LEDC_AUTO_CLK` picks APB first on ESP32/C2/C3/S2/S3) and `uart_bus` (`UART_SCLK_DEFAULT`) drift unless given a DFS-safe clock (XTAL / RC_FAST / REF_TICK); the console UART is moved by IDF. |
 | `wifi_min_memory` | Reduce Wi-Fi RX/TX buffer pools. ~10-15 KB RAM saved at cost of latency. |
 
 ### Diagnostics & I/O
 | Fragment | Description |
 |---|---|
-| `coredump` | ELF core-dump-to-flash on crash. Needs a `coredump` partition. |
+| `coredump` | ELF core dump printed to the console UART on crash (the device log captures it). No partition needed — no table carries a `coredump` one. |
 | `usb_serial_console` | Route console + logs to USB-Serial-JTAG (c3/c6/s3/h2). |
 
 ---

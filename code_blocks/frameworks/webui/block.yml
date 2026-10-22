@@ -15,12 +15,15 @@ radio: true
 # THE BINDING: device types contribute webui_entities rows — a static
 # manifest entry per control ({label, kind, param, min, max, scale}).
 # ONE embedded page (~3 KB, no external assets) renders the manifest:
-# toggle / slider / value / binary, polling GET /api/state and posting
-# /api/set. Params travel BY NAME in the API, mapped to enums by a
-# generated table.
+# toggle / slider / value / binary, polling GET /api/state and sending
+# POST /api/set with an X-ZC-Request header (a GET or a header-less request is
+# refused, so a page elsewhere cannot drive the device cross-site). Params
+# travel BY NAME in the API, mapped to enums by a generated table.
 #
-# NETWORK: standalone products bring up a SoftAP — "ZeroCode-<id>",
-# password "zerocode" — and serve at http://192.168.4.1. When any other
+# NETWORK: standalone products bring up a SoftAP — "ZeroCode-<id>", with a
+# per-device password made on first boot, kept in NVS and printed in the boot
+# log (it was a fixed, published "zerocode" until 2026-10) — and serve at
+# http://192.168.4.1. When any other
 # Wi-Fi framework (matter/rainmaker/mqtt/agents/aws_iot) is co-selected,
 # webui owns NOTHING: it serves on that framework's station network instead
 # and announces zerocode-<id>.local over mDNS (shared-network mode, same

@@ -22,9 +22,10 @@ radio: true
 # NOTHING and waits for the transport's IP (shared-net mode). Beside webui
 # or aws_iot it still owns Wi-Fi, and they serve/connect on its station.
 #
-# ONBOARDING: agent-wifi <ssid> <pass>, agent-id <id>, agent-token <refresh
-# token> — all NVS-persisted. The refresh token comes from the Agents
-# platform UI; there is no phone-app provisioning (their `setup` component
+# ONBOARDING: agent-wifi <ssid> <pass>, agent-id <id>, agent-token [refresh
+# token] (no argument reads a paste: a token longer than the 256-character
+# command line otherwise never arrives whole) — all NVS-persisted. The
+# refresh token comes from the Agents platform UI; there is no phone-app provisioning (their `setup` component
 # does BLE provisioning but drags in esp_rainmaker, so we deliberately skip
 # it). agent-say <text> talks; replies print on the console.
 #
@@ -39,8 +40,8 @@ onboarding:
     commands:
       - "agent-wifi <ssid> <password>"
       - "agent-id <agent id>"
-      - "agent-token <refresh token>"
+      - "agent-token [refresh token]"
       - "agent-say <message>"
       - "agent-new"
       - "agent-status"
-    note: "The refresh token comes from the Agents platform UI. Beside Matter, RainMaker or mqtt, Wi-Fi is theirs: agent-wifi does not exist."
+    note: "The refresh token comes from the Agents platform UI; run agent-token with no argument and paste it when it is longer than a console line (256 characters). Beside Matter, RainMaker or mqtt, Wi-Fi is theirs: agent-wifi does not exist."

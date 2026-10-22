@@ -1,14 +1,25 @@
-description: Enables Secure Boot v2 — bootloader verifies the app image signature
+description: Secure Boot v2 — for a future production phase only. Under this platform's mandatory CONFIG_EFUSE_VIRTUAL=y nothing is burned, so there is NO chain of trust; it also needs a signing key at build time.
 
-# Original notes from the .defaults file:
-#   Enables Secure Boot v2 — bootloader verifies the app image signature
-#   against a key burned into eFuse. Once enabled and burned, only signed
-#   images can boot. ONE-WAY: cannot be undone.
-#   Requires:
-#   - A signing key at the path indicated by CONFIG_SECURE_BOOT_SIGNING_KEY
-#   (defaults to ./secure_boot_signing_key.pem in the build dir)
-#   - The build will FAIL if the key is missing.
-#   Apply via:
-#   sdkconfig_fragments: [secure_boot]
-#   For production manufacturing: do NOT check the signing key into git.
-#   Inject it from the build CI's secret store.
+# What it does TODAY: every generated image keeps CONFIG_EFUSE_VIRTUAL=y, so
+# the bootloader runs the secure-boot flow against eFuses emulated in RAM and
+# says so at boot ("If Secure boot or Flash encryption is enabled then it does
+# not provide any security. FOR TESTING ONLY!"). Images are signed, but the
+# ROM never verifies the bootloader — nothing is burned — so anyone can flash
+# a bootloader and app of their own. Never present it as protecting a device.
+#
+# What it is FOR: the production phase, with virtual eFuses switched off — the
+# bootloader then verifies the app signature against a key digest burned into
+# eFuse, and only signed images boot. ONE-WAY: cannot be undone.
+#   - A signing key must exist at CONFIG_SECURE_BOOT_SIGNING_KEY (default
+#     ./secure_boot_signing_key.pem in the project); the build FAILS without
+#     it. Never check the key into git — inject it from CI's secret store.
+#   - SECURE_DISABLE_ROM_DL_MODE pairs with it: it permanently disables the
+#     UART ROM download mode (esptool), as IDF recommends for a secure-boot
+#     production device.
+#
+# CONFIG_USE_ESP32_ECDSA_PERIPHERAL used to be here. It is esp-matter's DAC
+# option (sign attestation with the on-chip ECDSA key), has nothing to do with
+# secure boot, and depends on SEC_CERT_DAC_PROVIDER, which nothing enables —
+# so it was a dead key that only invited the wrong reading.
+#
+# Apply via: sdkconfig_fragments: [secure_boot]

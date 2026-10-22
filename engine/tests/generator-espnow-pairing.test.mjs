@@ -35,11 +35,15 @@ test('espnow framework generates the pairing protocol', async () => {
     await eng.generate(paths, { product: entry.product, board: null, outDir, chip: 'esp32c3' })
     const src = readFileSync(join(outDir, 'components/app_espnow/app_espnow.cpp'), 'utf8')
     for (const sym of ['zc_espnow_pair_start', 'zc_now_peers_load', 'ZC_NOW_T_PAIR_REQ', 'ZC_NOW_T_PAIR_ACK',
-                       'zc_now_peer_known(from)', 'espnow-pair', 'espnow-forget']) {
+                       'zc_now_accepts(from)', 'xQueueSend(s_pair_q', 'espnow-pair', 'espnow-forget']) {
       assert.ok(src.includes(sym), `generated app_espnow.cpp carries ${sym}`)
     }
     // unicast to stored peers, broadcast only while none are stored
-    assert.match(src, /if \(s_peer_count == 0\) \{\s*zc_now_send_raw\(ZC_NOW_BCAST/)
+    assert.match(src, /if \(n == 0\) \{\s*zc_now_send_raw\(ZC_NOW_BCAST/)
+    // the receive callback (Wi-Fi task) never writes flash: pairing is queued
+    const recv = src.slice(src.indexOf('static void espnow_recv_cb'))
+    const recvBody = recv.slice(0, recv.indexOf('\n}\n'))
+    assert.doesNotMatch(recvBody, /zc_now_peer_store|nvs_/)
     const cmake = readFileSync(join(outDir, 'components/app_espnow/CMakeLists.txt'), 'utf8')
     assert.match(cmake, /esp_timer console/)
   } finally {

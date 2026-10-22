@@ -1045,6 +1045,23 @@ function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; ty
   return [...map.entries()].map(([name, type]) => ({ name, type }))
 }
 
+/** Solution-registry size for this product. Every framework registers one
+ *  solution, and so does every instance of a block whose slot code calls
+ *  app_driver_register_solution (nvs_persist_*, auto_off_timer, …). A fixed 8
+ *  ran out on a busy product: the 9th registration logged an error and got
+ *  handle 0 (= LOCAL), so its callback never ran — a persistence behavior
+ *  silently stopped saving. Sized from the composition, with headroom for
+ *  writer code that registers its own; never below the old 8, so a product
+ *  that fit keeps the same set_param stack footprint (one slot per entry is
+ *  copied onto the caller's stack on every write). */
+export function solutionRegistrySize(rendered: RenderedInstance[]): number {
+  const registrants = rendered.filter(r =>
+    r.block.kind === 'framework' ||
+    Object.values(r.slots).some(code => code.includes('app_driver_register_solution(')),
+  ).length
+  return Math.max(8, registrants + 4)
+}
+
 function genAppDriverTypesH(rendered: RenderedInstance[]): string {
   const params = collectParamIds(rendered)
   const enumLines = [
@@ -1073,7 +1090,7 @@ typedef union {
     uint32_t u32;
 } app_driver_param_val_t;
 
-#define APP_DRIVER_MAX_SOLUTIONS 8
+#define APP_DRIVER_MAX_SOLUTIONS ${solutionRegistrySize(rendered)}  /* registrants in this composition + headroom */
 typedef uint8_t app_driver_handle_t;
 #define APP_DRIVER_SOURCE_LOCAL 0
 
@@ -1195,7 +1212,16 @@ using namespace chip::app::Clusters;
 static const char *TAG = "app_matter";
 
 static app_driver_handle_t s_handle = 0;
-static bool s_from_driver = false;
+/* "This attribute update is the driver's own echo — do not apply it back."
+ * THREAD-LOCAL, because the echo and a controller write run on different
+ * tasks: matter_driver_cb sets it on the task that called set_param, then
+ * attribute::update blocks there for the CHIP lock. A plain global was true
+ * for that whole wait, so a controller write the CHIP task handled meanwhile
+ * hit PRE_UPDATE with the flag set and was dropped — the attribute changed,
+ * the hardware did not. Per task, only the update the setter itself makes
+ * (PRE_UPDATE runs on the caller of attribute::update) is skipped. ESP-IDF's
+ * FreeRTOS gives every task its own copy (api-guides/thread-local-storage). */
+static thread_local bool s_from_driver = false;
 
 ${collectSlot(rendered, 'matter_statics')}
 
@@ -1651,9 +1677,21 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
                 schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
             }
             break;
-        case EZB_ZDO_SIGNAL_LEAVE:
-            ESP_LOGW(TAG, "Left the Zigbee network");
+        case EZB_ZDO_SIGNAL_LEAVE: {
+            /* A leave WITHOUT rejoin (removed from the hub, or told to leave)
+             * clears the network data, and nothing else would ever look for a
+             * network again — the device stayed off-network until a power
+             * cycle. Steer again, as esp-zigbee's examples do. A leave WITH
+             * rejoin is the stack's own business: it rejoins by itself. */
+            const ezb_zdo_signal_leave_params_t *leave = (const ezb_zdo_signal_leave_params_t *)signal_params;
+            if (leave && leave->leave_type == EZB_ZDO_LEAVE_TYPE_RESET) {
+                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");
+                schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
+            } else {
+                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");
+            }
             break;
+        }
         default:
             ESP_LOGI(TAG, "ZDO signal: %s (0x%x), status: 0x%x",
                      ezb_app_signal_to_string(sig_type), sig_type, err_status);
@@ -1997,12 +2035,17 @@ ${collectSlot(rendered, 'ble_mesh_statics')}
  * onto the mesh and comes back lands on the value it started from. */
 int16_t zc_ble_mesh_level_from_u8(uint8_t value)
 {
-    return (int16_t)((int32_t)value * 65535 / 254 - 32768);
+    /* Rounded both ways: truncating in each direction took most values down a
+     * step per round trip (1 -> 0, 100 -> 99), so an echoed brightness crept
+     * down. The driver range is 0-254; 255 would overflow int16 (33025 wraps
+     * to -32511, nearly off), so it is clamped. */
+    if (value > 254) value = 254;
+    return (int16_t)(((int32_t)value * 65535 + 127) / 254 - 32768);
 }
 
 uint8_t zc_ble_mesh_level_to_u8(int16_t level)
 {
-    return (uint8_t)(((int32_t)level + 32768) * 254 / 65535);
+    return (uint8_t)((((int32_t)level + 32768) * 254 + 32767) / 65535);
 }
 
 bool zc_ble_mesh_provisioned(void)
@@ -2453,7 +2496,7 @@ function genAppSoundCpp(rendered: RenderedInstance[]): string {
  */
 export function genAppAgentsCpp(rendered: RenderedInstance[]): string {
   const sharedNet = wifiShared(rendered, 'agents')
-  const body = '#include "app_agents.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_console.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <nvs.h>\n#include <esp_agent.h>\n#include <esp_agent_tools.h>\n#include <esp_agent_events.h>\n#include <esp_agent_messages.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_agents";\n\nstatic esp_agent_handle_t s_agent = NULL;\nstatic volatile bool s_started = false;\nstatic volatile bool s_have_ip = false;\nstatic char s_agent_id[64] = {0};\nstatic char s_token[300] = {0};\n__NET_STATICS__\n\n/* ── device-type tool handlers (param bus in/out) ─────────────────── */\n__SLOT_STATICS__\n\nstatic void agents_save_cfg(void)\n{\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READWRITE, &h) != ESP_OK) return;\n    nvs_set_str(h, "agent_id", s_agent_id);\n    nvs_set_str(h, "token", s_token);\n__NET_SAVE__\n    nvs_commit(h);\n    nvs_close(h);\n}\n\n/* Start once and only once everything is present. Never blocks boot: an\n * unconfigured device just logs what is missing. */\nstatic void agents_try_start(void)\n{\n    if (s_started || s_agent == NULL) return;\n    if (!s_have_ip) { ESP_LOGI(TAG, "waiting for network before starting"); return; }\n    if (s_agent_id[0] == 0 || s_token[0] == 0) {\n        ESP_LOGW(TAG, "not configured — set: agent-id <id>, agent-token <refresh token>");\n        return;\n    }\n    if (esp_agent_set_agent_id(s_agent, s_agent_id) != ESP_OK ||\n        esp_agent_set_refresh_token(s_agent, s_token) != ESP_OK) {\n        ESP_LOGE(TAG, "failed to set credentials");\n        return;\n    }\n    if (esp_agent_start(s_agent, NULL) == ESP_OK) {\n        s_started = true;\n        ESP_LOGI(TAG, "Agent conversation started (text mode)");\n    } else {\n        ESP_LOGE(TAG, "esp_agent_start failed — check credentials/network");\n    }\n}\n\n/* ── agent events ─────────────────────────────────────────────────── */\nstatic void agents_on_connected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGI(TAG, "Agent connected");\n}\n\nstatic void agents_on_disconnected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGW(TAG, "Agent disconnected — the client reconnects on its own");\n}\n\nstatic void agents_on_text(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    esp_agent_message_data_t *msg = (esp_agent_message_data_t *)data;\n    if (msg == NULL || msg->text.text == NULL) return;\n    /* FINAL only: speculative chunks would interleave into console noise. */\n    if (msg->text.role == ESP_AGENT_MESSAGE_ROLE_ASSISTANT &&\n        msg->text.generation_stage != ESP_AGENT_MESSAGE_GENERATION_STAGE_SPECULATIVE) {\n        printf("\\n[agent] %s\\n", msg->text.text);\n    }\n}\n\nstatic void agents_on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    s_have_ip = true;\n    ESP_LOGI(TAG, "network up");\n    agents_try_start();\n}\n\n/* ── console ──────────────────────────────────────────────────────── */\nstatic int agent_id_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-id <id>\\n"); return 1; }\n    strlcpy(s_agent_id, argv[1], sizeof(s_agent_id));\n    agents_save_cfg();\n    printf("agent id saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_token_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-token <refresh token>\\n"); return 1; }\n    strlcpy(s_token, argv[1], sizeof(s_token));\n    agents_save_cfg();\n    printf("token saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_say_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-say <text…>\\n"); return 1; }\n    if (!s_started) { printf("agent not started — configure agent-id/agent-token first\\n"); return 1; }\n    char line[512] = {0};\n    for (int i = 1; i < argc; i++) {\n        if (i > 1) strlcat(line, " ", sizeof(line));\n        strlcat(line, argv[i], sizeof(line));\n    }\n    if (esp_agent_send_text(s_agent, line, pdMS_TO_TICKS(5000)) != ESP_OK) {\n        printf("send failed\\n");\n        return 1;\n    }\n    return 0;\n}\n\nstatic int agent_new_cmd(int argc, char **argv)\n{\n    if (!s_started) { printf("agent not started\\n"); return 1; }\n    return esp_agent_new_conversation(s_agent) == ESP_OK ? 0 : 1;\n}\n\nstatic int agent_status_cmd(int argc, char **argv)\n{\n    printf("network: %s\\nconfigured: %s\\nstarted: %s\\n",\n           s_have_ip ? "up" : "down",\n           (s_agent_id[0] && s_token[0]) ? "yes" : "no",\n           s_started ? "yes" : "no");\n    return 0;\n}\n__NET_CMD__\n\nesp_err_t app_agents_init(void)\n{\n    /* Restore config */\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READONLY, &h) == ESP_OK) {\n        size_t n = sizeof(s_agent_id); nvs_get_str(h, "agent_id", s_agent_id, &n);\n        n = sizeof(s_token); nvs_get_str(h, "token", s_token, &n);\n__NET_RESTORE__\n        nvs_close(h);\n    }\n\n    esp_agent_config_t cfg = {};\n    cfg.conversation_type = ESP_AGENT_CONVERSATION_TEXT;\n    /* UPSTREAM BUG WORKAROUND (esp-agents-firmware c5d6798, esp_agent.c:102):\n     * init dereferences upload/download_audio_config unconditionally — the\n     * NULL guard above it only covers SPEECH mode — so TEXT mode with NULL\n     * audio configs (the documented-valid case) is a Load access fault at\n     * boot. Values are copied by init, so stack locals are fine; they are\n     * unused in text mode. Drop when upstream fixes the guard. */\n    esp_agent_audio_config_t audio_dummy = {};\n    audio_dummy.format = ESP_AGENT_CONVERSATION_AUDIO_FORMAT_PCM;\n    audio_dummy.sample_rate = 16000;\n    audio_dummy.frame_duration = 20;\n    cfg.upload_audio_config = &audio_dummy;\n    cfg.download_audio_config = &audio_dummy;\n    s_agent = esp_agent_init(&cfg);\n    if (s_agent == NULL) {\n        ESP_LOGE(TAG, "esp_agent_init failed");\n        return ESP_FAIL;\n    }\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_CONNECTED, agents_on_connected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DISCONNECTED, agents_on_disconnected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DATA_TYPE_TEXT, agents_on_text, NULL, NULL);\n\n    /* Local tools the cloud agent may invoke on THIS device. */\n__SLOT_TOOL_REGISTER__\n\n    static const struct { const char *command; const char *help; esp_console_cmd_func_t func; } cmds[] = {\n        { "agent-id", "agent-id <id> — set the agent to talk to", &agent_id_cmd },\n        { "agent-token", "agent-token <refresh token> — from the Agents platform UI", &agent_token_cmd },\n        { "agent-say", "agent-say <text> — send a message to the agent", &agent_say_cmd },\n        { "agent-new", "start a fresh conversation", &agent_new_cmd },\n        { "agent-status", "connection/config state", &agent_status_cmd },\n    };\n    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {\n        esp_console_cmd_t c = {};\n        c.command = cmds[i].command;\n        c.help = cmds[i].help;\n        c.func = cmds[i].func;\n        esp_console_cmd_register(&c);\n    }\n__NET_INIT__\n\n    ESP_LOGI(TAG, "Agents client ready (text mode)");\n    return ESP_OK;\n}\n'
+  const body = '#include "app_agents.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_console.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <nvs.h>\n#include "app_console.h"\n#include <esp_agent.h>\n#include <esp_agent_tools.h>\n#include <esp_agent_events.h>\n#include <esp_agent_messages.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_agents";\n\nstatic esp_agent_handle_t s_agent = NULL;\nstatic volatile bool s_started = false;\nstatic volatile bool s_have_ip = false;\nstatic char s_agent_id[64] = {0};\n/* Refresh tokens are long (a JWT can run past a kilobyte), longer than a\n * console command line carries — so agent-token with no argument reads a\n * PASTE, and a token that does not fit is refused, never cut short. */\nstatic char s_token[2048] = {0};\n__NET_STATICS__\n\n/* ── device-type tool handlers (param bus in/out) ─────────────────── */\n__SLOT_STATICS__\n\nstatic void agents_save_cfg(void)\n{\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READWRITE, &h) != ESP_OK) return;\n    nvs_set_str(h, "agent_id", s_agent_id);\n    nvs_set_str(h, "token", s_token);\n__NET_SAVE__\n    nvs_commit(h);\n    nvs_close(h);\n}\n\n/* Start once and only once everything is present. Never blocks boot: an\n * unconfigured device just logs what is missing. */\nstatic void agents_try_start(void)\n{\n    if (s_started || s_agent == NULL) return;\n    if (!s_have_ip) { ESP_LOGI(TAG, "waiting for network before starting"); return; }\n    if (s_agent_id[0] == 0 || s_token[0] == 0) {\n        ESP_LOGW(TAG, "not configured — set: agent-id <id>, agent-token <refresh token>");\n        return;\n    }\n    if (esp_agent_set_agent_id(s_agent, s_agent_id) != ESP_OK ||\n        esp_agent_set_refresh_token(s_agent, s_token) != ESP_OK) {\n        ESP_LOGE(TAG, "failed to set credentials");\n        return;\n    }\n    if (esp_agent_start(s_agent, NULL) == ESP_OK) {\n        s_started = true;\n        ESP_LOGI(TAG, "Agent conversation started (text mode)");\n    } else {\n        ESP_LOGE(TAG, "esp_agent_start failed — check credentials/network");\n    }\n}\n\n/* ── agent events ─────────────────────────────────────────────────── */\nstatic void agents_on_connected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGI(TAG, "Agent connected");\n}\n\nstatic void agents_on_disconnected(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    ESP_LOGW(TAG, "Agent disconnected — the client reconnects on its own");\n}\n\nstatic void agents_on_text(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    esp_agent_message_data_t *msg = (esp_agent_message_data_t *)data;\n    if (msg == NULL || msg->text.text == NULL) return;\n    /* FINAL only: speculative chunks would interleave into console noise. */\n    if (msg->text.role == ESP_AGENT_MESSAGE_ROLE_ASSISTANT &&\n        msg->text.generation_stage != ESP_AGENT_MESSAGE_GENERATION_STAGE_SPECULATIVE) {\n        printf("\\n[agent] %s\\n", msg->text.text);\n    }\n}\n\nstatic void agents_on_ip(void *arg, esp_event_base_t base, int32_t id, void *data)\n{\n    s_have_ip = true;\n    ESP_LOGI(TAG, "network up");\n    agents_try_start();\n}\n\n/* ── console ──────────────────────────────────────────────────────── */\nstatic int agent_id_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-id <id>\\n"); return 1; }\n    strlcpy(s_agent_id, argv[1], sizeof(s_agent_id));\n    agents_save_cfg();\n    printf("agent id saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_token_cmd(int argc, char **argv)\n{\n    if (argc >= 2) {\n        /* A short token on the command line. The REPL caps a line at 256\n         * characters, so a longer one never arrives whole — paste it. */\n        if (strlen(argv[1]) >= sizeof(s_token)) { printf("token too long (max %u)\\n", (unsigned)(sizeof(s_token) - 1)); return 1; }\n        strlcpy(s_token, argv[1], sizeof(s_token));\n    } else {\n        app_console_text_opts_t opts = {};\n        opts.join_lines = true;   /* a token wrapped over lines is still one value */\n        opts.max_bytes = sizeof(s_token) - 1;\n        char *tok = NULL;\n        size_t len = 0;\n        esp_err_t err = app_console_read_text("Paste the refresh token, then an empty line:", &opts, &tok, &len);\n        if (err == ESP_ERR_INVALID_SIZE) { printf("token too long (max %u) — not saved\\n", (unsigned)(sizeof(s_token) - 1)); return 1; }\n        if (err != ESP_OK || tok == NULL || tok[0] == 0) { printf("no token read (%s) — not saved\\n", esp_err_to_name(err)); free(tok); return 1; }\n        strlcpy(s_token, tok, sizeof(s_token));\n        free(tok);\n    }\n    agents_save_cfg();\n    printf("token saved\\n");\n    agents_try_start();\n    return 0;\n}\n\nstatic int agent_say_cmd(int argc, char **argv)\n{\n    if (argc < 2) { printf("usage: agent-say <text…>\\n"); return 1; }\n    if (!s_started) { printf("agent not started — configure agent-id/agent-token first\\n"); return 1; }\n    char line[512] = {0};\n    for (int i = 1; i < argc; i++) {\n        if (i > 1) strlcat(line, " ", sizeof(line));\n        strlcat(line, argv[i], sizeof(line));\n    }\n    if (esp_agent_send_text(s_agent, line, pdMS_TO_TICKS(5000)) != ESP_OK) {\n        printf("send failed\\n");\n        return 1;\n    }\n    return 0;\n}\n\nstatic int agent_new_cmd(int argc, char **argv)\n{\n    if (!s_started) { printf("agent not started\\n"); return 1; }\n    return esp_agent_new_conversation(s_agent) == ESP_OK ? 0 : 1;\n}\n\nstatic int agent_status_cmd(int argc, char **argv)\n{\n    printf("network: %s\\nconfigured: %s\\nstarted: %s\\n",\n           s_have_ip ? "up" : "down",\n           (s_agent_id[0] && s_token[0]) ? "yes" : "no",\n           s_started ? "yes" : "no");\n    return 0;\n}\n__NET_CMD__\n\nesp_err_t app_agents_init(void)\n{\n    /* Restore config */\n    nvs_handle_t h;\n    if (nvs_open("zc_agents", NVS_READONLY, &h) == ESP_OK) {\n        size_t n = sizeof(s_agent_id); nvs_get_str(h, "agent_id", s_agent_id, &n);\n        n = sizeof(s_token); nvs_get_str(h, "token", s_token, &n);\n__NET_RESTORE__\n        nvs_close(h);\n    }\n\n    esp_agent_config_t cfg = {};\n    cfg.conversation_type = ESP_AGENT_CONVERSATION_TEXT;\n    /* UPSTREAM BUG WORKAROUND (esp-agents-firmware c5d6798, esp_agent.c:102):\n     * init dereferences upload/download_audio_config unconditionally — the\n     * NULL guard above it only covers SPEECH mode — so TEXT mode with NULL\n     * audio configs (the documented-valid case) is a Load access fault at\n     * boot. Values are copied by init, so stack locals are fine; they are\n     * unused in text mode. Drop when upstream fixes the guard. */\n    esp_agent_audio_config_t audio_dummy = {};\n    audio_dummy.format = ESP_AGENT_CONVERSATION_AUDIO_FORMAT_PCM;\n    audio_dummy.sample_rate = 16000;\n    audio_dummy.frame_duration = 20;\n    cfg.upload_audio_config = &audio_dummy;\n    cfg.download_audio_config = &audio_dummy;\n    s_agent = esp_agent_init(&cfg);\n    if (s_agent == NULL) {\n        ESP_LOGE(TAG, "esp_agent_init failed");\n        return ESP_FAIL;\n    }\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_CONNECTED, agents_on_connected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DISCONNECTED, agents_on_disconnected, NULL, NULL);\n    esp_agent_register_event_handler(s_agent, ESP_AGENT_EVENT_DATA_TYPE_TEXT, agents_on_text, NULL, NULL);\n\n    /* Local tools the cloud agent may invoke on THIS device. */\n__SLOT_TOOL_REGISTER__\n\n    static const struct { const char *command; const char *help; esp_console_cmd_func_t func; } cmds[] = {\n        { "agent-id", "agent-id <id> — set the agent to talk to", &agent_id_cmd },\n        { "agent-token", "agent-token [refresh token] — from the Agents platform UI; no argument to paste a long one", &agent_token_cmd },\n        { "agent-say", "agent-say <text> — send a message to the agent", &agent_say_cmd },\n        { "agent-new", "start a fresh conversation", &agent_new_cmd },\n        { "agent-status", "connection/config state", &agent_status_cmd },\n    };\n    for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {\n        esp_console_cmd_t c = {};\n        c.command = cmds[i].command;\n        c.help = cmds[i].help;\n        c.func = cmds[i].func;\n        esp_console_cmd_register(&c);\n    }\n__NET_INIT__\n\n    ESP_LOGI(TAG, "Agents client ready (text mode)");\n    return ESP_OK;\n}\n'
   return body
     .replace('__SLOT_INCLUDES__', collectSlot(rendered, 'agents_includes'))
     .replace('__SLOT_STATICS__', collectSlot(rendered, 'agents_statics'))
@@ -2470,7 +2513,9 @@ export function genAppAgentsCpp(rendered: RenderedInstance[]): string {
  *
  * Binding: device types contribute webui_entities manifest rows; ONE
  * embedded page renders them by kind (toggle/slider/value/binary) against
- * GET /api/state + GET /api/set. Standalone products bring up a SoftAP;
+ * GET /api/state + POST /api/set (with the page's X-ZC-Request header).
+ * Standalone products bring up a SoftAP with a per-device password (made on
+ * first boot, kept in NVS, printed in the boot log);
  * with a Wi-Fi transport co-selected, webui owns nothing and serves on the
  * transport's network (+ mDNS either way).
  *
@@ -2481,9 +2526,9 @@ export function genAppAgentsCpp(rendered: RenderedInstance[]): string {
 export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
   // An empty manifest is a DEGENERATE page: the server comes up and serves a
   // control page with no controls, which reads as "working" and is not.
-  // Observed live on hallway-web-panel-msmz4sqr — smart_plug had no
-  // webui_entities slot, s_entities[] rendered empty, and code_writing quietly
-  // replaced the whole generated component with a hand-rolled one. Fail here
+  // Seen in practice: a device type with no webui_entities slot rendered an
+  // empty s_entities[], and the generated component was replaced by a
+  // hand-written one. Fail here
   // instead, naming the device types that need the binding.
   const entities = collectSlot(rendered, 'webui_entities', 4)
   const deviceTypes = rendered
@@ -2500,8 +2545,8 @@ export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
     )
   }
   const sharedNet = wifiShared(rendered, 'webui')
-  const body = '#include "app_webui.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <esp_mac.h>\n#include <esp_http_server.h>\n#include <mdns.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_webui";\n\n/* vtype: 0 bool, 1 u8, 2 i16, 3 u16, 4 u32 (shared tag vocabulary). */\ntypedef struct {\n    const char *label;\n    const char *kind;   /* toggle | slider | value | binary */\n    app_driver_param_id_t param;\n    const char *param_name;\n    uint8_t vtype;\n    int32_t min;\n    int32_t max;\n    int32_t scale;      /* UI divides the raw value by this for display */\n} zc_webui_entity_t;\n\nstatic const zc_webui_entity_t s_entities[] = {\n__SLOT_ENTITIES__\n};\n#define ZC_WEBUI_N (sizeof(s_entities) / sizeof(s_entities[0]))\n\n/* The whole UI: plain-ASCII vanilla JS, no external assets. DOM rebuilds on\n * each poll unless a control is focused (mid-drag). */\nstatic const char INDEX_HTML[] =\n"<!DOCTYPE html><html><head><meta name=viewport content=\'width=device-width,initial-scale=1\'>"\n"<title>ZeroCode</title><style>"\n"body{font-family:system-ui;margin:0;background:#141414;color:#eee}"\n"h1{font-size:17px;padding:14px 16px;margin:0;border-bottom:1px solid #333;color:#e0a06a}"\n".c{padding:14px 16px;border-bottom:1px solid #262626;display:flex;justify-content:space-between;align-items:center;gap:12px}"\n".v{color:#7fd4a3;font-variant-numeric:tabular-nums}"\n".on{color:#7fd4a3}.off{color:#888}"\n"input[type=range]{width:46vw}"\n"</style></head><body><h1>ZeroCode</h1><div id=root></div><script>"\n"function post(p,v){fetch(\'/api/set?param=\'+encodeURIComponent(p)+\'&value=\'+v);}"\n"function row(e){"\n"var d=document.createElement(\'div\');d.className=\'c\';"\n"var l=document.createElement(\'span\');l.textContent=e.label;d.appendChild(l);"\n"if(e.kind==\'toggle\'){var i=document.createElement(\'input\');i.type=\'checkbox\';i.checked=e.value!=0;"\n"i.onchange=function(){post(e.param,i.checked?1:0);};d.appendChild(i);}"\n"else if(e.kind==\'slider\'){var w=document.createElement(\'span\');"\n"var i=document.createElement(\'input\');i.type=\'range\';i.min=e.min;i.max=e.max;i.value=e.value;"\n"i.onchange=function(){post(e.param,i.value);};w.appendChild(i);d.appendChild(w);}"\n"else if(e.kind==\'binary\'){var s=document.createElement(\'span\');"\n"s.textContent=e.value!=0?\'ACTIVE\':\'clear\';s.className=e.value!=0?\'on\':\'off\';d.appendChild(s);}"\n"else{var s=document.createElement(\'span\');s.className=\'v\';"\n"s.textContent=(e.scale>1?(e.value/e.scale).toFixed(2):e.value);d.appendChild(s);}"\n"return d;}"\n"function render(st){if(document.activeElement&&document.activeElement.tagName==\'INPUT\')return;"\n"var r=document.getElementById(\'root\');r.textContent=\'\';"\n"st.entities.forEach(function(e){r.appendChild(row(e));});}"\n"function tick(){fetch(\'/api/state\').then(function(r){return r.json();}).then(render).catch(function(){});}"\n"tick();setInterval(tick,2500);"\n"</script></body></html>";\n\nstatic int32_t entity_value(const zc_webui_entity_t *e)\n{\n    app_driver_param_val_t v = {};\n    app_driver_get_param(e->param, &v);\n    switch (e->vtype) {\n        case 0: return v.b ? 1 : 0;\n        case 1: return v.u8;\n        case 2: return v.i16;\n        case 3: return v.u16;\n        default: return (int32_t)v.u32;\n    }\n}\n\nstatic esp_err_t index_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "text/html");\n    return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);\n}\n\nstatic esp_err_t state_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "application/json");\n    httpd_resp_sendstr_chunk(req, "{\\"entities\\":[");\n    char buf[240];\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        snprintf(buf, sizeof(buf),\n                 "%s{\\"label\\":\\"%s\\",\\"kind\\":\\"%s\\",\\"param\\":\\"%s\\","\n                 "\\"min\\":%ld,\\"max\\":%ld,\\"scale\\":%ld,\\"value\\":%ld}",\n                 i ? "," : "", e->label, e->kind, e->param_name,\n                 (long)e->min, (long)e->max, (long)e->scale, (long)entity_value(e));\n        httpd_resp_sendstr_chunk(req, buf);\n    }\n    httpd_resp_sendstr_chunk(req, "]}");\n    httpd_resp_sendstr_chunk(req, NULL);\n    return ESP_OK;\n}\n\nstatic esp_err_t set_get(httpd_req_t *req)\n{\n    char query[128] = {0};\n    char pname[64] = {0};\n    char valstr[16] = {0};\n    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||\n        httpd_query_key_value(query, "param", pname, sizeof(pname)) != ESP_OK ||\n        httpd_query_key_value(query, "value", valstr, sizeof(valstr)) != ESP_OK) {\n        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "param and value required");\n        return ESP_FAIL;\n    }\n    long raw = strtol(valstr, NULL, 10);\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        if (strcmp(e->param_name, pname) != 0) continue;\n        if (raw < e->min) raw = e->min;\n        if (raw > e->max) raw = e->max;\n        app_driver_param_val_t v = {};\n        switch (e->vtype) {\n            case 0: v.b = raw != 0; break;\n            case 1: v.u8 = (uint8_t)raw; break;\n            case 2: v.i16 = (int16_t)raw; break;\n            case 3: v.u16 = (uint16_t)raw; break;\n            default: v.u32 = (uint32_t)raw; break;\n        }\n        app_driver_set_param(e->param, v, APP_DRIVER_SOURCE_LOCAL);\n        httpd_resp_sendstr(req, "ok");\n        return ESP_OK;\n    }\n    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown param");\n    return ESP_FAIL;\n}\n\nstatic void webui_start_server(void)\n{\n    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();\n    cfg.lru_purge_enable = true;\n    httpd_handle_t server = NULL;\n    if (httpd_start(&server, &cfg) != ESP_OK) {\n        ESP_LOGE(TAG, "httpd start failed");\n        return;\n    }\n    const char *uris[] = { "/", "/api/state", "/api/set" };\n    esp_err_t (*handlers[])(httpd_req_t *) = { index_get, state_get, set_get };\n    for (int i = 0; i < 3; i++) {\n        httpd_uri_t u = {};\n        u.uri = uris[i];\n        u.method = HTTP_GET;\n        u.handler = handlers[i];\n        httpd_register_uri_handler(server, &u);\n    }\n}\n\nesp_err_t app_webui_init(void)\n{\n    uint8_t mac[6] = {0};\n    esp_read_mac(mac, ESP_MAC_WIFI_STA);\n    char host[24];\n    snprintf(host, sizeof(host), "zerocode-%02x%02x", mac[4], mac[5]);\n\n__NET_SETUP__\n\n    if (mdns_init() == ESP_OK) {\n        mdns_hostname_set(host);\n        mdns_instance_name_set("ZeroCode device");\n        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);\n    }\n\n    webui_start_server();\n__SLOT_NODE_INIT__\n\n    ESP_LOGI(TAG, "Web UI ready — http://%s.local/", host);\n    return ESP_OK;\n}\n'
-  const netSetup = sharedNet ? '    /* Shared-network mode: another framework owns Wi-Fi (a station); the\n     * server just binds on it. The netif layer and the default loop are not\n     * the radio — both are idempotent, and httpd/mdns need them even when the\n     * owner is listed after us or (aws_iot) brings the radio up later. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }' : '    /* Standalone: bring up a SoftAP — the device IS the network. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }\n    esp_netif_create_default_wifi_ap();\n    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();\n    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));\n    wifi_config_t ap = {};\n    snprintf((char *)ap.ap.ssid, sizeof(ap.ap.ssid), "ZeroCode-%02X%02X", mac[4], mac[5]);\n    strlcpy((char *)ap.ap.password, "zerocode", sizeof(ap.ap.password));\n    ap.ap.ssid_len = 0;\n    ap.ap.channel = 1;\n    ap.ap.max_connection = 4;\n    ap.ap.authmode = WIFI_AUTH_WPA2_PSK;\n    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));\n    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));\n    ESP_ERROR_CHECK(esp_wifi_start());\n    ESP_LOGI(TAG, "SoftAP \'%s\' up — connect and open http://192.168.4.1/", (char *)ap.ap.ssid);'
+  const body = '#include "app_webui.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <esp_mac.h>\n#include <esp_random.h>\n#include <nvs.h>\n#include <esp_http_server.h>\n#include <mdns.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_webui";\n\n/* vtype: 0 bool, 1 u8, 2 i16, 3 u16, 4 u32 (shared tag vocabulary). */\ntypedef struct {\n    const char *label;\n    const char *kind;   /* toggle | slider | value | binary */\n    app_driver_param_id_t param;\n    const char *param_name;\n    uint8_t vtype;\n    int32_t min;\n    int32_t max;\n    int32_t scale;      /* UI divides the raw value by this for display */\n} zc_webui_entity_t;\n\nstatic const zc_webui_entity_t s_entities[] = {\n__SLOT_ENTITIES__\n};\n#define ZC_WEBUI_N (sizeof(s_entities) / sizeof(s_entities[0]))\n\n/* The whole UI: plain-ASCII vanilla JS, no external assets. DOM rebuilds on\n * each poll unless a control is focused (mid-drag). */\nstatic const char INDEX_HTML[] =\n"<!DOCTYPE html><html><head><meta name=viewport content=\'width=device-width,initial-scale=1\'>"\n"<title>ZeroCode</title><style>"\n"body{font-family:system-ui;margin:0;background:#141414;color:#eee}"\n"h1{font-size:17px;padding:14px 16px;margin:0;border-bottom:1px solid #333;color:#e0a06a}"\n".c{padding:14px 16px;border-bottom:1px solid #262626;display:flex;justify-content:space-between;align-items:center;gap:12px}"\n".v{color:#7fd4a3;font-variant-numeric:tabular-nums}"\n".on{color:#7fd4a3}.off{color:#888}"\n"input[type=range]{width:46vw}"\n"</style></head><body><h1>ZeroCode</h1><div id=root></div><script>"\n"function post(p,v){fetch(\'/api/set?param=\'+encodeURIComponent(p)+\'&value=\'+v,{method:\'POST\',headers:{\'X-ZC-Request\':\'1\'}});}"\n"function row(e){"\n"var d=document.createElement(\'div\');d.className=\'c\';"\n"var l=document.createElement(\'span\');l.textContent=e.label;d.appendChild(l);"\n"if(e.kind==\'toggle\'){var i=document.createElement(\'input\');i.type=\'checkbox\';i.checked=e.value!=0;"\n"i.onchange=function(){post(e.param,i.checked?1:0);};d.appendChild(i);}"\n"else if(e.kind==\'slider\'){var w=document.createElement(\'span\');"\n"var i=document.createElement(\'input\');i.type=\'range\';i.min=e.min;i.max=e.max;i.value=e.value;"\n"i.onchange=function(){post(e.param,i.value);};w.appendChild(i);d.appendChild(w);}"\n"else if(e.kind==\'binary\'){var s=document.createElement(\'span\');"\n"s.textContent=e.value!=0?\'ACTIVE\':\'clear\';s.className=e.value!=0?\'on\':\'off\';d.appendChild(s);}"\n"else{var s=document.createElement(\'span\');s.className=\'v\';"\n"s.textContent=(e.scale>1?(e.value/e.scale).toFixed(2):e.value);d.appendChild(s);}"\n"return d;}"\n"function render(st){if(document.activeElement&&document.activeElement.tagName==\'INPUT\')return;"\n"var r=document.getElementById(\'root\');r.textContent=\'\';"\n"st.entities.forEach(function(e){r.appendChild(row(e));});}"\n"function tick(){fetch(\'/api/state\').then(function(r){return r.json();}).then(render).catch(function(){});}"\n"tick();setInterval(tick,2500);"\n"</script></body></html>";\n\nstatic int32_t entity_value(const zc_webui_entity_t *e)\n{\n    app_driver_param_val_t v = {};\n    app_driver_get_param(e->param, &v);\n    switch (e->vtype) {\n        case 0: return v.b ? 1 : 0;\n        case 1: return v.u8;\n        case 2: return v.i16;\n        case 3: return v.u16;\n        default: return (int32_t)v.u32;\n    }\n}\n\nstatic esp_err_t index_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "text/html");\n    return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);\n}\n\nstatic esp_err_t state_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "application/json");\n    httpd_resp_sendstr_chunk(req, "{\\"entities\\":[");\n    char buf[240];\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        snprintf(buf, sizeof(buf),\n                 "%s{\\"label\\":\\"%s\\",\\"kind\\":\\"%s\\",\\"param\\":\\"%s\\","\n                 "\\"min\\":%ld,\\"max\\":%ld,\\"scale\\":%ld,\\"value\\":%ld}",\n                 i ? "," : "", e->label, e->kind, e->param_name,\n                 (long)e->min, (long)e->max, (long)e->scale, (long)entity_value(e));\n        httpd_resp_sendstr_chunk(req, buf);\n    }\n    httpd_resp_sendstr_chunk(req, "]}");\n    httpd_resp_sendstr_chunk(req, NULL);\n    return ESP_OK;\n}\n\n/* POST only, and only with the X-ZC-Request header the page itself sends.\n * As a GET, any page the user opened anywhere could drive the device with an\n * <img src=…>; a custom header makes a cross-site request preflighted\n * (OPTIONS), which this server never answers, so only this page gets through. */\nstatic esp_err_t set_post(httpd_req_t *req)\n{\n    if (httpd_req_get_hdr_value_len(req, "X-ZC-Request") == 0) {\n        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "use the device page");\n        return ESP_FAIL;\n    }\n    char query[128] = {0};\n    char pname[64] = {0};\n    char valstr[16] = {0};\n    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||\n        httpd_query_key_value(query, "param", pname, sizeof(pname)) != ESP_OK ||\n        httpd_query_key_value(query, "value", valstr, sizeof(valstr)) != ESP_OK) {\n        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "param and value required");\n        return ESP_FAIL;\n    }\n    long raw = strtol(valstr, NULL, 10);\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        if (strcmp(e->param_name, pname) != 0) continue;\n        if (raw < e->min) raw = e->min;\n        if (raw > e->max) raw = e->max;\n        app_driver_param_val_t v = {};\n        switch (e->vtype) {\n            case 0: v.b = raw != 0; break;\n            case 1: v.u8 = (uint8_t)raw; break;\n            case 2: v.i16 = (int16_t)raw; break;\n            case 3: v.u16 = (uint16_t)raw; break;\n            default: v.u32 = (uint32_t)raw; break;\n        }\n        app_driver_set_param(e->param, v, APP_DRIVER_SOURCE_LOCAL);\n        httpd_resp_sendstr(req, "ok");\n        return ESP_OK;\n    }\n    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown param");\n    return ESP_FAIL;\n}\n\nstatic void webui_start_server(void)\n{\n    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();\n    cfg.lru_purge_enable = true;\n    httpd_handle_t server = NULL;\n    if (httpd_start(&server, &cfg) != ESP_OK) {\n        ESP_LOGE(TAG, "httpd start failed");\n        return;\n    }\n    const char *uris[] = { "/", "/api/state", "/api/set" };\n    esp_err_t (*handlers[])(httpd_req_t *) = { index_get, state_get, set_post };\n    const httpd_method_t methods[] = { HTTP_GET, HTTP_GET, HTTP_POST };\n    for (int i = 0; i < 3; i++) {\n        httpd_uri_t u = {};\n        u.uri = uris[i];\n        u.method = methods[i];\n        u.handler = handlers[i];\n        httpd_register_uri_handler(server, &u);\n    }\n}\n\nesp_err_t app_webui_init(void)\n{\n    uint8_t mac[6] = {0};\n    esp_read_mac(mac, ESP_MAC_WIFI_STA);\n    char host[24];\n    snprintf(host, sizeof(host), "zerocode-%02x%02x", mac[4], mac[5]);\n\n__NET_SETUP__\n\n    if (mdns_init() == ESP_OK) {\n        mdns_hostname_set(host);\n        mdns_instance_name_set("ZeroCode device");\n        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);\n    }\n\n    webui_start_server();\n__SLOT_NODE_INIT__\n\n    ESP_LOGI(TAG, "Web UI ready — http://%s.local/", host);\n    return ESP_OK;\n}\n'
+  const netSetup = sharedNet ? '    /* Shared-network mode: another framework owns Wi-Fi (a station); the\n     * server just binds on it. The netif layer and the default loop are not\n     * the radio — both are idempotent, and httpd/mdns need them even when the\n     * owner is listed after us or (aws_iot) brings the radio up later. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }' : '    /* Standalone: bring up a SoftAP — the device IS the network. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }\n    esp_netif_create_default_wifi_ap();\n    /* A per-device password, made once and kept in NVS, printed at every\n     * boot. It used to be "zerocode" on every device — published, so anyone\n     * in range could join and drive the actuators. */\n    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();\n    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));\n    char ap_pass[11] = {0};\n    {\n        static const char alphabet[] = "abcdefghjkmnpqrstuvwxyz23456789";\n        nvs_handle_t h;\n        bool have = false;\n        if (nvs_open("zc_webui", NVS_READONLY, &h) == ESP_OK) {\n            size_t n = sizeof(ap_pass);\n            have = nvs_get_str(h, "ap_pass", ap_pass, &n) == ESP_OK && strlen(ap_pass) >= 8;\n            nvs_close(h);\n        }\n        if (!have) {\n            /* esp_random() is a true RNG only while the RF subsystem runs\n             * (ESP-IDF Random Number Generation: enabled by esp_wifi_start).\n             * So start the radio in station mode first: nothing is broadcast\n             * and nothing is joined, and there is no AP before the password\n             * exists. bootloader_random_enable()/disable() would do instead,\n             * but disable() must run before any ADC or (ESP32) I2S user is set\n             * up (bootloader_random.h) — and the drivers are initialised before\n             * this, so it would undo their setup on a first boot. */\n            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));\n            ESP_ERROR_CHECK(esp_wifi_start());\n            for (size_t i = 0; i < sizeof(ap_pass) - 1; i++) ap_pass[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];\n            ESP_ERROR_CHECK(esp_wifi_stop());\n            ap_pass[sizeof(ap_pass) - 1] = 0;\n            bool kept = false;\n            if (nvs_open("zc_webui", NVS_READWRITE, &h) == ESP_OK) {\n                kept = nvs_set_str(h, "ap_pass", ap_pass) == ESP_OK && nvs_commit(h) == ESP_OK;\n                nvs_close(h);\n            }\n            if (!kept) ESP_LOGW(TAG, "could not keep the SoftAP password in NVS — it changes at every boot");\n        }\n    }\n    wifi_config_t ap = {};\n    snprintf((char *)ap.ap.ssid, sizeof(ap.ap.ssid), "ZeroCode-%02X%02X", mac[4], mac[5]);\n    strlcpy((char *)ap.ap.password, ap_pass, sizeof(ap.ap.password));\n    ap.ap.ssid_len = 0;\n    ap.ap.channel = 1;\n    ap.ap.max_connection = 4;\n    ap.ap.authmode = WIFI_AUTH_WPA2_PSK;\n    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));\n    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));\n    ESP_ERROR_CHECK(esp_wifi_start());\n    ESP_LOGI(TAG, "SoftAP \'%s\' up, password \'%s\' — connect and open http://192.168.4.1/", (char *)ap.ap.ssid, ap_pass);'
   return body
     .replace('__SLOT_INCLUDES__', collectSlot(rendered, 'webui_includes'))
     .replace('__SLOT_ENTITIES__', entities)
@@ -2538,6 +2583,10 @@ function genAppEspnowCpp(rendered: RenderedInstance[]): string {
 #include <esp_console.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 ${collectSlot(rendered, 'espnow_includes')}
 
 static const char *TAG = "app_espnow";
@@ -2574,13 +2623,38 @@ static const uint8_t ZC_NOW_BCAST[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 #define ZC_NOW_MAX_PEERS 8
 #define ZC_NOW_NVS_NS   "zc_now"
 #define ZC_NOW_NVS_KEY  "peers"
+/* The peer table is read on the Wi-Fi task (every received frame), by
+ * whichever task sends, and by the console; it is written by the pairing
+ * task and the console. s_peer_lock guards it; anything slow (NVS, the radio)
+ * runs on a copy taken under the lock, never holding it. */
 static uint8_t s_peers[ZC_NOW_MAX_PEERS][6];
 static uint8_t s_peer_count = 0;
+static SemaphoreHandle_t s_peer_lock = NULL;
 static volatile bool s_pairing = false;
 static esp_timer_handle_t s_pair_timer = NULL;   /* window end */
 static esp_timer_handle_t s_pair_beacon = NULL;  /* PAIR_REQ repeat */
 
-static bool zc_now_peer_known(const uint8_t *mac)
+/* Pairing frames are handed from the Wi-Fi task to this queue: storing a peer
+ * writes flash (nvs_commit) and answers with esp_now_send, and doing that in
+ * the receive callback stalls the Wi-Fi task — the receive callback must stay
+ * short (IDF's espnow example queues for the same reason). */
+typedef struct { uint8_t type; uint8_t mac[6]; } zc_now_pair_evt_t;
+static QueueHandle_t s_pair_q = NULL;
+
+static void zc_now_lock(void)   { xSemaphoreTake(s_peer_lock, portMAX_DELAY); }
+static void zc_now_unlock(void) { xSemaphoreGive(s_peer_lock); }
+
+/* Copies the table; returns the count. */
+static uint8_t zc_now_peers_copy(uint8_t out[ZC_NOW_MAX_PEERS][6])
+{
+    zc_now_lock();
+    uint8_t n = s_peer_count;
+    memcpy(out, s_peers, (size_t)n * 6);
+    zc_now_unlock();
+    return n;
+}
+
+static bool zc_now_peer_known_locked(const uint8_t *mac)
 {
     for (uint8_t i = 0; i < s_peer_count; i++) {
         if (memcmp(s_peers[i], mac, 6) == 0) return true;
@@ -2588,11 +2662,20 @@ static bool zc_now_peer_known(const uint8_t *mac)
     return false;
 }
 
-static void zc_now_peers_save(void)
+/* An open kit (no peers) accepts every matching frame; a paired one only its peers'. */
+static bool zc_now_accepts(const uint8_t *from)
+{
+    zc_now_lock();
+    bool ok = s_peer_count == 0 || (from != NULL && zc_now_peer_known_locked(from));
+    zc_now_unlock();
+    return ok;
+}
+
+static void zc_now_peers_save(const uint8_t peers[][6], uint8_t count)
 {
     nvs_handle_t h;
     if (nvs_open(ZC_NOW_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_blob(h, ZC_NOW_NVS_KEY, s_peers, (size_t)s_peer_count * 6);
+    nvs_set_blob(h, ZC_NOW_NVS_KEY, peers, (size_t)count * 6);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -2620,18 +2703,32 @@ static void zc_now_radio_add_peer(const uint8_t *mac)
     if (err != ESP_OK) ESP_LOGW(TAG, "add peer failed: %s", esp_err_to_name(err));
 }
 
+/* Runs on the pairing task, never the Wi-Fi task. */
 static bool zc_now_peer_store(const uint8_t *mac)
 {
-    if (zc_now_peer_known(mac)) return true;
+    uint8_t copy[ZC_NOW_MAX_PEERS][6];
+    zc_now_lock();
+    if (zc_now_peer_known_locked(mac)) { zc_now_unlock(); return true; }
     if (s_peer_count >= ZC_NOW_MAX_PEERS) {
+        zc_now_unlock();
         ESP_LOGW(TAG, "peer table full (%d) — forget a peer first", ZC_NOW_MAX_PEERS);
         return false;
     }
-    memcpy(s_peers[s_peer_count++], mac, 6);
+    zc_now_unlock();
+    /* The radio entry goes in before the table entry is visible — a send that
+     * sees the new peer must find the radio able to unicast to it — and
+     * outside the lock, which the Wi-Fi task takes on every received frame. */
     zc_now_radio_add_peer(mac);
-    zc_now_peers_save();
+    zc_now_lock();
+    if (!zc_now_peer_known_locked(mac) && s_peer_count < ZC_NOW_MAX_PEERS) {
+        memcpy(s_peers[s_peer_count++], mac, 6);
+    }
+    uint8_t n = s_peer_count;
+    memcpy(copy, s_peers, (size_t)n * 6);
+    zc_now_unlock();
+    zc_now_peers_save(copy, n);
     ESP_LOGI(TAG, "paired with %02x:%02x:%02x:%02x:%02x:%02x (%d peer%s)",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], s_peer_count, s_peer_count == 1 ? "" : "s");
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], n, n == 1 ? "" : "s");
     return true;
 }
 
@@ -2681,9 +2778,14 @@ uint8_t zc_espnow_peer_count(void) { return s_peer_count; }
 
 void zc_espnow_forget_peers(void)
 {
-    for (uint8_t i = 0; i < s_peer_count; i++) (void)esp_now_del_peer(s_peers[i]);
+    uint8_t copy[ZC_NOW_MAX_PEERS][6];
+    zc_now_lock();
+    uint8_t n = s_peer_count;
+    memcpy(copy, s_peers, (size_t)n * 6);
     s_peer_count = 0;
-    zc_now_peers_save();
+    zc_now_unlock();
+    for (uint8_t i = 0; i < n; i++) (void)esp_now_del_peer(copy[i]);
+    zc_now_peers_save(copy, 0);
     ESP_LOGI(TAG, "peers forgotten — back to open broadcast");
 }
 
@@ -2698,10 +2800,12 @@ static int zc_now_cmd_pair(int argc, char **argv)
 static int zc_now_cmd_peers(int argc, char **argv)
 {
     (void)argc; (void)argv;
-    printf("%d peer(s)%s\\n", s_peer_count, s_peer_count ? "" : " (open kit: broadcast)");
-    for (uint8_t i = 0; i < s_peer_count; i++) {
-        printf("  %02x:%02x:%02x:%02x:%02x:%02x\\n", s_peers[i][0], s_peers[i][1], s_peers[i][2],
-               s_peers[i][3], s_peers[i][4], s_peers[i][5]);
+    uint8_t peers[ZC_NOW_MAX_PEERS][6];
+    uint8_t n = zc_now_peers_copy(peers);
+    printf("%d peer(s)%s\\n", n, n ? "" : " (open kit: broadcast)");
+    for (uint8_t i = 0; i < n; i++) {
+        printf("  %02x:%02x:%02x:%02x:%02x:%02x\\n", peers[i][0], peers[i][1], peers[i][2],
+               peers[i][3], peers[i][4], peers[i][5]);
     }
     return 0;
 }
@@ -2725,12 +2829,14 @@ ${collectSlot(rendered, 'espnow_statics')}
 void zc_espnow_send(const char *param_name, uint8_t type, uint32_t value)
 {
     uint32_t hash = zc_now_hash(param_name);
-    if (s_peer_count == 0) {
+    uint8_t peers[ZC_NOW_MAX_PEERS][6];
+    uint8_t n = zc_now_peers_copy(peers);   /* this send's snapshot */
+    if (n == 0) {
         zc_now_send_raw(ZC_NOW_BCAST, type, hash, value);
         return;
     }
-    for (uint8_t i = 0; i < s_peer_count; i++) {
-        zc_now_send_raw(s_peers[i], type, hash, value);
+    for (uint8_t i = 0; i < n; i++) {
+        zc_now_send_raw(peers[i], type, hash, value);
     }
 }
 
@@ -2746,16 +2852,18 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     const uint8_t *from = info ? info->src_addr : NULL;
     if (msg.type >= 0xF0) {
         /* Pairing. Only while our own window is open — a stray request from a
-           neighbour's kit is ignored, which is the whole point of pairing. */
-        if (!from || !s_pairing) return;
-        if (msg.type == ZC_NOW_T_PAIR_REQ) {
-            if (zc_now_peer_store(from)) zc_now_send_raw(from, ZC_NOW_T_PAIR_ACK, 0, 0);
-        } else if (msg.type == ZC_NOW_T_PAIR_ACK) {
-            (void)zc_now_peer_store(from);
-        }
+           neighbour's kit is ignored, which is the whole point of pairing.
+           Handed to the pairing task: storing writes flash. A full queue drops
+           the frame; the requester repeats PAIR_REQ every 500 ms. */
+        if (!from || !s_pairing || s_pair_q == NULL) return;
+        if (msg.type != ZC_NOW_T_PAIR_REQ && msg.type != ZC_NOW_T_PAIR_ACK) return;
+        zc_now_pair_evt_t evt = {};
+        evt.type = msg.type;
+        memcpy(evt.mac, from, 6);
+        (void)xQueueSend(s_pair_q, &evt, 0);
         return;
     }
-    if (s_peer_count > 0 && (!from || !zc_now_peer_known(from))) return;
+    if (!zc_now_accepts(from)) return;
     uint32_t hash = msg.name_hash;
     (void)hash;
 ${collectSlot(rendered, 'espnow_recv_cases', 4)}
@@ -2778,9 +2886,32 @@ ${collectSlot(rendered, 'espnow_driver_cb_cases', 4)}
     }
 }
 
+static void zc_now_pair_task(void *arg)
+{
+    (void)arg;
+    zc_now_pair_evt_t evt;
+    for (;;) {
+        if (xQueueReceive(s_pair_q, &evt, portMAX_DELAY) != pdTRUE) continue;
+        if (!s_pairing) continue;   /* the window closed while it waited */
+        if (evt.type == ZC_NOW_T_PAIR_REQ) {
+            if (zc_now_peer_store(evt.mac)) zc_now_send_raw(evt.mac, ZC_NOW_T_PAIR_ACK, 0, 0);
+        } else {
+            (void)zc_now_peer_store(evt.mac);
+        }
+    }
+}
+
 esp_err_t app_espnow_init(void)
 {
     s_handle = app_driver_register_solution("espnow", espnow_driver_cb, NULL);
+
+    s_peer_lock = xSemaphoreCreateMutex();
+    s_pair_q = xQueueCreate(4, sizeof(zc_now_pair_evt_t));
+    if (s_peer_lock == NULL || s_pair_q == NULL ||
+        xTaskCreate(zc_now_pair_task, "now_pair", 3072, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "out of memory starting ESP-NOW pairing");
+        return ESP_ERR_NO_MEM;
+    }
 
     /* Wi-Fi up in STA mode, NOT connected — ESP-NOW rides the radio alone.
      * All kit members pin channel 1 (see the trust-model note). */
@@ -2804,8 +2935,14 @@ esp_err_t app_espnow_init(void)
     ESP_ERROR_CHECK(esp_now_register_recv_cb(espnow_recv_cb));
 
     /* Peers learnt in an earlier pairing window, and the window's timers. */
+    zc_now_lock();
     zc_now_peers_load();
-    for (uint8_t i = 0; i < s_peer_count; i++) zc_now_radio_add_peer(s_peers[i]);
+    zc_now_unlock();
+    {
+        uint8_t peers[ZC_NOW_MAX_PEERS][6];
+        uint8_t n = zc_now_peers_copy(peers);
+        for (uint8_t i = 0; i < n; i++) zc_now_radio_add_peer(peers[i]);
+    }
     const esp_timer_create_args_t end_args = {
         .callback = &zc_now_pair_end_cb, .arg = NULL, .dispatch_method = ESP_TIMER_TASK,
         .name = "now_pair_end", .skip_unhandled_events = true,
