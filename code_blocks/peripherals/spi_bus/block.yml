@@ -2,9 +2,7 @@ description: Shared SPI bus init for products with multiple SPI devices on the s
 
 # Adopts rather than collides: a host another block (drivers/display_ili9341_spi)
 # already initialized is logged and left as that block configured it, and the
-# panel does the same if this block ran first. Give max_transfer_size room for
-# the largest transfer of any device on the host (an ILI9341 band is
-# HRES*40*2 bytes).
+# panel does the same if this block ran first.
 
 params:
   host:

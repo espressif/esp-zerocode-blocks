@@ -11,10 +11,10 @@
                                                          &{{prefix_lc}}_bus, SPI_DMA_CH_AUTO);
     if ({{prefix_lc}}_bus_err == ESP_ERR_INVALID_STATE) {
         /* peripherals/spi_bus (another device on the same lines) brought the
-         * host up first. Share it instead of aborting the boot; its
-         * max_transfer_size must cover one LVGL band or draws fail. */
-        ESP_LOGW(TAG, "ILI9341 {{prefix_lc}}: SPI host %d already initialized — sharing it (needs max_transfer_size >= %u)",
-                 {{prefix}}_LCD_SPI_HOST, (unsigned)({{prefix}}_LCD_HRES * 40 * sizeof(uint16_t)));
+         * host up first. Share it as configured there instead of aborting the
+         * boot; the panel IO splits larger color transfers to the bus limit. */
+        ESP_LOGW(TAG, "ILI9341 {{prefix_lc}}: SPI host %d already initialized — sharing it as configured there",
+                 {{prefix}}_LCD_SPI_HOST);
     } else {
         ESP_ERROR_CHECK({{prefix_lc}}_bus_err);
     }
