@@ -140,8 +140,10 @@ static void {{prefix_lc}}_dht_poll(void)
 static void {{prefix_lc}}_dht_task(void *arg)
 {
     TickType_t last = xTaskGetTickCount();
+    /* Wait one period (at least 2 s) first: the sensor does not answer
+     * within ~1-2 s of power-up. */
     for (;;) {
-        {{prefix_lc}}_dht_poll();
         vTaskDelayUntil(&last, pdMS_TO_TICKS({{prefix}}_DHT_PERIOD_MS));
+        {{prefix_lc}}_dht_poll();
     }
 }
