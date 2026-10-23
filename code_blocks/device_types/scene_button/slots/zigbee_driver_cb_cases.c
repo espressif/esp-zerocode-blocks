@@ -1,9 +1,10 @@
-/* A controller turns a param into a COMMAND to bound devices, so the shell's
- * post-join/reboot resync (ZB_SOURCE_RESYNC) must not reach it: replaying the
- * remembered state would switch every bound device after each reboot. */
+/* A controller turns a param into a COMMAND to bound devices, so neither the
+ * shell's post-join/reboot resync (ZB_SOURCE_RESYNC) nor a boot-time NVS
+ * restore (APP_DRIVER_SOURCE_RESTORE) may reach it: replaying the remembered
+ * state would switch every bound device after each reboot. */
 /* A position of 0 carries no press (the position_param contract), as in the
  * Matter binding. */
-if (param_id == {{cfg.position_param}} && val.u8 != 0 && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
+if (param_id == {{cfg.position_param}} && val.u8 != 0 && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC && source != APP_DRIVER_SOURCE_RESTORE) {
     ezb_zcl_on_off_cmd_t cmd = {};
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
     cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;

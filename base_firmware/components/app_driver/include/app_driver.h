@@ -33,6 +33,21 @@
 #include "app_driver_types.h"
 
 /**
+ * Source for a write that RESTORES remembered state at boot (an NVS persist
+ * behavior putting back the last power/level). Use it as the `source` of
+ * app_driver_set_param() for such writes — never APP_DRIVER_SOURCE_LOCAL.
+ *
+ * A restore is local state, not a command: a solution that turns a param
+ * change into a message to OTHER devices (a mesh/Zigbee/ESP-NOW controller
+ * binding) must ignore notifications whose source is this, or every reboot
+ * switches the room. Hardware is still applied and every solution is still
+ * notified, so state holders (a Matter attribute, a display) stay in step.
+ * No registered solution ever has this handle (nor has Zigbee's resync source,
+ * 0xFF).
+ */
+#define APP_DRIVER_SOURCE_RESTORE ((app_driver_handle_t)0xFE)
+
+/**
  * Initialize hardware peripherals.
  * Template-overridden per device type.
  */
@@ -65,7 +80,8 @@ app_driver_handle_t app_driver_register_solution(
 
 /**
  * Name a solution was registered under, for a handle a notify callback was
- * given as `source`. Returns "local" for APP_DRIVER_SOURCE_LOCAL and NULL for a
+ * given as `source`. Returns "local" for APP_DRIVER_SOURCE_LOCAL, "restore" for
+ * APP_DRIVER_SOURCE_RESTORE, and NULL for a
  * handle nobody registered.
  *
  * Handles are assigned in registration order, which differs per product (the
@@ -74,7 +90,7 @@ app_driver_handle_t app_driver_register_solution(
  * screen versus a command from across the network — can only do it by name.
  *
  * @param handle  A source handle
- * @return The registered name, "local", or NULL
+ * @return The registered name, "local", "restore", or NULL
  */
 const char *app_driver_solution_name(app_driver_handle_t handle);
 
@@ -119,6 +135,20 @@ esp_err_t app_driver_fire_event(
     app_driver_param_id_t id,
     app_driver_param_val_t val,
     app_driver_handle_t source);
+
+/**
+ * Whether the notification being delivered right now — on the calling task —
+ * comes from app_driver_fire_event() (an EVENT: a press, a ring) rather than
+ * app_driver_set_param() (STATE: a value written, restored or synced).
+ *
+ * Call it from inside an app_driver_notify_cb_t. A binding whose param means
+ * "one press = one command" (a scene/switch button sending Toggle) must act
+ * only when this is true: the same param written as state — a restore at
+ * boot, an app keeping its own bookkeeping in it — is not a press.
+ *
+ * @return true while delivering a fire_event notification on this task
+ */
+bool app_driver_notifying_event(void);
 
 /**
  * Get the current value of a parameter.
