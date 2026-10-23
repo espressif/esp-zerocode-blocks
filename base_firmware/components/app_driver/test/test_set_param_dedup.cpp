@@ -51,6 +51,25 @@ static int s_sol2_notify = 0;
 static void sol1_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *) { s_sol1_notify++; }
 static void sol2_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *) { s_sol2_notify++; }
 
+/* Records, per param, whether its last notification was an event and who sent
+ * it. On a POWER event it also writes LEVEL as state, from inside the event's
+ * dispatch — that nested notification must NOT read as an event. */
+static bool s_rec_event[APP_DRIVER_PARAM_MAX];
+static app_driver_handle_t s_rec_source[APP_DRIVER_PARAM_MAX];
+static bool s_rec_nested_armed = false;
+static app_driver_handle_t s_rec_handle = 0;
+static void rec_cb(app_driver_param_id_t id, app_driver_param_val_t, app_driver_handle_t source, void *) {
+    s_rec_event[id] = app_driver_notifying_event();
+    s_rec_source[id] = source;
+    if (id == APP_DRIVER_PARAM_POWER && s_rec_nested_armed) {
+        s_rec_nested_armed = false;
+        app_driver_param_val_t lv; memset(&lv, 0, sizeof(lv)); lv.u16 = 321;
+        app_driver_set_param(APP_DRIVER_PARAM_LEVEL, lv, s_rec_handle);
+        /* back in the event's own dispatch: still an event */
+        s_rec_event[APP_DRIVER_PARAM_POWER] = app_driver_notifying_event();
+    }
+}
+
 static int s_failures = 0;
 #define CHECK(cond, msg) do { \
     if (cond) { printf("  ok   %s\n", msg); } \
@@ -154,6 +173,35 @@ int main(void) {
     CHECK(lvNow.u16 == 200, "racing writers: the later commit is the stored state");
     CHECK(s_apply_last_id == APP_DRIVER_PARAM_LEVEL && s_apply_last_val.u16 == 200,
           "racing writers: the hardware ends on the stored state, not the older apply");
+
+    /* 13) A notification knows whether it is an EVENT (fire_event) or STATE
+     *     (set_param), so a "one press = one command" binding can ignore the
+     *     same param written as state — a boot restore, app bookkeeping. */
+    app_driver_handle_t rec = app_driver_register_solution("rec", rec_cb, nullptr);
+    s_rec_handle = rec;
+    CHECK(!app_driver_notifying_event(), "outside any dispatch: not an event");
+    app_driver_fire_event(APP_DRIVER_PARAM_LED_PATTERN, U8(1), sol1);
+    CHECK(s_rec_event[APP_DRIVER_PARAM_LED_PATTERN], "fire_event notification reads as an event");
+    app_driver_set_param(APP_DRIVER_PARAM_LED_PATTERN, U8(2), sol1);
+    CHECK(!s_rec_event[APP_DRIVER_PARAM_LED_PATTERN], "set_param notification does not read as an event");
+    CHECK(!app_driver_notifying_event(), "after a dispatch: not an event");
+    s_rec_nested_armed = true;
+    app_driver_fire_event(APP_DRIVER_PARAM_POWER, B(false), sol1);
+    CHECK(!s_rec_event[APP_DRIVER_PARAM_LEVEL],
+          "a set_param made inside an event's dispatch is state, not the event");
+    CHECK(s_rec_event[APP_DRIVER_PARAM_POWER],
+          "the event's dispatch is still an event after a nested set_param");
+    CHECK(!app_driver_notifying_event(), "after a nested dispatch: not an event");
+
+    /* 14) A boot restore carries its own source: applied and announced as
+     *     state, but distinguishable from a local command. */
+    int applyBeforeRestore = s_apply_calls;
+    app_driver_set_param(APP_DRIVER_PARAM_LED_PATTERN, U8(42), APP_DRIVER_SOURCE_RESTORE);
+    CHECK(s_apply_calls == applyBeforeRestore + 1, "a restore is applied to hardware");
+    CHECK(s_rec_source[APP_DRIVER_PARAM_LED_PATTERN] == APP_DRIVER_SOURCE_RESTORE,
+          "a restore notifies with the RESTORE source");
+    CHECK(strcmp(app_driver_solution_name(APP_DRIVER_SOURCE_RESTORE), "restore") == 0,
+          "solution_name(RESTORE) is \"restore\"");
 
     (void)sol1; (void)sol2;
     printf(s_failures ? "\nRESULT: FAIL (%d)\n" : "\nRESULT: PASS\n", s_failures);

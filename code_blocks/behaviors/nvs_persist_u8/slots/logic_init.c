@@ -6,7 +6,8 @@
         if (nvs_get_u8(h, {{prefix}}_NVS_KEY, &saved) == ESP_OK) {
             ESP_LOGI(TAG, "{{prefix_lc}}: restoring {{cfg.target_param}}=%u from NVS", saved);
             app_driver_param_val_t pv = { .u8 = saved };
-            app_driver_set_param({{cfg.target_param}}, pv, APP_DRIVER_SOURCE_LOCAL);
+            /* RESTORE, not LOCAL: put back as state, never re-sent as a command. */
+            app_driver_set_param({{cfg.target_param}}, pv, APP_DRIVER_SOURCE_RESTORE);
         }
         nvs_close(h);
     }

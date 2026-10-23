@@ -34,6 +34,9 @@ typedef struct {
     bool active;
 } solution_slot_t;
 
+static_assert(APP_DRIVER_MAX_SOLUTIONS < APP_DRIVER_SOURCE_RESTORE,
+              "solution handles must never reach the reserved restore source");
+
 static solution_slot_t s_solutions[APP_DRIVER_MAX_SOLUTIONS];
 static uint8_t s_solution_count = 0;
 
@@ -46,6 +49,11 @@ static app_driver_param_val_t s_params[APP_DRIVER_PARAM_MAX];
  * always propagates; change-detection only applies from the second write on. */
 static bool s_param_seen[APP_DRIVER_PARAM_MAX];
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
+
+/* True while THIS task is delivering a fire_event notification. Per task, so a
+ * set_param on another task — or one a callback makes from inside the event's
+ * dispatch — is never mistaken for the event. */
+static __thread bool s_notifying_event = false;
 
 /* ──── PUBLIC API ─────────────────────────────────────────────────────── */
 
@@ -76,6 +84,9 @@ const char *app_driver_solution_name(app_driver_handle_t handle)
 {
     if (handle == APP_DRIVER_SOURCE_LOCAL) {
         return "local";
+    }
+    if (handle == APP_DRIVER_SOURCE_RESTORE) {
+        return "restore";
     }
     const char *name = NULL;
     portENTER_CRITICAL(&s_lock);
@@ -162,6 +173,8 @@ esp_err_t app_driver_set_param(
      * ended on, not this call's: when the loop above re-applied a later
      * writer's value, this notify may be the LAST one, and announcing `val`
      * would leave every listener (a Matter attribute, NVS) on the stale value. */
+    bool outer_event = s_notifying_event;
+    s_notifying_event = false;
     for (uint8_t i = 0; i < count; i++) {
         uint8_t handle = i + 1;
         if (handle == source) continue; /* skip the source */
@@ -169,6 +182,7 @@ esp_err_t app_driver_set_param(
             snapshot[i].cb(id, applied, source, snapshot[i].ctx);
         }
     }
+    s_notifying_event = outer_event;
 
     return ESP_OK;
 }
@@ -208,6 +222,8 @@ esp_err_t app_driver_fire_event(
         ESP_LOGW(TAG, "apply_param(%d) failed: %s", id, esp_err_to_name(err));
     }
 
+    bool outer_event = s_notifying_event;
+    s_notifying_event = true;
     for (uint8_t i = 0; i < count; i++) {
         uint8_t handle = i + 1;
         if (handle == source) continue;
@@ -215,8 +231,14 @@ esp_err_t app_driver_fire_event(
             snapshot[i].cb(id, val, source, snapshot[i].ctx);
         }
     }
+    s_notifying_event = outer_event;
 
     return ESP_OK;
+}
+
+bool app_driver_notifying_event(void)
+{
+    return s_notifying_event;
 }
 
 bool app_driver_param_seen(app_driver_param_id_t id)
