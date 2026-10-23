@@ -1,12 +1,29 @@
-description: Passive buzzer / piezo on a GPIO via LEDC. Frequency_param controls tone (0 = silent).
+description: "Buzzer on a GPIO. kind passive (default): a piezo driven with an LEDC tone, frequency_param = pitch in Hz. kind active: a self-oscillating buzzer driven as a plain on/off level, frequency_param non-zero = on. 0 = silent either way."
 
 params:
   gpio: { type: int, required: true }
   ledc_channel: { type: int, default: 3 }
   ledc_timer:   { type: int, default: 2 }
+  kind:
+    type: string
+    default: passive
+    enum: [passive, active]
+    description: >-
+      passive (default): a bare piezo / magnetic transducer with no oscillator
+      of its own — it needs a tone, so it is driven with an LEDC square wave at
+      50 % duty. active: a buzzer with a built-in oscillator (the part or its
+      listing says "active"; it sounds at its own fixed pitch when powered) —
+      driven as a plain on/off GPIO level. PWM on an active buzzer chops its
+      supply, so it sounds faint or garbled; pick active whenever the part says so.
+  active_level:
+    type: int
+    default: 1
+    description: >-
+      kind active only — the GPIO level that sounds the buzzer (1 = high = on,
+      the usual module; 0 for a low-side / inverted driver). Ignored for passive.
 
 driver_params:
   frequency_param:
     type: u32
     required: true
-    description: Tone frequency in Hz (uint32, 0 = silent)
+    description: Tone frequency in Hz (uint32, 0 = silent). For kind active only zero / non-zero matters — the part sets the pitch.

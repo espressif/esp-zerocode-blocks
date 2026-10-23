@@ -19,13 +19,21 @@ static const {{prefix_lc}}_note_t s_{{prefix_lc}}_chime_dn[] = { {1760,150},{132
 
 static void {{prefix_lc}}_play_note(uint16_t freq, uint16_t ms)
 {
+#if defined({{prefix}}_MEL_KIND_active)
+    /* Active buzzer: the part sets the pitch; a note is just "on" for its length. */
+    gpio_set_level((gpio_num_t){{prefix}}_MEL_GPIO,
+                   freq != 0 ? {{prefix}}_MEL_ACTIVE_LEVEL : !{{prefix}}_MEL_ACTIVE_LEVEL);
+#else
     if (freq == 0) {
         ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_MEL_CHANNEL, 0);
     } else {
         ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t){{prefix}}_MEL_TIMER, freq);
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_MEL_CHANNEL, 128);
+        /* 50 % duty at the timer's resolution. */
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_MEL_CHANNEL,
+                      (1u << {{prefix}}_MEL_DUTY_BITS) / 2);
     }
     ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t){{prefix}}_MEL_CHANNEL);
+#endif
     if (ms > 0) vTaskDelay(pdMS_TO_TICKS(ms));
 }
 

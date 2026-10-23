@@ -1,4 +1,4 @@
-description: Buzzer that plays preset melodies / alert patterns. Builds on the same LEDC tone generator as drivers/buzzer.
+description: "Buzzer that plays preset melodies / alert patterns. kind passive (default): notes are LEDC tones, as drivers/buzzer. kind active: a self-oscillating buzzer keyed on/off with the same rhythm (its pitch is fixed by the part)."
 
 # Listens for changes to pattern_param and starts playing the corresponding pattern
 # on the buzzer. Patterns are short fixed sequences (frequency_hz, duration_ms) chosen
@@ -21,6 +21,23 @@ params:
     default: 2
     description: LEDC channel (0-5 exist on every chip; must differ from any other LEDC user)
   ledc_timer:   { type: int, default: 2 }
+  kind:
+    type: string
+    default: passive
+    enum: [passive, active]
+    description: >-
+      passive (default): a bare piezo / magnetic transducer with no oscillator
+      of its own — it needs a tone, so it is driven with an LEDC square wave at
+      50 % duty. active: a buzzer with a built-in oscillator (the part or its
+      listing says "active"; it sounds at its own fixed pitch when powered) —
+      driven as a plain on/off GPIO level. PWM on an active buzzer chops its
+      supply, so it sounds faint or garbled; pick active whenever the part says so.
+  active_level:
+    type: int
+    default: 1
+    description: >-
+      kind active only — the GPIO level that sounds the buzzer (1 = high = on,
+      the usual module; 0 for a low-side / inverted driver). Ignored for passive.
 
 driver_params:
   pattern_param:
