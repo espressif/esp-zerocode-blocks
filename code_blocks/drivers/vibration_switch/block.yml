@@ -1,0 +1,63 @@
+description: >-
+  Digital vibration switch module (SW-420, SW-18010P, 801S and other
+  comparator-output "vibration sensor" boards) on a GPIO — counts its pulses
+  and publishes an activity level in pulses per minute. Its output pulses
+  while shaken, it is never a steady "vibrating" level, so do not read it as
+  one. Bind the activity to behaviors/cycle_done_detector for a washer or
+  dryer "cycle finished" monitor.
+
+# WHAT IT PUBLISHES. The module's output flickers while the switch is shaken
+# and rests at its inactive level otherwise: a reading of the pin at any one
+# instant is noise. So every pulse (its edge into the active level) is counted
+# in an interrupt, and once per window the count becomes a rate.
+#
+# THE UNIT is pulses per minute, not per second: a gentle machine gives a few
+# pulses per window, and a per-second rate rounds those to zero. Clamped at
+# 65535 (about 1 kHz, a module shaken hard with its sensitivity turned up).
+#
+# POLARITY. Each pulse has one edge of each kind, so the count does not
+# depend on active_level. It decides the health check only: a line that sits
+# at its ACTIVE level for a whole window with no pulse is either inverted
+# (active_level wrong) or turned up so far the comparator never releases. That
+# is logged once, and the window reports 0.
+#
+# CHATTER. A comparator without hysteresis rings on every transition; edges
+# closer than min_pulse_gap_us count as one pulse.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_gpio, esp_timer]
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO wired to the module's DO (digital out) pin
+  active_level:
+    type: int
+    default: 1
+    description: >-
+      Level the module drives while shaken (1 for most SW-420 boards; the
+      board's LED shows it). Only used to recognise a line stuck active.
+  pull:
+    type: string
+    default: none
+    enum: [none, pullup, pulldown]
+    description: >-
+      Internal pull. none for a module, which drives the line itself; pullup
+      for a bare switch wired from the GPIO to GND.
+  window_ms:
+    type: int
+    default: 2000
+    description: Counting window. Each window publishes one activity value.
+  min_pulse_gap_us:
+    type: int
+    default: 1000
+    description: Edges closer together than this count as one pulse (comparator ringing).
+
+driver_params:
+  activity_param:
+    type: u16
+    required: true
+    description: >-
+      Activity in pulses per minute over the last window (0 = still). A
+      level for behaviors/cycle_done_detector, not a yes/no.

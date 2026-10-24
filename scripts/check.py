@@ -475,6 +475,88 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
         if f'"{name}"' not in sources and f'"{name}"' not in _ENGINE_SRC:
             err(fid, f'onboarding lists console command "{name}", but neither the block nor the engine registers it')
 
+# CONSOLE COMMANDS: a non-framework block may list the console commands it
+# registers (`console_commands:`), which its facts then promise the owner by
+# name. Same rule as onboarding: each command's first word must appear as a
+# string literal in the block's own sources.
+for by in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
+    try:
+        cc = (yaml.safe_load(by.read_text()) or {}).get('console_commands')
+    except yaml.YAMLError:
+        continue
+    if cc is None:
+        continue
+    fid = by.parent.relative_to(ROOT / 'code_blocks').as_posix()
+    if not isinstance(cc, list) or not cc or not all(isinstance(c, str) and c.strip() for c in cc):
+        err(fid, 'console_commands must be a non-empty list of strings')
+        continue
+    sources = '\n'.join(f.read_text(errors='replace') for f in by.parent.rglob('*')
+                        if f.is_file() and f.suffix in ('.c', '.cc', '.cpp', '.h', '.hpp'))
+    for c in cc:
+        name = c.split()[0]
+        if f'"{name}"' not in sources:
+            err(fid, f'console_commands lists "{name}", but the block does not register it')
+
+# FACTS: what a block gives the owner and cannot do, stated to the owner as
+# fact (a framework's are copied into every product's seed) — a mapping of
+# short snake_case keys to one sentence each.
+for by in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
+    try:
+        facts = (yaml.safe_load(by.read_text()) or {}).get('facts')
+    except yaml.YAMLError:
+        continue
+    if facts is None:
+        continue
+    fid = by.parent.relative_to(ROOT / 'code_blocks').as_posix()
+    if not isinstance(facts, dict) or not facts:
+        err(fid, 'facts: must be a non-empty mapping of key: "sentence"')
+        continue
+    for k, v in facts.items():
+        if not isinstance(k, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', k):
+            err(fid, f'facts key "{k}" must be snake_case')
+        if not isinstance(v, str) or not v.strip():
+            err(fid, f'facts.{k} must be a non-empty string')
+        elif len(v) > 400:
+            err(fid, f'facts.{k} is {len(v)} characters; keep a fact to one sentence (400 at most)')
+
+# base_firmware/facts.yml: the facts every product's seed carries
+# (`firmwareFacts`), same shape as a block's, and every console command it
+# names is registered by the base console.
+_bf = ROOT / 'base_firmware' / 'facts.yml'
+if _bf.is_file():
+    _doc = yaml.safe_load(_bf.read_text()) or {}
+    _facts = _doc.get('facts')
+    if not isinstance(_facts, dict) or not _facts or not all(isinstance(v, str) and v.strip() and len(v) <= 400 for v in _facts.values()):
+        err('base_firmware/facts.yml', 'facts: must be a non-empty mapping of key: "sentence" (400 characters at most)')
+    _src = (ROOT / 'base_firmware' / 'components' / 'app_console' / 'app_console.cpp').read_text()
+    for _c in _doc.get('console_commands') or []:
+        if f'"{_c}"' not in _src:
+            err('base_firmware/facts.yml', f'console command "{_c}" is not registered by app_console')
+
+# A framework fact keyed `not_*` names device types the framework does NOT
+# carry; a type it names that has the framework's binding (any `<fw>_*` slot)
+# is a stale fact, and every product's seed would tell the owner a falsehood.
+_DT_DIR = ROOT / 'code_blocks' / 'device_types'
+for by in sorted(ROOT.glob('code_blocks/frameworks/*/block.yml')):
+    try:
+        facts = (yaml.safe_load(by.read_text()) or {}).get('facts') or {}
+    except yaml.YAMLError:
+        continue
+    fw = by.parent.name
+    for k, v in (facts.items() if isinstance(facts, dict) else []):
+        if not (isinstance(k, str) and k.startswith('not_') and isinstance(v, str)):
+            continue
+        text = v.replace("/", " ")  # "on/off light switch" names on_off_light_switch
+        # longest names first, each match blanked, so "heat pump" is not also "pump"
+        for dt in sorted(_DT_DIR.iterdir(), key=lambda d: -len(d.name)):
+            human = dt.name.replace('_', ' ')
+            pat = rf'\b{re.escape(human)}\b'
+            if not re.search(pat, text, re.I):
+                continue
+            text = re.sub(pat, ' ', text, flags=re.I)
+            if any(f.name.startswith(f'{fw}_') for f in (dt / 'slots').glob('*')):
+                err(f'frameworks/{fw}', f'facts.{k} says "{human}" is not carried, but device_types/{dt.name} has {fw}_* slots')
+
 # DEFAULTS: base_firmware/defaults.yml and a framework's `defaults:` name
 # behaviors every product gets, so each must be a chip-agnostic behavior that
 # needs no cfg.

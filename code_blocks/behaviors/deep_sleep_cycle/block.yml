@@ -1,0 +1,122 @@
+description: >-
+  Runs the device as a battery sensor: deep sleep, wake when a contact opens or
+  closes (and on an optional heartbeat timer), stay awake just long enough for
+  the framework to connect and deliver the current state, then sleep again.
+  With MQTT it sleeps as soon as the broker has acknowledged the state and signs
+  off cleanly, so Home Assistant keeps it available between wakes. Compose this
+  for a battery door/window or leak sensor instead of designing power control.
+
+# THE CYCLE
+#   wake      a wake pin changes level, or the heartbeat timer fires
+#   report    the input driver publishes its reading at boot; the framework
+#             connects and sends every entity's state (retained)
+#   sleep     once delivered (MQTT: the broker acknowledged every QoS 1
+#             publish) and nothing changed for quiet_ms; or after max_awake_ms
+#             whatever happened (no network, broker down, another framework)
+#
+# WAKE PINS. Every chip in chips.txt wakes on a pin LEVEL (ext1, ext0 or the
+# deep-sleep GPIO wakeup, picked from the chip's caps at build time), so before
+# each sleep the pin is armed for the level it is NOT at now: a closed contact
+# arms "wake on open", an open one "wake on close". A change while going to
+# sleep therefore wakes it at once instead of being lost. Only RTC/LP pins can
+# wake a chip (e.g. 0-5 on the C3, 0-7 on the C6, 0-21 on the S3); a pin that
+# cannot is logged at boot, and if no pin could be armed it wakes hourly so it
+# is never asleep for good. The pin is read here and published by an input
+# driver (drivers/gpio_input_sensor) on the same GPIO, with the same pull.
+#
+# PULL-UP CURRENT. A contact closed against a pull-up conducts the whole time
+# it is closed. The internal pull-up (~45 kOhm) costs ~70 uA at 3.3 V — several
+# times the sleeping chip. Either use an external 1 MOhm or larger pull-up
+# (wake_pull: none, and the input driver's pull: none), or mount the reed so
+# it is OPEN while the door is shut (a normally-closed reed), so current only
+# flows while the door is open.
+#
+# THE BOARD DECIDES THE BATTERY LIFE. The chip sleeps at ~5-10 uA, but a dev
+# kit's regulator, USB-serial chip, power LED and addressable LED keep drawing
+# milliamps in deep sleep: weeks on a battery, not years. Long life needs a
+# bare module board fed from the battery (or a low-quiescent regulator) with no
+# LEDs. Never cut the board's own supply with a load switch to "turn it off":
+# an unpowered chip cannot wake. Deep sleep is the off state.
+#
+# SETUP AND FLASHING. After a power-up or reset (not a wake) it stays awake
+# boot_awake_seconds for the serial console, and with MQTT it stays awake as
+# long as Wi-Fi and the broker are not set up (run mqtt-setup). Asleep, its USB
+# serial port disappears: reset it to get the window back, or set
+# stay_awake_on_usb (needs the chip's own USB console: C3/C5/C6/H2/P4/S3/S31).
+#
+# MQTT. The connected handler marks the state announced; the sleep waits for
+# the client's outbox to empty (every retained state acknowledged), then sends
+# a clean DISCONNECT so the broker does not publish the "offline" will. Home
+# Assistant keeps the device available with its last state between wakes, and
+# the heartbeat re-sends it. The flip side: a dead battery is not shown as
+# unavailable (the discovery sets no expire_after). Other frameworks give no
+# delivery signal, so the device sleeps after max_awake_ms; Matter, Zigbee,
+# Thread and RainMaker need their own sleepy-device modes, not this block.
+
+cmake_priv_requires:
+  app_logic: [esp_driver_gpio, esp_timer, esp_driver_usb_serial_jtag]
+
+params:
+  wake_gpio:
+    type: int
+    default: -1
+    description: >-
+      Pin whose change wakes the device (the contact's GPIO); -1 for none
+      (heartbeat only). Must be an RTC/LP pin the chip can wake from.
+  wake_gpio_2:
+    type: int
+    default: -1
+    description: Optional second wake pin (-1 for none).
+  wake_pull:
+    type: string
+    default: pullup
+    enum: [pullup, pulldown, none]
+    description: >-
+      Pull held on the wake pins through deep sleep — match the input driver's
+      pull. none with an external high-value resistor saves the pull-up current
+      while the contact is closed.
+  heartbeat_minutes:
+    type: int
+    default: 60
+    description: Also wake this often to re-send the state (0 = only on a pin change).
+  max_awake_ms:
+    type: int
+    default: 20000
+    description: Go back to sleep after this long awake even if the state was not delivered (no Wi-Fi, broker down).
+  quiet_ms:
+    type: int
+    default: 1000
+    description: >-
+      The reading must hold this long before sleeping; keep it above the input
+      driver's poll interval plus debounce, so a change during the wake is
+      published before the device sleeps.
+  boot_awake_seconds:
+    type: int
+    default: 60
+    description: After a power-up or reset (not a wake), stay awake this long for setup over the serial console.
+  stay_awake_on_usb:
+    type: int
+    default: 0
+    description: 1 = never sleep while a computer is connected to the chip's own USB port (development); 0 = off.
+
+driver_params:
+  state_param:
+    type: bool
+    required: false
+    description: >-
+      Optional. The reading this device reports (e.g. the contact). Sleep waits
+      until it has been published and has held for quiet_ms.
+
+# The deep-sleep GPIO wakeup (C3) would otherwise pull the pin toward the idle
+# level of the wake it is armed for, which fights the opposite-level re-arm.
+sdkconfig:
+  CONFIG_ESP_SLEEP_GPIO_ENABLE_INTERNAL_RESISTORS: "n"
+
+facts:
+  battery_life: "On a development board the regulator, USB chip and LEDs keep drawing milliamps while the chip sleeps, so a battery lasts weeks; years needs a bare module board powered from the battery with no LEDs."
+  wake: "It wakes when the contact opens or closes and every heartbeat_minutes, reports the current state, and sleeps again within seconds; a change shorter than the wake-up (about a third of a second) can go unreported."
+  pull_up_current: "A contact held closed against a pull-up draws current the whole time it is closed (about 70 uA with the internal pull-up, more than the sleeping chip): use a 1 MOhm or larger external pull-up, or a reed that is open while the door is shut."
+  power_switching: "Deep sleep is how it turns off; it must never switch off its own supply, because an unpowered chip cannot wake."
+  home_assistant: "With MQTT it signs off cleanly before sleeping, so Home Assistant keeps it available with its last state between wakes; a flat battery therefore shows as the last state, not as unavailable."
+  setup: "After a power-up or reset it stays awake for setup (and with MQTT until Wi-Fi and the broker are set); while asleep its USB serial port is gone, so reset it to reach the console or to flash it."
+  other_frameworks: "Only MQTT tells it the state was delivered; with other frameworks it sleeps after a fixed time, and Matter, Zigbee, Thread and RainMaker devices cannot be reached while it sleeps."

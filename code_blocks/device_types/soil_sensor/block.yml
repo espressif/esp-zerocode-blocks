@@ -1,16 +1,34 @@
-description: Soil Sensor device type stub (soil moisture measurement; SoilMeasurement cluster)
-# Matter-only today. RainMaker/Zigbee: bindings can be added when a driver produces the value.
+description: "Soil Sensor device type (read-only soil moisture, whole percent 0-100) (Matter: soil_sensor / SoilMeasurement; RainMaker: esp.device.other; MQTT: Home Assistant moisture sensor)"
 device_types:
   matter: soil_sensor
+  rainmaker: esp.device.other
+# No Zigbee binding: ZCL's Soil Moisture cluster (0x0408) is not in
+# esp-zigbee-lib 2.x (no ezb_zcl_* descriptor for it), and reporting moisture
+# as Relative Humidity would put a false "humidity" entity in ZHA / Z2M. A
+# Zigbee product with this block gets no endpoint for it.
 
-# Endpoint exists on the fabric; no attribute<->driver wiring yet.
-# check.py keeps this field in step with the slots.
-matter_wiring: endpoint_only
-matter_wiring_note: "SoilMeasurement endpoint created; measured-value reporting from a driver is a follow-up"
+# Framework SDK deps come from the framework blocks (frameworks/matter,
+# frameworks/rainmaker, frameworks/mqtt, …) — this block contributes only bindings.
 
-# Framework SDK deps come from the framework blocks (frameworks/matter) —
-# this block contributes only bindings.
+params:
+  label:
+    type: string
+    default: Soil Moisture
+    description: User-visible device name (RainMaker device name / Home Assistant entity name; must be unique per node)
 
-params: {}
-param_refs: {}
-maturity: stub
+driver_params:
+  value_param:
+    type: u8
+    required: true
+    description: Driver param ID this endpoint mirrors (uint8, soil moisture in whole percent 0-100 — what drivers/soil_moisture_adc publishes)
+
+facts:
+  matter: "On Matter it is a Soil Sensor endpoint whose SoilMeasurement moisture value (0-100 %) follows the probe; the soil sensor is a recent Matter device type, so some controller apps may not show it yet."
+  home_assistant: "Over MQTT, Home Assistant discovers it as a Moisture sensor entity in % under the device; the value is retained by the broker once the probe has produced a first reading."
+  web_page: "On the web page it is a reading row showing the moisture in whole percent."
+  display: "On the display it is a card with its name and the moisture in whole percent."
+  rainmaker: "In the RainMaker app it is a read-only device whose Moisture value is in percent."
+  no_zigbee: "Zigbee has no binding: a Zigbee product shows no soil moisture entity."
+  relative_value: "The percent is relative wetness between the probe's calibrated dry and wet points, not volumetric water content, and the device does not water anything by itself."
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

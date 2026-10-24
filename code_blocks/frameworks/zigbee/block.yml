@@ -31,3 +31,12 @@ radio: true
 # helper (see the app_zigbee scaffold / the OTA-endpoint pattern).
 
 # Pin esp-zigbee-lib ~2.0.0. That is the only Zigbee component the app declares.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  role: "It always joins as a mains-powered router that relays for other Zigbee devices (up to 10 can join through it); it cannot be a battery or sleepy end device and cannot start a network of its own, so it needs an existing Zigbee hub."
+  pairing: "Until it is in a network the device keeps looking for one, so the person only opens pairing on the hub; no install code is needed."
+  reconnect: "After a power cut it rejoins the same network by itself and sends its current state to the hub."
+  reset: "When removed from the hub it starts looking for a network again at once; the framework adds no reset button."
+  remotes: "A switch, dimmer remote or scene button controls only the devices it has been bound to; binding is started from the hub's app or with the device's zb-bind console command."

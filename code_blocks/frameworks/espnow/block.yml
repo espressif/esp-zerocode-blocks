@@ -48,3 +48,14 @@ onboarding:
       - "espnow-forget — forget every paired device, back to the open broadcast kit"
     api: "zc_espnow_pair_start, zc_espnow_pairing, zc_espnow_peer_count, zc_espnow_forget_peers (app_espnow.h); behaviors/espnow_pair_trigger binds the pairing window to a button"
     note: "Unpaired devices are an open kit: broadcast, unencrypted, for a trusted space. Paired devices talk only to each other, and the pairing is kept across reboots."
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  role: "Devices talk to each other directly over the radio and never join a Wi-Fi network, so there is no internet, phone app, web page or network time."
+  what_talks: "In the catalog a dimmer remote sends on/off and a brightness level, a scene button sends a scene number, and a light, dimmable light or smart plug obeys on/off (a dimmable light also brightness); no catalog device obeys a scene number."
+  state_not_toggle: "A remote sends the on/off state and level it holds itself, never \"toggle\" or \"brighter\", so a light changed some other way can disagree with the remote until the remote is used again."
+  missed_messages: "A message goes out once, when the control changes: a device that is off or out of range then misses it and is not told later, and the sender never learns whether it arrived."
+  limits: "A device remembers at most 8 paired devices, and messages are not encrypted, paired or not."
+  one_channel: "Every device uses the same fixed radio channel and group, so two unpaired kits in range of each other control each other's devices; only pairing keeps them apart."
+  reset: "A factory reset forgets every paired device and returns it to the open kit."

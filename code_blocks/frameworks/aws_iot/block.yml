@@ -137,3 +137,15 @@ device_data:
       encoding: binary
       label: Root CA (PEM)
       required: false
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  aws_account: "In their own AWS account the owner creates an IoT thing, a certificate with its private key (activated and attached to the thing) and an IoT policy attached to the certificate; the certificate and key files are entered on the flash page."
+  policy: "The policy must let the device connect with its thing name as its ID, publish to every topic the product sends on (plus retain-publish for any it keeps on the broker), and subscribe to and receive on every topic it listens to; AWS drops the connection the moment the device publishes outside the policy."
+  endpoint: "The endpoint is the owner's own AWS IoT device data endpoint on port 8883 (or 443); Amazon's root certificate is built in, so a root CA file is needed only for a private endpoint."
+  topics: "The framework only connects: it sends and listens on no topics by itself, so the spec names every topic the product uses, and those are exactly the topics the policy must allow."
+  not_included: "Nothing appears in a phone app, and no device shadow, remote job, over-the-air update or fleet provisioning is built in; the messages go to the owner's AWS account and nowhere else."
+  one_identity_per_device: "Each device needs its own thing name and certificate: two devices with the same thing name keep knocking each other off AWS."
+  offline: "It reconnects by itself after a drop, but a message it tries to send while offline is not kept and sent later."
+  reset: "A factory reset erases the Wi-Fi settings but keeps the AWS identity; only a reflash with new device data replaces it."

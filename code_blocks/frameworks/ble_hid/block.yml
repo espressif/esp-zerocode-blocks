@@ -30,3 +30,15 @@ radio: true
 #
 # Chips: every BLE chip. esp32s2 has no Bluetooth, but it isn't in the
 # catalog matrix anyway.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  name: "On the phone, PC or TV the device appears in Bluetooth settings as \"ZeroCode Remote\"; the product cannot pick its own name."
+  one_host: "It connects to one phone, PC or TV at a time; while one is connected, no other can find it."
+  findable: "When nothing is connected it stays discoverable, so pairing needs no button press or pairing mode."
+  repair: "If the phone or PC forgets the device, pairing again from it works."
+  before_pairing: "Presses made while nothing is connected are dropped, not sent later."
+  keyboard: "The framework sends media keys, not keyboard keys; the chip itself can be a full Bluetooth keyboard (arrows, letters), but only with firmware written for the product beyond the catalog."
+  what_sends: "Only three kinds of control send anything: a scene button sends one chosen media key per press (play/pause, mute, next or previous track), and a dimmer or colour remote sends mute from its power button and volume up or down from its knob."
+  one_way: "It only sends key presses: it cannot see what is playing, the volume or whether the TV is on, it joins no Wi-Fi, and it appears in no app."

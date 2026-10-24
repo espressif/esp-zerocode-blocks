@@ -60,10 +60,16 @@ Chips).
 `led-strip-cct`, `ceiling-panel-light`, `outdoor-flood-light`,
 `in-wall-dimmer`
 
-### Sensors (9)
+### Sensors (10)
 `temp-humidity-sensor`, `motion-sensor`, `contact-sensor`,
 `water-leak-sensor`, `ambient-light-sensor`, `air-quality-monitor`,
-`smoke-co-alarm`, `thread-contact-sensor`, `environment-sensor-hub`
+`smoke-co-alarm`, `thread-contact-sensor`, `environment-sensor-hub`,
+`laundry-done-monitor`
+
+`laundry-done-monitor` watches a washer (MPU6050 `activity_param`) and a dryer
+(`drivers/vibration_switch`, an SW-420 module) with one
+`behaviors/cycle_done_detector` each, and lights a lamp per machine when its
+cycle is done. It is where those three blocks are built.
 
 `environment-sensor-hub` is a multi-probe station on ONE I2C bus: three
 temperature/humidity probes at different heights (SHT4x @0x44, SHT3x @0x45,
@@ -439,7 +445,7 @@ build it with no AWS account. `aws-iot-board-light` is the second product: a
 colour light on a C3 devkit's own LED and BOOT button. Every Wi-Fi chip (not esp32h2; not esp32p4 — esp-aws-iot does not list
 it).
 
-### MQTT (1)
+### MQTT (2)
 `mqtt-room-node` — first `frameworks: [mqtt]` product: light + DHT22
 temperature over Home Assistant MQTT discovery. Wi-Fi + broker configured on
 the serial console (guided `mqtt-setup`, or `mqtt-wifi` / `mqtt-broker`, all
@@ -449,7 +455,7 @@ ship with IDF — no managed components. Every Wi-Fi chip (not esp32h2); on
 esp32p4 the Wi-Fi is the companion radio's, reached over esp_wifi_remote.
 **44 of 53 device types carry `mqtt_*` bindings** — full HA coverage:
 switch/outlet, light (brightness + color-temp), sensor (temperature,
-humidity, power, energy, air quality…), binary_sensor (motion, contact,
+humidity, soil moisture, power, energy, air quality…), binary_sensor (motion, contact,
 leak, freeze, smoke/CO), fan, cover, climate (thermostat heat / AC cool),
 lock (LOCK+UNLOCK — unlike voice, HA is an authenticated controller),
 number (setpoints), select (appliance modes), and **device_triggers** for
@@ -460,6 +466,12 @@ without are `# MQTT-absent` with reasons (4 remaining controllers, 2 with
 no params, device_energy_management). Full key names in discovery JSON,
 plain payload values, never value_template. First framework the EMULATOR verifies end-to-end
 (esp-emu --net user; boot + unconfigured path proven on a virtual esp32c3).
+
+`battery-door-sensor` — a reed switch on battery: `behaviors/deep_sleep_cycle`
+wakes it on either edge of the contact (and hourly), sleeps once the broker has
+acknowledged the retained state, and signs off cleanly so Home Assistant keeps
+it available between wakes. It is where that behavior and its MQTT hook are
+built.
 
 ### Display panels (2)
 `drivers/display_ili9341_spi` — 240x320 SPI TFT, the ubiquitous cheap panel;
@@ -715,9 +727,11 @@ pnpm exec tsx scripts/validate-templates.ts --strict
   expose controller endpoints but emit no commands. Need
   `behaviors/emit_onoff_toggle`, `behaviors/emit_level_step`,
   `behaviors/emit_color_step`.
-- **Matter 1.5/1.6 device types** — `soil_moisture_sensor`, cameras. NO LONGER
-  BLOCKED: esp_matter is 1.6.0 (spec 1.6) since the ESP-IDF 6 move. This is now
-  work someone can just do.
+- **Matter 1.5/1.6 device types** — cameras. NO LONGER BLOCKED: esp_matter is
+  1.6.0 (spec 1.6) since the ESP-IDF 6 move. This is now work someone can just
+  do. (`device_types/soil_sensor` is done: SoilMeasurement wired from
+  `drivers/soil_moisture_adc`, plus MQTT / webui / display / RainMaker; no
+  Zigbee — esp-zigbee-lib 2.x has no Soil Moisture cluster.)
 - **ESP-Mosaico, remaining** — every peripheral in the user guide's pin table is
   wired except the 1 Gbit SPI NAND (no block exposes flash storage yet) and the
   camera on the 2×10P module headers (`drivers/camera_motion_v4l2` builds; the

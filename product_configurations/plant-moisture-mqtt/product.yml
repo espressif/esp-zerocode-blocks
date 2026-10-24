@@ -1,0 +1,61 @@
+id: plant-moisture-mqtt
+name: Plant Moisture Monitor (MQTT)
+description: >-
+  Wi-Fi soil moisture monitor for a plant pot — a capacitive probe read on an
+  ADC pin, reported to Home Assistant over plain MQTT as a Moisture sensor in
+  percent, discovered automatically the moment the node connects. Configure
+  Wi-Fi + broker over the serial console.
+keywords: [mqtt, home assistant, soil, moisture, plant, capacitive, sensor]
+
+# Onboarding is the serial console (mqtt-wifi <ssid> <pass>, then
+# mqtt-broker <uri> [user] [pass]) persisted in NVS. The probe is calibrated
+# there too, after flashing: soil-cal dry (in air), soil-cal wet (in water),
+# soil-cal show — registered by drivers/soil_moisture_adc, kept in NVS.
+frameworks: [mqtt]
+
+# GPIO4 is an ADC1 pin on the C3/C6/S3/H2; on the classic ESP32 it is ADC2,
+# whose reads fail while Wi-Fi is up — use GPIO32-39 there.
+ci_chips: [esp32c3]
+
+instances:
+  # ── The probe: capacitive soil moisture sensor v1.2, AOUT on GPIO4 ──
+  - block: drivers/soil_moisture_adc
+    prefix: SOIL
+    cfg:
+      gpio: 4
+      dry_raw: 3000
+      wet_raw: 1300
+      value_param: APP_DRIVER_PARAM_SOIL_MOISTURE
+
+  - block: device_types/soil_sensor
+    prefix: PLANT
+    cfg:
+      label: Soil Moisture
+      value_param: APP_DRIVER_PARAM_SOIL_MOISTURE
+
+  # ── Status LED: solid = broker connected, breathe = lost ──────────
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - block: behaviors/commissioning_led
+    prefix: COMM_LED
+    cfg:
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Plant Moisture Monitor

@@ -42,6 +42,14 @@ static int64_t s_{{prefix_lc}}_last_move_ms = 0;
 static int s_{{prefix_lc}}_fail = 0;
 static uint32_t s_{{prefix_lc}}_vib_x16 = 0;      /* EMA of |a|-1g, mg x 16 */
 static uint16_t s_{{prefix_lc}}_vib_pub = 0xFFFF;  /* last published level   */
+{{#if cfg.activity_param}}
+/* Activity window: per-axis sums of (raw - first sample), raw LSB. */
+static int32_t s_{{prefix_lc}}_act_ref[3];
+static int64_t s_{{prefix_lc}}_act_sum[3];
+static int64_t s_{{prefix_lc}}_act_sq[3];
+static uint32_t s_{{prefix_lc}}_act_n = 0;
+static int64_t s_{{prefix_lc}}_act_start_ms = 0;
+{{/if}}
 
 static esp_err_t {{prefix_lc}}_rd(uint8_t reg, uint8_t *buf, size_t len)
 {
@@ -174,6 +182,40 @@ static void {{prefix_lc}}_poll_cb(void *arg)
             s_{{prefix_lc}}_vib_pub = level;
             app_driver_param_val_t vv = { .u16 = level };
             app_driver_set_param({{cfg.vibration_param}}, vv, APP_DRIVER_SOURCE_LOCAL);
+        }
+    }
+{{/if}}
+{{#if cfg.activity_param}}
+    {
+        int32_t raw[3] = { x, y, z };
+        if (s_{{prefix_lc}}_act_n == 0) {
+            for (int i = 0; i < 3; i++) {
+                s_{{prefix_lc}}_act_ref[i] = raw[i];
+                s_{{prefix_lc}}_act_sum[i] = 0;
+                s_{{prefix_lc}}_act_sq[i] = 0;
+            }
+            s_{{prefix_lc}}_act_start_ms = now_ms;
+        }
+        for (int i = 0; i < 3; i++) {
+            int64_t d = raw[i] - s_{{prefix_lc}}_act_ref[i];
+            s_{{prefix_lc}}_act_sum[i] += d;
+            s_{{prefix_lc}}_act_sq[i] += d * d;
+        }
+        s_{{prefix_lc}}_act_n++;
+        if (now_ms - s_{{prefix_lc}}_act_start_ms >= {{prefix}}_IMU_ACT_WINDOW_MS && s_{{prefix_lc}}_act_n >= 2) {
+            /* Variance about the window mean, exact in integers:
+               (n*sum(d^2) - sum(d)^2) / n^2, summed over the axes. */
+            int64_t n = s_{{prefix_lc}}_act_n;
+            int64_t var = 0;
+            for (int i = 0; i < 3; i++) {
+                var += (n * s_{{prefix_lc}}_act_sq[i] - s_{{prefix_lc}}_act_sum[i] * s_{{prefix_lc}}_act_sum[i]) / (n * n);
+            }
+            if (var < 0) var = 0;
+            /* RMS in LSB -> mg, keeping sub-LSB precision before the divide. */
+            uint32_t rms_mg = ({{prefix_lc}}_isqrt((uint64_t)var * 1000000ULL) + {{prefix}}_IMU_LSB_PER_G / 2) / {{prefix}}_IMU_LSB_PER_G;
+            app_driver_param_val_t av = { .u16 = (uint16_t)(rms_mg > 0xFFFF ? 0xFFFF : rms_mg) };
+            app_driver_set_param({{cfg.activity_param}}, av, APP_DRIVER_SOURCE_LOCAL);
+            s_{{prefix_lc}}_act_n = 0;
         }
     }
 {{/if}}

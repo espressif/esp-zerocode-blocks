@@ -20,7 +20,10 @@ radio: true
 # The binding is Home Assistant MQTT discovery: each device-type instance
 # publishes a retained discovery config (homeassistant/<component>/…/config),
 # subscribes its command topic, publishes its state topic. Availability rides
-# a Last-Will topic, so HA shows the device offline the moment it drops.
+# a Last-Will topic, so HA shows the device offline once the broker's keep-alive gives up on it.
+# A behavior that sleeps (behaviors/deep_sleep_cycle) hooks in through
+# mqtt_statics / mqtt_event_cases: it waits for the outbox to empty, then stops
+# the client, whose clean DISCONNECT means the broker never sends the will.
 #
 # ONBOARDING IS THE CONSOLE, deliberately. Unlike RainMaker (phone app) or
 # Matter (QR commissioning), a bare MQTT node has no companion app, so v1
@@ -56,3 +59,13 @@ onboarding:
       - "mqtt-broker <uri> [username] [password]"
     api: "app_mqtt_set_wifi, app_mqtt_set_broker, app_mqtt_configured (app_mqtt.h); app_console_read_line (app_console.h)"
     note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: mqtt-wifi does not exist and mqtt-setup asks for the broker only."
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  in_the_app: "Home Assistant finds it by itself and shows one device, named \"ZeroCode\" plus the board's 12-character hardware address, with one entity per device type, named by the label the spec gives it."
+  entity_kinds: "Each catalog device type appears in Home Assistant as a light, switch, fan, cover, lock, climate, sensor, binary sensor, number or select; a dimmer remote or scene button appears only as triggers for automations, with no state of its own."
+  not_announced: "A device type with no MQTT binding (doorbell, chime, light sensor, pressure sensor, heat pump, extractor hood and a few controller types) does not appear in Home Assistant."
+  offline: "When it loses power, Wi-Fi or the broker, Home Assistant marks it unavailable only once the broker's keep-alive gives up on it, not the moment it drops; a device that sleeps looks exactly like one that lost power, unless it signs off before sleeping, as behaviors/deep_sleep_cycle does."
+  reconnect: "It reconnects to Wi-Fi and the broker by itself, marks itself available again and re-sends each entity's current state, so changes made while it was offline arrive as the latest value, not one by one."
+  reset: "A factory reset erases the Wi-Fi and broker settings, so setup runs again, but the device keeps its name and entities in Home Assistant because they come from its hardware address."

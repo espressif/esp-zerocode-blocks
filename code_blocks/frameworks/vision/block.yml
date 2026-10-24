@@ -35,3 +35,14 @@ radio: false
 # Chips: esp32 + esp32s3 only — the DVP camera interface. c3/c5/c6/h2 have no
 # camera peripheral. esp32p4 has one (plus MIPI-CSI) but a different driver
 # story, so it is out of scope for this block until someone builds it.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  detects: "The camera notices movement only, by comparing each picture with the one before; it does not recognise people, faces or objects."
+  privacy: "Pictures are never stored, streamed or sent anywhere, and the camera cannot be viewed; detection runs on the device with no network."
+  in_the_app: "Movement reaches an app or controller only through an occupancy sensor, which reads occupied or clear."
+  hold: "Once movement is seen, occupied holds for a set time after the last movement, so a brief pause does not flip it back to clear."
+  false_alarms: "Anything that changes enough of the picture counts as movement, such as a curtain in a breeze or a big change in light, so its sensitivity is tuned where it is installed."
+  camera: "It needs a parallel (DVP) camera module of the ESP32-CAM kind; a USB or MIPI ribbon camera is not supported."
+  no_camera: "If the camera is missing or fails to start, the device still boots and runs everything else, without motion detection."

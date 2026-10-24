@@ -869,15 +869,15 @@ export function validateProduct(
   let boardUnresolved = false
   if (boardFile) {
     const ciChips = product.ci_chips ?? []
-    // The chips CI builds this product on and the chip the user's hardware
-    // carries have to be the same silicon, or the build proves nothing about
-    // the board it claims to be for.
-    const wrongCi = ciChips.filter((c) => c !== boardFile.chip)
-    if (wrongCi.length > 0) {
+    // CI has to build this product on the chip the board carries, or the
+    // build proves nothing about the board it claims to be for. Other chips
+    // in the list are other boards the product is proven on: a catalog
+    // product built on [esp32c6, esp32c3] applies to a C6 board.
+    if (ciChips.length > 0 && !ciChips.includes(boardFile.chip)) {
       errors.push({
         level: 'error',
         ...ctx,
-        message: `ci_chips [${ciChips.join(', ')}] disagrees with the board file's chip (${boardFile.chip}, board '${boardFile.selected}')`,
+        message: `the board's chip (${boardFile.chip}, board '${boardFile.selected}') is not among the chips this product is built on (ci_chips [${ciChips.join(', ')}])`,
       })
     }
   }

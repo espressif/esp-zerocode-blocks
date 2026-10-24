@@ -45,3 +45,14 @@ onboarding:
       - "agent-new"
       - "agent-status"
     note: "The refresh token comes from the Agents platform UI; run agent-token with no argument and paste it when it is longer than a console line (256 characters). Beside Matter, RainMaker or mqtt, Wi-Fi is theirs: agent-wifi does not exist."
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  setup: "The AI agent is created and configured on the ESP Private Agents dashboard (agents.espressif.com); the agent ID and refresh token typed into the device come from there, and the agent's personality and knowledge live there, not on the device."
+  tools: "The agent acts on the device only through tools the firmware offers, and each one must also be added, under the exact name the firmware uses, to the agent's configuration on the dashboard."
+  in_the_catalog: "The ready-made tools switch a light on or off, ask whether it is on, and read a temperature sensor; anything else the agent should do must be written for this product."
+  conversation: "Conversations are text only: the person types on the device's serial console and the reply is printed there; there is no voice, phone app or screen."
+  no_phone_setup: "There is no phone-app or QR-code setup."
+  power_loss: "Wi-Fi details, agent ID and token are kept through power loss; after a restart or a dropped connection the device reconnects by itself."
+  offline: "Without internet the agent is unavailable but the rest of the device keeps working, and an unconfigured device boots normally and says what is missing."

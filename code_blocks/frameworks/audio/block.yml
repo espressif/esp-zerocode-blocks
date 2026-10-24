@@ -47,3 +47,13 @@ radio: false
 early_build:
   partition_table: 8mb-voice
   min_flash_mb: 8
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  listening: "After the wake word the device listens for ONE command for up to 6 seconds, then waits again; every command needs the wake word first."
+  commands: "It understands only a fixed list of short English phrases that come with each device, such as \"turn on the light\" or \"make it brighter\"; the spec may reword them, but it cannot follow free speech, questions or spoken numbers."
+  offline: "All recognition happens on the device: no internet, account or cloud, and nothing said leaves the device."
+  no_reply: "The device never speaks back; a status LED can blink fast while it listens, if the spec includes one."
+  hardware: "Voice needs PSRAM and at least 8 MB of flash (16 MB beside Matter, RainMaker or BLE Mesh); without PSRAM the rest of the product runs but voice stays off."
+  microphone: "It listens through an I2S microphone wired to the board (an INMP441-type module), not a board's own codec microphone, and it does not cancel sound the device itself plays, so its own speaker can drown out a command."

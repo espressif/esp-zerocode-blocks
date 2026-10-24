@@ -13,9 +13,10 @@ radio: true
 # and rendering its main_includes / main_init slots into app_main.cpp.
 #
 # THE BINDING: device types contribute webui_entities rows — a static
-# manifest entry per control ({label, kind, param, min, max, scale}).
+# manifest entry per control ({label, kind, param, min, max, scale, step}).
 # ONE embedded page (~3 KB, no external assets) renders the manifest:
-# toggle / slider / value / binary, polling GET /api/state and sending
+# toggle (off = min, on = max) / slider / number (- and + by step, shown
+# divided by scale) / value / binary, polling GET /api/state and sending
 # POST /api/set with an X-ZC-Request header (a GET or a header-less request is
 # refused, so a page elsewhere cannot drive the device cross-site). Params
 # travel BY NAME in the API, mapped to enums by a generated table.
@@ -30,3 +31,14 @@ radio: true
 # pattern as mqtt's; the engine's wifiOwner() picks the one owner).
 #
 # esp_http_server ships with IDF; espressif/mdns is the one managed dep.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  the_page: "The page has one row per control (an on/off switch, a slider for brightness, level or fan speed, a number with - and + buttons such as a thermostat's target temperature, a reading, or an active/clear state) and refreshes itself every few seconds; it needs no app and no internet."
+  covered_devices: "Only these device types put controls on the page: light, dimmable light, smart plug, dimmable plug, wall switch, wall dimmer, water valve, fan (speed only), thermostat, temperature sensor, humidity sensor, soil moisture sensor, occupancy sensor and door lock; any other device type is missing from it."
+  thermostat: "A thermostat shows its room temperature, a target temperature set with - and + in half-degree steps from 5 to 35 °C, and a heating on/off switch; whether the heat is running right now is shown only when the heat output is wired to the thermostat (its heating_param), and there is no cooling, schedule or fan mode on the page."
+  lock: "A door lock's state is shown, but it cannot be locked or unlocked from the page."
+  no_login: "The page has no login: anyone who can reach it (anyone on the device's own network, or anyone on the home network when it shares one) can operate every control on it."
+  own_network_limits: "On its own network at most 4 phones or computers can join at once, and a phone joined to it has no internet while connected."
+  reset: "A factory reset makes a new network password, printed in the boot log again; the network name and page address stay the same because they come from the hardware address."
