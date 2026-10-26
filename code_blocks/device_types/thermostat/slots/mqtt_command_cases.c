@@ -23,5 +23,10 @@ if (tlen == (int)strlen(s_{{prefix_lc}}_mode_cmd_topic) &&
         app_driver_set_param({{cfg.system_mode_param}}, v, s_handle);
         zc_mqtt_publish(s_{{prefix_lc}}_mode_state_topic, "heat", 0, 1, true);
     }
+{{#if cfg.heating_param}}
+    /* The bus does not hand this binding its own write back, so the action
+     * that follows the new mode is published here. */
+    {{prefix_lc}}_publish_action();
+{{/if}}
     return;
 }
