@@ -38,10 +38,61 @@ static void {{prefix_lc}}_board_button_cb(void *arg, void *usr_data)
 static void {{prefix_lc}}_double_click_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; {{prefix_lc}}_on_double_click(); }
 static void {{prefix_lc}}_long_press_cb(void *arg, void *usr_data)   { (void)arg; (void)usr_data; {{prefix_lc}}_on_long_press(); }
 {{#if cfg.factory_reset_ms}}
+/* Factory-reset hold feedback: app_factory_reset_hold_started() once the press
+ * has lasted the cue (a one-shot esp_timer from press-down — iot_button never
+ * fires a per-callback long press shorter than the DEVICE's long-press time,
+ * which is the board's), app_factory_reset_hold_cancelled() on a release
+ * before the reset. Everything here runs on the esp_timer task, as the button
+ * callbacks do, so the two flags need no lock. */
+#define {{prefix}}_FR_HOLD_MS {{cfg.factory_reset_ms}}
+#define {{prefix}}_FR_CUE_CFG_MS {{cfg.reset_cue_ms}}
+#define {{prefix}}_FR_CUE_MS ({{prefix}}_FR_CUE_CFG_MS > 0 ? {{prefix}}_FR_CUE_CFG_MS : ({{cfg.long_press_ms}} < {{prefix}}_FR_HOLD_MS ? {{cfg.long_press_ms}} : 1000))
+static esp_timer_handle_t s_{{prefix_lc}}_fr_cue = NULL;
+static bool s_{{prefix_lc}}_fr_held = false;   /* started was called for this press */
+static bool s_{{prefix_lc}}_fr_fired = false;  /* the reset fired during this press */
+
+static void {{prefix_lc}}_fr_cue_cb(void *arg)
+{
+    (void)arg;
+    if (s_{{prefix_lc}}_fr_held || s_{{prefix_lc}}_fr_fired) return;
+    s_{{prefix_lc}}_fr_held = true;
+    ESP_LOGI(TAG, "{{prefix_lc}}: held %d ms — factory reset at %d ms unless released", (int){{prefix}}_FR_CUE_MS, (int){{prefix}}_FR_HOLD_MS);
+    app_factory_reset_hold_started();
+}
+static void {{prefix_lc}}_fr_down_cb(void *arg, void *usr_data)
+{
+    (void)arg; (void)usr_data;
+    s_{{prefix_lc}}_fr_held = false;
+    s_{{prefix_lc}}_fr_fired = false;
+    if (s_{{prefix_lc}}_fr_cue) {
+        esp_timer_stop(s_{{prefix_lc}}_fr_cue);
+        esp_timer_start_once(s_{{prefix_lc}}_fr_cue, (uint64_t){{prefix}}_FR_CUE_MS * 1000ULL);
+    }
+}
+static void {{prefix_lc}}_fr_up_cb(void *arg, void *usr_data)
+{
+    (void)arg; (void)usr_data;
+    if (s_{{prefix_lc}}_fr_cue) esp_timer_stop(s_{{prefix_lc}}_fr_cue);
+    if (s_{{prefix_lc}}_fr_held && !s_{{prefix_lc}}_fr_fired) {
+        ESP_LOGI(TAG, "{{prefix_lc}}: released before the factory reset — cancelled");
+        app_factory_reset_hold_cancelled();
+    }
+    s_{{prefix_lc}}_fr_held = false;
+    s_{{prefix_lc}}_fr_fired = false;
+}
 static void {{prefix_lc}}_factory_reset_cb(void *arg, void *usr_data)
 {
     (void)arg; (void)usr_data;
+    if (s_{{prefix_lc}}_fr_cue) esp_timer_stop(s_{{prefix_lc}}_fr_cue);
+    if (!s_{{prefix_lc}}_fr_held) {
+        s_{{prefix_lc}}_fr_held = true;
+        app_factory_reset_hold_started();
+    }
+    s_{{prefix_lc}}_fr_fired = true;
     ESP_LOGW(TAG, "{{prefix_lc}}: held {{cfg.factory_reset_ms}} ms — factory reset");
-    app_utils_factory_reset();
+    if (app_utils_factory_reset() != ESP_OK) {
+        /* The erase failed and the device carries on: end the feedback. */
+        app_factory_reset_hold_cancelled();
+    }
 }
 {{/if}}

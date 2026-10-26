@@ -5,3 +5,14 @@ params:
   gpio_b: { type: int, required: true }
   active_level: { type: int, default: 0 }
   hold_time_ms: { type: int, default: 5000 }
+  reset_cue_ms:
+    type: int
+    default: 1000
+    description: >-
+      How long both buttons are held together before the base's
+      app_factory_reset_hold_started() runs (app_utils.h); either released
+      after it and before hold_time_ms, app_factory_reset_hold_cancelled()
+      runs. Checked every 100 ms.
+
+facts:
+  reset_hold_feedback: "Both buttons held past reset_cue_ms (1 s) call app_factory_reset_hold_started() and releasing either early calls app_factory_reset_hold_cancelled() (app_utils.h, weak, defined in app_logic) — feedback during the hold goes there, never a second poll of the two pins."

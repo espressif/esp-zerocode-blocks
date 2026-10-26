@@ -187,6 +187,16 @@ second `factory_reset` console command: esp_console keeps one of two same-named
 commands, so one silently replaces the other. `check.py` fails a block slot
 that calls `nvs_flash_erase()` itself or names a `"factory_reset"` command.
 
+Every hold-to-reset path (`board_button`'s `factory_reset_ms`,
+`factory_reset_long_press`, `factory_reset_button_combo`) also calls the weak
+`app_factory_reset_hold_started()` once the press has lasted its
+`reset_cue_ms` and `app_factory_reset_hold_cancelled()` when it is released
+before the reset (app_utils.h), so a product shows feedback during the hold
+without touching the button block's callbacks. The cue is a one-shot
+`esp_timer` from press-down, not a per-callback long press: iot_button never
+fires one shorter than the DEVICE's long-press time, which on a shared pin is
+whoever created the device. Tested by `engine/tests/factory-reset-hold.test.mjs`.
+
 ## Block slots
 
 Each block contributes code via named `slots` in `block.yml`. The

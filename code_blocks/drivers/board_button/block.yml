@@ -81,7 +81,20 @@ params:
       (the behaviors/factory_reset_long_press action, on the board's own
       button — that block takes a gpio and so cannot be pointed at a board
       device). Make it longer than long_press_ms when both are used: the
-      long-press hook fires first, on the way.
+      long-press hook fires first, on the way. While the hold is counted
+      down the base's app_factory_reset_hold_started() /
+      app_factory_reset_hold_cancelled() hooks run (app_utils.h; see
+      reset_cue_ms).
+  reset_cue_ms:
+    type: int
+    default: 0
+    description: >-
+      With factory_reset_ms set: how long a press lasts before
+      app_factory_reset_hold_started() runs — the moment the press stops
+      being any other gesture and the reset is being counted down. Released
+      after it and before factory_reset_ms, app_factory_reset_hold_cancelled()
+      runs. 0 = long_press_ms when that is shorter than factory_reset_ms
+      (the long press fires first, then the feedback), else 1000.
 
 driver_params:
   target_param:
@@ -107,6 +120,13 @@ driver_params:
 # default logs "<prefix>: <gesture> (no handler)", which is how a missing or
 # misspelled override shows up in a device log instead of not at all.
 #
+# RESET FEEDBACK. With factory_reset_ms set, the block also calls the base's
+# app_factory_reset_hold_started() at reset_cue_ms and
+# app_factory_reset_hold_cancelled() on an early release (app_utils.h). A
+# product that wants "LED full blue while held" defines those two — it never
+# unregisters this block's callbacks or re-implements the button, which is how
+# the click toggle and the reset itself get lost.
+#
 # WHY HOOKS RATHER THAN MORE PARAMS. Before 2026-10, this block offered a
 # single click that toggles one bool and nothing else, and every gpio button
 # block (multi_event_button, factory_reset_long_press) is — correctly — an IO
@@ -115,3 +135,6 @@ driver_params:
 # its writer learned iot_button from source instead (108 lookups across six
 # runs of one product). What a gesture DOES is the product's; how to detect it
 # on the board's device is this block's.
+
+facts:
+  reset_hold_feedback: "With factory_reset_ms set, a press held past reset_cue_ms calls app_factory_reset_hold_started() and an early release app_factory_reset_hold_cancelled() (app_utils.h, weak, defined in app_logic) — feedback during the hold goes there; the block's own callbacks are never unregistered or re-registered, so its click, long press and reset keep working."
