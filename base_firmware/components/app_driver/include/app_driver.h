@@ -30,6 +30,7 @@
 #pragma once
 
 #include <esp_err.h>
+#include <stdint.h>
 #include "app_driver_types.h"
 
 #ifdef __cplusplus
@@ -195,6 +196,22 @@ esp_err_t app_driver_get_param(
  * @return true once the param has carried a real value
  */
 bool app_driver_param_seen(app_driver_param_id_t id);
+
+/**
+ * esp_timer time (µs since boot) of the last write of a parameter — EVERY
+ * app_driver_set_param(), including one that changed nothing (which is not
+ * notified), and every app_driver_fire_event(). 0 if never written.
+ *
+ * An unchanged write is not notified, so a listener cannot tell "the sensor is
+ * alive and reads the same value" from "the sensor stopped" by value changes.
+ * Ask this instead (now - written > a few poll intervals = stale), or wire the
+ * driver's status param, which says so directly. Cheap: one read under the
+ * bus lock.
+ *
+ * @param id  Parameter to check
+ * @return esp_timer_get_time() of its last write, or 0
+ */
+int64_t app_driver_param_written_us(app_driver_param_id_t id);
 
 #ifdef __cplusplus
 }

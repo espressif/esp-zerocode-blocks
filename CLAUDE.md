@@ -136,6 +136,18 @@ that sent nothing on the second press. A deduped write now logs at DEBUG
 (`set_param(N) unchanged — not propagated`) so the swallow is at least visible
 in a device log.
 
+### An unchanged write leaves only a timestamp
+
+Because `set_param` dedups, a sensor reading the same value every poll is
+indistinguishable, by notifications, from one that stopped. Product code must
+never infer staleness from value changes (a steady 12.0 °C read as "stale" after
+15 s stopped a heater answering its target). Two signals exist: the driver's
+`status_param` (ds18b20, aht21, dht22, bh1750, hcsr04 — true after a good read,
+false after a failed one), and `app_driver_param_written_us(id)` — the
+`esp_timer` time of the param's last write, unchanged writes and events
+included, 0 if never written. Each sensor driver says so in its `facts:`, and
+`base_firmware/facts.yml` carries the rule for every product.
+
 ### A late listener is handed the current values
 
 Drivers and behaviors take their first reading during init, before

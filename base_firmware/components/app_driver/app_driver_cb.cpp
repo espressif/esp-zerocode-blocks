@@ -21,6 +21,7 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <esp_timer.h>
 #include <string.h>
 
 static const char *TAG = "app_driver_cb";
@@ -53,6 +54,9 @@ static bool s_param_seen[APP_DRIVER_PARAM_MAX];
  * solution. */
 static uint32_t s_write_seq = 0;
 static uint32_t s_param_seq[APP_DRIVER_PARAM_MAX];
+/* esp_timer time of each param's last write, unchanged writes included: the
+ * only liveness signal a deduped set_param leaves behind. */
+static int64_t s_param_written_us[APP_DRIVER_PARAM_MAX];
 /* Set by app_main before app_logic_init(): from then on a new registration is
  * handed the current value of every param already written. */
 static bool s_replay_on_register = false;
@@ -160,7 +164,9 @@ esp_err_t app_driver_set_param(
     solution_slot_t snapshot[APP_DRIVER_MAX_SOLUTIONS];
     uint8_t count;
 
+    int64_t now_us = esp_timer_get_time();
     portENTER_CRITICAL(&s_lock);
+    s_param_written_us[id] = now_us;
     bool unchanged = s_param_seen[id] && (memcmp(&s_params[id], &val, sizeof(val)) == 0);
     if (unchanged) {
         portEXIT_CRITICAL(&s_lock);
@@ -245,10 +251,12 @@ esp_err_t app_driver_fire_event(
     solution_slot_t snapshot[APP_DRIVER_MAX_SOLUTIONS];
     uint8_t count;
 
+    int64_t now_us = esp_timer_get_time();
     portENTER_CRITICAL(&s_lock);
     s_params[id] = val;
     s_param_seen[id] = true;
     s_param_seq[id] = ++s_write_seq;
+    s_param_written_us[id] = now_us;
     memcpy(snapshot, s_solutions, sizeof(s_solutions));
     count = s_solution_count;
     portEXIT_CRITICAL(&s_lock);
@@ -303,3 +311,14 @@ esp_err_t app_driver_get_param(
     return ESP_OK;
 }
 
+
+int64_t app_driver_param_written_us(app_driver_param_id_t id)
+{
+    if (id >= APP_DRIVER_PARAM_MAX) {
+        return 0;
+    }
+    portENTER_CRITICAL(&s_lock);
+    int64_t at = s_param_written_us[id];
+    portEXIT_CRITICAL(&s_lock);
+    return at;
+}
