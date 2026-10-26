@@ -234,18 +234,18 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
       path.join(outDir, 'components/app_matter/app_matter.cpp'),
       genAppMatterCpp(rendered),
     )
-    if (hasDeviceTypes) {
-      await writeFileMk(
-        path.join(outDir, 'components/app_matter/CMakeLists.txt'),
-        `idf_component_register(
+    // Written with or without device types: the generated app_matter.cpp
+    // needs app_utils, which an older catalog's own CMakeLists lacks.
+    await writeFileMk(
+      path.join(outDir, 'components/app_matter/CMakeLists.txt'),
+      `idf_component_register(
     SRCS "app_matter.cpp"
     INCLUDE_DIRS "include"
     REQUIRES espressif__esp_matter
-    PRIV_REQUIRES app_driver app_config
+    PRIV_REQUIRES app_driver app_config app_utils
 )
 `,
-      )
-    }
+    )
   }
   const hasRainmaker = rendered.some(r => isFramework(r, 'rainmaker'))
   if (hasRainmaker) {
@@ -1197,15 +1197,20 @@ export function genAppMatterCpp(rendered: RenderedInstance[]): string {
   // Defaulted slot: a `matter_last_fabric_cases` contribution replaces this code.
   // Some handler must exist — with none, a device removed from its last fabric
   // can never be commissioned again.
+  // The product's own factory-reset hook runs first, as on every other reset
+  // path (app_utils_factory_reset): esp_matter::factory_reset() erases NVS and
+  // reboots without it.
   const lastFabricCases = collectSlot(rendered, 'matter_last_fabric_cases', 4) ||
 `    if (event->Type == chip::DeviceLayer::DeviceEventType::kFabricRemoved &&
         chip::Server::GetInstance().GetFabricTable().FabricCount() == 0) {
         ESP_LOGW(TAG, "Last fabric removed — factory reset to out-of-box state");
+        app_factory_reset_hook();
         esp_matter::factory_reset();
     }`
   return `#include "app_matter.h"
 #include "app_driver.h"
 #include "app_config.h"
+#include "app_utils.h"
 
 #include <esp_log.h>
 #include <esp_matter.h>

@@ -63,9 +63,11 @@ esp_err_t app_utils_ledc_timer_config(ledc_timer_config_t *cfg, uint32_t *max_du
  * `factory_reset` console command: the console keeps only one of two commands
  * with the same name.
  *
- * It may run on any task (a button's timer task) and at boot (a power-cycle
- * reset, before the product's own init), so it must not block for long or
- * rely on the product being initialized. Nothing it does can stop the reset.
+ * It may run on any task (a button's timer task), at boot (a power-cycle
+ * reset, before the product's own init) and on the Matter thread (removal
+ * from the last fabric, just before esp_matter::factory_reset()), so it must
+ * not block for long, wait on Matter work, or rely on the product being
+ * initialized. Nothing it does can stop the reset.
  */
 void app_factory_reset_hook(void);
 
