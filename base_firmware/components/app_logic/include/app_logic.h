@@ -17,6 +17,10 @@
 
 #include <esp_err.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Initialize the composed behaviors (console commands, persistence, factory
  * reset, diagnostics, …). GENERATED into zc_behaviors.cpp and called by
@@ -29,3 +33,7 @@ esp_err_t zc_behaviors_init(void);
  * The product's own entry point — app_logic.cpp.
  */
 esp_err_t app_logic_init(void);
+
+#ifdef __cplusplus
+}
+#endif

@@ -13,13 +13,13 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_smoke_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.smoke_state_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_smoke_topic,
-                                (init.u8 != 0) ? "ON" : "OFF", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_smoke_topic,
+                        (init.u8 != 0) ? "ON" : "OFF", 0, 1, true);
     }
     snprintf(s_{{prefix_lc}}_co_topic, sizeof(s_{{prefix_lc}}_co_topic),
              "zerocode/%s/{{prefix_lc}}/co", s_node_id);
@@ -35,12 +35,12 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_co_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.co_state_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_co_topic,
-                                (init.u8 != 0) ? "ON" : "OFF", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_co_topic,
+                        (init.u8 != 0) ? "ON" : "OFF", 0, 1, true);
     }
 }

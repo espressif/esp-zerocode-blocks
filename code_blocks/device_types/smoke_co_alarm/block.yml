@@ -29,4 +29,7 @@ driver_params:
     required: true
     description: Driver param ID for CO state (uint8 — same encoding)
 
+facts:
+  fixed_class: "Over MQTT its Home Assistant classes are fixed to smoke and carbon_monoxide (Detected/Clear), so it is only for a real smoke or CO alarm; a product's own alert belongs in device_types/generic_binary_sensor with class problem or safety."
+
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

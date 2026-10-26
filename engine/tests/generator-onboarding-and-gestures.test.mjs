@@ -178,7 +178,7 @@ test('board_button: double click, long press and a factory-reset hold, on the bo
   assert.match(control, /iot_button_set_param\(btn_btn, BUTTON_SHORT_PRESS_TIME_MS, \(void \*\)\(intptr_t\)350\)/)
   assert.match(control, /btn_lp\.long_press\.press_time = 2000;/)
   assert.match(control, /btn_fr\.long_press\.press_time = 6000;[\s\S]*btn_factory_reset_cb/)
-  assert.match(control, /nvs_flash_erase\(\);\s*esp_restart\(\);/)
+  assert.match(control, /factory reset"\);\s*app_utils_factory_reset\(\);/)
   // still NO pin and no second device on the board's line
   assert.ok(!/app_button_get_or_create|gpio_config/.test(code(control)))
 })

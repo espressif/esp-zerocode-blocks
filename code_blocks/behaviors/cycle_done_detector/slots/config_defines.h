@@ -8,3 +8,6 @@
 #define {{prefix}}_CYC_QUIET_S     ({{cfg.quiet_minutes}} * 60)
 #define {{prefix}}_CYC_NVS_NS      "{{cfg.nvs_namespace}}"
 #define {{prefix}}_CYC_NVS_KEY     "{{cfg.nvs_key}}"
+/* A cycle running when the device restarted: true = carry on, false = drop it.
+ * Tested with a plain if, never #if: a C preprocessor reads `true` as 0. */
+#define {{prefix}}_CYC_RESUME      ({{cfg.resume_after_reboot}})

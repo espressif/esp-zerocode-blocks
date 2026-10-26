@@ -62,6 +62,17 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
             err(bid, 'target: must be a chip name (e.g. esp32h2)')
         else:
             block_targets[bid] = tgt
+    # `requires_frameworks: [fw, …]` — the block works only beside one of
+    # them (the engine's validator refuses a product without); each must be a
+    # framework folder.
+    rf = d.get('requires_frameworks')
+    if rf is not None:
+        if not (isinstance(rf, list) and rf and all(isinstance(f, str) for f in rf)):
+            err(bid, 'requires_frameworks: must be a non-empty list of framework names')
+        else:
+            for f in rf:
+                if not (ROOT / 'code_blocks' / 'frameworks' / f / 'block.yml').is_file():
+                    err(bid, f'requires_frameworks names "{f}", which is not a framework')
     for name, spec in (d.get('driver_params') or {}).items():
         if not isinstance(spec, dict) or 'type' not in spec:
             err(bid, f'driver_param "{name}" needs a type')
@@ -175,6 +186,22 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                  f'neither requires_bus: nor provides_bus:. Undeclared, "some other '
                  f'instance configured this port" is convention only — the product '
                  f'builds and the device is silent. See CLAUDE.md → Shared buses.')
+
+    # ── A FACTORY RESET GOES THROUGH app_utils_factory_reset(). ───────────
+    # It runs the product's app_factory_reset_hook() before erasing; a block
+    # that erases NVS itself skips the hook, and a second "factory_reset"
+    # console command silently replaces the base console's (esp_console keeps
+    # the last registration of a name).
+    for n in sorted(slot_names):
+        code = re.sub(r'/\*.*?\*/|//[^\n]*', '', slot_text[n], flags=re.S)
+        if re.search(r'\bnvs_flash_erase\s*\(\s*\)', code):
+            err(bid, f'slots/{n} calls nvs_flash_erase() directly: a factory reset is '
+                     f'app_utils_factory_reset() (app_utils.h), which runs the product\'s '
+                     f'app_factory_reset_hook() first.')
+        if re.search(r'"factory_reset"', code):
+            err(bid, f'slots/{n} names a "factory_reset" command: the base console already '
+                     f'registers it, and a second registration replaces the first. A product '
+                     f'that clears more defines app_factory_reset_hook() instead.')
 
     # ── A MATTER ENDPOINT WITH NO WIRING MUST SAY SO. ──────────────────────
     # 24 of the 53 device_types create a Matter endpoint and wire no
@@ -439,22 +466,21 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
             if mf is not None and not (isinstance(mf, int) and mf > 0):
                 err(fid, 'early_build.min_flash_mb must be a positive integer')
 
-# ONBOARDING: what a framework says its firmware already ships for first-run
-# onboarding is copied into every product's seed by the platform, so the spec
-# and the writer take it as fact. A command listed there that nothing registers
+# ONBOARDING: what a block (a framework, or a behavior that brings up the
+# network) says its firmware already ships for first-run onboarding is read by
+# the platform as fact (a framework's is copied into every product's seed), so
+# the spec and the writer take it as fact. A command listed there that nothing registers
 # is a spec the firmware cannot meet — so each listed command name must appear
 # as a registered string literal in the block's own sources or in the engine
 # (frameworks like mqtt and agents are generated there).
 _ENGINE_SRC = (ROOT / 'engine' / 'src' / 'generator.ts').read_text()
-for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
-    by = bd / 'block.yml'
-    if not by.is_file():
-        continue
+for by in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
+    bd = by.parent
     fw = yaml.safe_load(by.read_text()) or {}
     onb = fw.get('onboarding')
     if onb is None:
         continue
-    fid = f'frameworks/{bd.name}'
+    fid = bd.relative_to(ROOT / 'code_blocks').as_posix()
     con = onb.get('console') if isinstance(onb, dict) else None
     if not isinstance(onb, dict) or (con is not None and not isinstance(con, dict)):
         err(fid, 'onboarding: must be a mapping (e.g. `onboarding: { console: {...} }`)')
@@ -631,6 +657,13 @@ for manifest in sorted([*ROOT.glob('code_blocks/**/idf_component.yml'), *ROOT.gl
         if key in deprecated and owner not in deprecated[key]:
             err(rel.as_posix(), f'depends on {key}, which is deprecated (base_firmware/deprecated_components.yml) — use its replacements, or list {owner} under allowed_in with the reason')
 
+
+# MQTT PUBLISHES: an mqtt_* slot publishes with zc_mqtt_publish, which only
+# queues. esp_mqtt_client_publish blocks its caller on the network, and these
+# slots run on whatever task changed the param (often the esp_timer task).
+for slot in sorted(ROOT.glob('code_blocks/*/*/slots/mqtt_*')):
+    if 'esp_mqtt_client_publish' in slot.read_text():
+        err(slot.relative_to(ROOT).as_posix(), 'calls esp_mqtt_client_publish; use zc_mqtt_publish (same arguments without the client), which never blocks')
 
 # assembly must succeed (proves the authoring→consumption transform is valid)
 r = subprocess.run([sys.executable, str(ROOT / 'scripts/assemble_blocks.py'), '--check'],

@@ -505,6 +505,67 @@ export function ledcConflicts(
   return out
 }
 
+/** A block that `needs_internet` with nothing that `provides_internet`, and a
+ *  `singleton` block listed twice. Both build and link (or fail to link with a
+ *  duplicate symbol nobody can read) and then do nothing on the device. */
+export function networkIssues(
+  instances: ReadonlyArray<{ block?: string; prefix?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworkBlocks: ReadonlyMap<string, Block>,
+): string[] {
+  const out: string[] = []
+  const providers = [
+    ...instances.filter((i) => i.block && blocks.get(i.block)?.provides_internet).map((i) => i.block as string),
+    ...[...frameworkBlocks].filter(([, b]) => b.provides_internet).map(([n]) => `frameworks/${n}`),
+  ]
+  const needers = instances.filter((i) => i.block && blocks.get(i.block)?.needs_internet)
+  if (needers.length > 0 && providers.length === 0) {
+    const fws = [...blocks.values()].filter((b) => b.kind === 'framework' && b.provides_internet).map((b) => b.id.split('/').pop())
+    out.push(
+      `${[...new Set(needers.map((i) => i.block))].join(', ')} needs internet, and nothing in this product brings up a network — ` +
+      `add behaviors/wifi_station${fws.length ? `, or a framework that does (${fws.join(', ')})` : ''}`,
+    )
+  }
+  const seen = new Map<string, number>()
+  for (const i of instances) {
+    if (!i.block || !blocks.get(i.block)?.singleton) continue
+    seen.set(i.block, (seen.get(i.block) ?? 0) + 1)
+  }
+  for (const [id, n] of seen) if (n > 1) out.push(`${id} may be listed once; it is listed ${n} times`)
+  return out
+}
+
+/** A block listed without any of the frameworks it `requires_frameworks`:
+ *  every line of it lives in that framework's slots, so it would generate
+ *  nothing at all. */
+export function missingFrameworks(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworks: readonly string[],
+): string[] {
+  const out: string[] = []
+  for (const id of new Set(instances.map((i) => i.block).filter((b): b is string => !!b))) {
+    const need = blocks.get(id)?.requires_frameworks ?? []
+    if (need.length && !need.some((f) => frameworks.includes(f))) {
+      out.push(`${id} works only with the ${need.join(' or ')} framework, which this product does not select — add ${need.length > 1 ? 'one of them' : 'it'} to frameworks:, or drop the block`)
+    }
+  }
+  return out
+}
+
+/** A behavior that brings up Wi-Fi beside a framework that already does: it
+ *  defers at run time, so its setup commands configure nothing. */
+export function redundantNetwork(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworkBlocks: ReadonlyMap<string, Block>,
+): string[] {
+  const fws = [...frameworkBlocks].filter(([, b]) => b.provides_internet).map(([n]) => n)
+  if (fws.length === 0) return []
+  return [...new Set(instances.map((i) => i.block).filter((id): id is string => !!id && blocks.get(id)?.kind !== 'framework' && !!blocks.get(id)?.provides_internet))]
+    .map((id) => `${id} is redundant beside ${fws.join(', ')}, which already brings up Wi-Fi; it stands aside at run time — drop it`)
+}
+
 export function validateProduct(
   given: Product,
   blocks: Map<string, Block>,
@@ -802,6 +863,16 @@ export function validateProduct(
   }
 
   errors.push(...ledcConflicts(product.instances, blocks).map((message) => ({ level: 'error' as const, ...ctx, message })))
+
+  for (const message of networkIssues(product.instances, blocks, frameworkBlocks)) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of missingFrameworks(product.instances, blocks, product.frameworks ?? [])) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of redundantNetwork(product.instances, blocks, frameworkBlocks)) {
+    warnings.push({ level: 'warning', ...ctx, message })
+  }
 
   // ── Chip/pin compatibility ─────────────────────────────────────────────
   // Products are chip-agnostic, so a GPIO choice can be fine on one chip and

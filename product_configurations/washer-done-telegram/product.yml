@@ -1,0 +1,60 @@
+id: washer-done-telegram
+name: Washer Done Telegram
+description: >-
+  Sends a Telegram message to your phone when the washing machine has
+  finished. A vibration switch on the machine feeds a cycle monitor; when the
+  cycle ends the device messages you through your own Telegram bot over home
+  Wi-Fi, and a lamp stays lit until the next wash starts. Messages that cannot
+  be sent wait on the device and are retried until they get through.
+keywords: [laundry, washer, washing machine, done, finished, telegram, notification, phone, message, vibration, sw-420]
+
+# Framework-less: behaviors/wifi_station brings up Wi-Fi and
+# behaviors/telegram_notify sends the message. Pins are for the RISC-V parts.
+frameworks: []
+ci_chips: [esp32c3]
+
+instances:
+  - block: behaviors/wifi_station
+    prefix: WIFI
+    cfg: {}
+
+  - block: drivers/vibration_switch
+    prefix: WASHER_VIB
+    cfg:
+      gpio: 3
+      pull: pulldown
+      activity_param: APP_DRIVER_PARAM_WASHER_ACTIVITY
+      # Two days with no pulse is logged: unplugged, or nobody has washed.
+      stale_after_s: 172800
+
+  - block: behaviors/cycle_done_detector
+    prefix: WASHER
+    cfg:
+      activity_param: APP_DRIVER_PARAM_WASHER_ACTIVITY
+      running_param: APP_DRIVER_PARAM_WASHER_RUNNING
+      done_param: APP_DRIVER_PARAM_WASHER_DONE
+      nvs_key: washer_run
+
+  - block: behaviors/telegram_notify
+    prefix: TG
+    cfg:
+      trigger_param: APP_DRIVER_PARAM_WASHER_DONE
+      trigger_text: "The washing machine has finished."
+
+  # ── A "done" lamp ──
+  - block: drivers/relay
+    prefix: DONE_LAMP
+    cfg:
+      gpio: 6
+      param_id: APP_DRIVER_PARAM_WASHER_DONE
+
+  - block: behaviors/console_param_get
+    prefix: GET_WASHER_RUNNING
+    cfg:
+      command_name: washer-running
+      target_param: APP_DRIVER_PARAM_WASHER_RUNNING
+      value_kind: bool
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Washer Done

@@ -15,6 +15,10 @@
 
 #include <esp_err.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 esp_err_t app_zigbee_init(void);
 
 /**
@@ -24,3 +28,7 @@ esp_err_t app_zigbee_init(void);
  * stack. Also exposed as the `zb-bind` console command.
  */
 esp_err_t app_zigbee_start_finding_binding(void);
+
+#ifdef __cplusplus
+}
+#endif

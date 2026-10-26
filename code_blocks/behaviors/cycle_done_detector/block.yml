@@ -15,11 +15,20 @@ description: >-
 #                  machine gives them continuously) -> running = true,
 #                  done = false
 #   still busy     busy_active_seconds active seconds within the window: the
-#                  quiet clock restarts. A lone knock does not hold a finished
-#                  cycle open.
-#   finished       quiet for quiet_minutes AND the run lasted min_run_minutes
-#                  -> running = false, done = true. Quiet that comes earlier is
-#                  a false start (the machine was moved): back to idle, no done.
+#                  newest active second becomes the run's LAST active second.
+#                  A lone knock (fewer active seconds in the window) does not
+#                  move it, so it does not hold a finished cycle open.
+#   finished       quiet_minutes after the run's last active second -> running
+#                  = false, done = true, provided the run lasted
+#                  min_run_minutes. The run's length is from its FIRST active
+#                  second (the oldest one in the window when it started) to its
+#                  last active second, both counted. A shorter run is a false
+#                  start (the machine was moved): back to idle, no done.
+#
+# So the two rules an owner states hold exactly: "finished after N minutes
+# with no vibration" is quiet_minutes: N, counted from the last second the
+# activity reached the threshold; "a run shorter than M minutes never counts"
+# is min_run_minutes: M, measured over the vibration itself.
 #
 # done stays true until the NEXT run starts, so it re-arms only on a new cycle,
 # and every cycle is one false -> true change for whatever binds to it.
@@ -35,10 +44,15 @@ description: >-
 # boots beside a running machine starts from min_level and sees a run, rather
 # than learning the running machine as "idle". Set idle_level to fix it.
 #
-# REBOOT MID-CYCLE. running is kept in NVS (written only when it changes). A
-# device that restarts while a cycle runs comes back running with the minimum
-# run already served, so the cycle still ends in done; without it the shorter
-# remainder after the restart would read as a false start.
+# REBOOT MID-CYCLE. running is kept in NVS (written only when it changes). By
+# default a cycle that was running when the device restarted is DROPPED: idle,
+# no done, a log line. A power cut usually stops the machine as well, and
+# carrying the cycle on would end it, a quiet time later, in a "done" for a
+# wash that never finished. resume_after_reboot: true is for a device that
+# restarts on its own while the machine keeps running (a separate supply, a
+# watchdog): it comes back running with the minimum run already served, so the
+# cycle still ends in done; without that the shorter remainder after the
+# restart would read as a false start.
 #
 # UNITS. min_level, margin and idle_level are in the activity source's own
 # unit — mg RMS from drivers/mpu6050 (noise ~5, washers tens to hundreds),
@@ -53,38 +67,61 @@ params:
     type: int
     default: 15
     description: >-
-      Lowest activity that ever counts as running, in the source's unit. Keep
-      it well above the sensor's resting noise (mpu6050 ~5 mg).
+      Lowest activity that ever counts as running, in the activity source's
+      unit: mg RMS from drivers/mpu6050, pulses PER MINUTE from
+      drivers/vibration_switch (N pulses per second = N x 60). Keep it well
+      above the sensor's resting noise (mpu6050 ~5 mg).
   margin:
     type: int
     default: 10
-    description: How far above the idle level the activity must rise to count.
+    description: >-
+      How far above the idle level the activity must rise to count, in the
+      activity source's unit (mg RMS, or pulses per minute).
   idle_level:
     type: int
     default: -1
-    description: Resting activity level; -1 learns it while the machine is idle.
+    description: >-
+      Resting activity level in the activity source's unit (mg RMS, or pulses
+      per minute); -1 learns it while the machine is idle.
   window_seconds:
     type: int
     default: 120
-    description: Sliding window the active seconds are counted in (10-600).
+    description: Sliding window, in seconds, the active seconds are counted in (10-600).
   start_active_seconds:
     type: int
     default: 30
-    description: Active seconds within the window that start a run.
+    description: >-
+      Active seconds (seconds whose activity reached the threshold) within the
+      window that start a run.
   busy_active_seconds:
     type: int
     default: 10
-    description: Active seconds within the window that mean a run is still going (restart the quiet clock).
+    description: >-
+      Active seconds within the window that mean a run is still going: the
+      newest of them is the run's last active second, which the quiet time
+      counts from. Fewer (a lone knock) do not move it.
   min_run_minutes:
     type: int
     default: 10
-    description: A run shorter than this never reports done (a false start).
+    description: >-
+      A run shorter than this never reports done (a false start). Measured
+      from the run's first active second to its last, both counted.
   quiet_minutes:
     type: int
     default: 15
     description: >-
-      Quiet time that ends a run. Must exceed the machine's longest mid-cycle
+      Minutes with no active second, counted from the run's last active
+      second, that end it: done arrives exactly this long after the
+      vibration stops. Must exceed the machine's longest mid-cycle
       pause (washer fill/soak/drain 2-15 min); 5 is enough for a dryer.
+  resume_after_reboot:
+    type: bool
+    default: false
+    description: >-
+      false (default): a cycle running when the device restarts (power cut,
+      crash) is dropped — no done for it. true: it carries on and still ends
+      in done; only for a device that can restart while the machine keeps
+      running.
   nvs_namespace:
     type: string
     default: app
@@ -106,3 +143,9 @@ driver_params:
     type: bool
     required: true
     description: Published — true once a cycle has finished, until the next one starts.
+
+facts:
+  activity_unit: "Its levels (min_level, margin, idle_level) are in the activity source's unit, checked once a second: mg RMS from drivers/mpu6050, pulses per minute from drivers/vibration_switch, so a requirement of N vibration pulses per second is a min_level of N x 60."
+  reboot: "A cycle running when the device loses power or restarts is dropped by default, with no done for it, because a power cut usually stops the machine too; resume_after_reboot: true carries it on to done instead, for a device that can restart while the machine keeps running."
+  running: "busy_active_seconds is how many vibrating seconds the window must hold for the run to count as still going: an owner's \"running while any second of the last N minutes had vibration\" is busy_active_seconds: 1 with window_seconds N x 60; a larger value ends a run during quiet phases (a soak) that still vibrate now and then."
+  timing: "quiet_minutes N means done exactly N minutes after the last second the vibration reached the threshold, and min_run_minutes M means a run whose vibration lasted less than M minutes (first to last vibrating second) never reports done, so an owner's \"finished after N minutes with no vibration\" and \"a run shorter than M minutes never counts\" are those two params as stated."

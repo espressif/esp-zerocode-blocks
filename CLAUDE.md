@@ -136,6 +136,20 @@ that sent nothing on the second press. A deduped write now logs at DEBUG
 (`set_param(N) unchanged — not propagated`) so the swallow is at least visible
 in a device log.
 
+### A late listener is handed the current values
+
+Drivers and behaviors take their first reading during init, before
+`app_logic_init()` registers the product's own solution, and a later identical
+reading is deduped — so a product listener would not see a param until it
+CHANGED. `app_main` calls `app_driver_replay_on_register(true)` just before
+`app_logic_init()`: from then on `app_driver_register_solution()` calls the new
+callback once per param already written, with its current value and source
+`APP_DRIVER_SOURCE_RESTORE` (state, not an event). No other solution is
+notified, dedup is unchanged, and a param written after the registration is
+left to that write's own notification. Frameworks and behaviors register
+earlier and keep the plain behaviour. Tested by
+`base_firmware/components/app_driver/test/run.sh`.
+
 ### Actuators must be born safe
 
 `gpio_config()` and `ledc_channel_config()` drive the pin the moment they are
@@ -157,6 +171,19 @@ code is its boot behaviour**, and no later code can undo it:
   use. 13-bit at 20 kHz is out of reach on the H2 and S3, and the fixed value
   aborted the boot through `ESP_ERROR_CHECK`. An unreachable frequency logs and
   leaves the output off instead.
+
+### A factory reset is `app_utils_factory_reset()`
+
+Every factory-reset path — the base console's `factory_reset`, the
+`factory_reset_*` behaviors, `board_button`'s `factory_reset_ms` hold — calls
+`app_utils_factory_reset()` (base `app_utils`): it runs the weak
+`app_factory_reset_hook()`, erases the default NVS partition and reboots. A
+product that keeps data elsewhere (its own partition, the fctry values) defines
+the hook in a file under `components/app_logic/` (WHOLE_ARCHIVE, so a file
+holding only the definition is linked) with C linkage. It never registers a
+second `factory_reset` console command: esp_console keeps one of two same-named
+commands, so one silently replaces the other. `check.py` fails a block slot
+that calls `nvs_flash_erase()` itself or names a `"factory_reset"` command.
 
 ## Block slots
 
@@ -190,9 +217,14 @@ Beyond slots, a block can also contribute:
 | `params` | Schema for `cfg` (with `type`, `required`, `default`, `enum`, `description`) |
 | `provides_bus` / `requires_bus` | Which shared bus this block configures, or only talks on — see **Shared buses** |
 | `bmgr` | esp-board-manager mapping, read only when a board file is supplied — see **Boards** |
-| `onboarding` | Framework blocks only: what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. The platform copies it verbatim into every product's details seed, so the spec names it instead of inventing a flow (before it existed, specs asked for "the device asks for…" and writers built 430-500 line wizards the framework already had). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is DATA the platform reads, so a framework's onboarding changes here, with no platform release. |
+| `onboarding` | A framework, or a behavior that brings up the network (`behaviors/wifi_station`): what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. The platform copies a framework's verbatim into every product's details seed, so the spec names it instead of inventing a flow (before it existed, specs asked for "the device asks for…" and writers built 430-500 line wizards the framework already had). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is DATA the platform reads, so a framework's onboarding changes here, with no platform release. |
 | `facts` | Any block: what it gives the owner and cannot do, as `key: "one sentence"` (snake_case keys, 400 characters at most — `check.py`). A framework's are copied into every product's seed; any block's ride its `get_template` answer, so a spec states them instead of guessing (a sleeping sensor's battery life, a framework's offline behaviour). |
 | `device_data` | Any block: the per-device values its firmware reads from the `fctry` NVS partition — `{ namespace, keys: [{ key, type: data\|file, encoding, default?, label?, required? }] }` (`engine/src/device-data.ts`). A declaration, never a value: `default` is only a non-secret pre-fill and a `file` key has none. The generator merges every block's keys, then the product's own (`generate()`'s `deviceData` input — the platform passes the keys its spec declares, under the namespace `zc_app`, which no block may use), into `device_data.csv` at the tree root: an `nvs_partition_gen` CSV with blank values, written only when there are keys. The platform builds its flash form from it and writes the entered values to `fctry` in the browser. Two blocks may share a key only by declaring it identically — anything else fails validation. |
+| `needs_internet` / `provides_internet` | A block that talks to an internet service and brings no network (`behaviors/telegram_notify`) says `needs_internet: true`; a block or framework that brings up a station says `provides_internet: true` (`behaviors/wifi_station`, matter, rainmaker, mqtt, agents, aws_iot). The validator refuses a product with a needer and no provider, and warns on a provider behavior beside a provider framework (it stands aside at run time). |
+| `singleton` | At most one instance per product (the block owns fixed C symbols or the radio). Checked by the validator. |
+| `requires_frameworks` | A block whose code lives entirely in a framework's slots (`behaviors/mqtt_republish`: `[mqtt]`) lists the frameworks it works beside, any one of them. Without one it would generate nothing, so the validator refuses the product; `check.py` checks each name is a framework. |
+| `wraps` | The SDK functions the block calls on the product's behalf (`behaviors/sntp_time`: `esp_netif_sntp_init`, …). A host's code check names the block when product code calls one while the block is not composed, so a hand-written copy of the behaviour is pointed back at the catalog. |
+| `radio` | Required on frameworks (see Chips); a non-framework block that brings up Wi-Fi itself also says `radio: true`, so the ESP32-P4 keeps its hosted radio stack. |
 
 ## Shared buses (`provides_bus:` / `requires_bus:`)
 
@@ -805,6 +837,12 @@ options, before `project()`) or `cmake/post_project.cmake` (patches to managed
 components, after it); the generator copies them to `cmake/frameworks/<name>/`
 and the base CMakeLists includes them, so a product without the framework never
 runs them.
+
+**`app_logic` and `app_driver` compile every `.c` / `.cpp` in their directory**
+(`file(GLOB … CONFIGURE_DEPENDS)` in their CMakeLists, skipped in IDF's
+script-mode requirement scan, where the flag is an error). A product adds a
+source file there with no CMakeLists edit, and a new file is picked up on the
+next build; a stray copy of a file in either directory is compiled too.
 
 Watch out for these common authoring pitfalls:
 1. **Cross-TU statics.** `logic_*` slots are now grouped by concern into

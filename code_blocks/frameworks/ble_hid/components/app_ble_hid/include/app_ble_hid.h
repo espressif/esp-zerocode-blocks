@@ -16,6 +16,10 @@
 #include <esp_err.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 esp_err_t app_ble_hid_init(void);
 
 /**
@@ -26,3 +30,7 @@ esp_err_t app_ble_hid_init(void);
  * (drops the report if no host is connected).
  */
 void zc_ble_hid_send_consumer(uint16_t usage);
+
+#ifdef __cplusplus
+}
+#endif

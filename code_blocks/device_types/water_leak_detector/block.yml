@@ -23,4 +23,7 @@ driver_params:
     required: true
     description: Driver param ID for leak state (boolean — true if leak detected)
 
+facts:
+  fixed_class: "Over MQTT its Home Assistant class is fixed to moisture (Wet while the param is true, Dry while false), so it is only for a real leak probe; a product's own flag such as \"needs water\" belongs in device_types/generic_binary_sensor with class problem."
+
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

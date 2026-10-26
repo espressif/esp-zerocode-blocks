@@ -15,8 +15,18 @@
 # member that holds ONLY such an override is never pulled in — control.o
 # already satisfies the reference — so the override links cleanly and silently
 # does nothing. Whole-archive links every file the product put here.
+# Every .c / .cpp in this directory is compiled, so a new source file needs
+# no edit here (CONFIGURE_DEPENDS re-globs at build time). IDF's requirement
+# scan runs this file in script mode, where the flag is refused and no
+# sources are needed.
+set(app_logic_srcs)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    file(GLOB app_logic_srcs CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_LIST_DIR}/*.c" "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+endif()
+
 idf_component_register(
-    SRCS "app_logic.cpp"
+    SRCS ${app_logic_srcs}
     INCLUDE_DIRS "include"
     WHOLE_ARCHIVE
     PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button

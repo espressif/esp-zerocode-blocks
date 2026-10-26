@@ -48,6 +48,14 @@ static app_driver_param_val_t s_params[APP_DRIVER_PARAM_MAX];
  * boot) would be deduped and never reach hardware. The first write of any param
  * always propagates; change-detection only applies from the second write on. */
 static bool s_param_seen[APP_DRIVER_PARAM_MAX];
+/* Sequence number of each param's last write. A registration's replay skips a
+ * param written after it: that write's own notification reaches the new
+ * solution. */
+static uint32_t s_write_seq = 0;
+static uint32_t s_param_seq[APP_DRIVER_PARAM_MAX];
+/* Set by app_main before app_logic_init(): from then on a new registration is
+ * handed the current value of every param already written. */
+static bool s_replay_on_register = false;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /* True while THIS task is delivering a fire_event notification. Per task, so a
@@ -74,10 +82,36 @@ app_driver_handle_t app_driver_register_solution(
     s_solutions[s_solution_count].ctx = ctx;
     s_solutions[s_solution_count].active = true;
     s_solution_count++;
+    bool replay = s_replay_on_register && cb != NULL;
+    uint32_t registered_at = s_write_seq;
     portEXIT_CRITICAL(&s_lock);
 
     ESP_LOGI(TAG, "Registered solution '%s' (handle=%d)", name, handle);
+
+    /* A reading taken before this registration (a driver's first poll during
+     * init) is otherwise only seen at its next CHANGE: hand the current value
+     * to the new solution alone, as state from RESTORE. */
+    if (replay) {
+        for (int i = 0; i < APP_DRIVER_PARAM_MAX; i++) {
+            portENTER_CRITICAL(&s_lock);
+            bool current = s_param_seen[i] && s_param_seq[i] <= registered_at;
+            app_driver_param_val_t val = s_params[i];
+            portEXIT_CRITICAL(&s_lock);
+            if (!current) continue;
+            bool outer_event = s_notifying_event;
+            s_notifying_event = false;
+            cb((app_driver_param_id_t)i, val, APP_DRIVER_SOURCE_RESTORE, ctx);
+            s_notifying_event = outer_event;
+        }
+    }
     return handle;
+}
+
+void app_driver_replay_on_register(bool on)
+{
+    portENTER_CRITICAL(&s_lock);
+    s_replay_on_register = on;
+    portEXIT_CRITICAL(&s_lock);
 }
 
 const char *app_driver_solution_name(app_driver_handle_t handle)
@@ -141,6 +175,7 @@ esp_err_t app_driver_set_param(
     }
     s_params[id] = val;
     s_param_seen[id] = true;
+    s_param_seq[id] = ++s_write_seq;
     memcpy(snapshot, s_solutions, sizeof(s_solutions));
     count = s_solution_count;
     portEXIT_CRITICAL(&s_lock);
@@ -213,6 +248,7 @@ esp_err_t app_driver_fire_event(
     portENTER_CRITICAL(&s_lock);
     s_params[id] = val;
     s_param_seen[id] = true;
+    s_param_seq[id] = ++s_write_seq;
     memcpy(snapshot, s_solutions, sizeof(s_solutions));
     count = s_solution_count;
     portEXIT_CRITICAL(&s_lock);

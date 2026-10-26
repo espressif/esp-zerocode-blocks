@@ -26,6 +26,10 @@
 #include <esp_err.h>
 #include <esp_console.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Initialize the console REPL and register built-in commands.
  * Call this AFTER esp_matter::start() so Matter is fully initialized.
@@ -128,3 +132,7 @@ typedef struct {
  */
 esp_err_t app_console_read_text(const char *prompt, const app_console_text_opts_t *opts,
                                 char **out, size_t *out_len);
+
+#ifdef __cplusplus
+}
+#endif

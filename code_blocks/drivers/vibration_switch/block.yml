@@ -23,6 +23,13 @@ description: >-
 #
 # CHATTER. A comparator without hysteresis rings on every transition; edges
 # closer than min_pulse_gap_us count as one pulse.
+#
+# SENSOR HEALTH. stale_after_s > 0 turns stale_param true (and logs once) when
+# no pulse has been counted for that long, and false at the next pulse. It is
+# this driver's own clock, independent of behaviors/cycle_done_detector and
+# its quiet time, so it neither races nor resets a cycle. It cannot tell an
+# unplugged sensor from a machine that has not run: set it beyond the longest
+# normal gap between uses.
 
 cmake_priv_requires:
   app_driver: [esp_driver_gpio, esp_timer]
@@ -48,16 +55,45 @@ params:
   window_ms:
     type: int
     default: 2000
-    description: Counting window. Each window publishes one activity value.
+    description: >-
+      Counting window in milliseconds. Each window publishes one activity
+      value: the pulses counted in it scaled to pulses per minute
+      (count x 60000 / window_ms), whatever the window length.
   min_pulse_gap_us:
     type: int
     default: 1000
-    description: Edges closer together than this count as one pulse (comparator ringing).
+    description: >-
+      Microseconds; edges closer together than this count as one pulse
+      (comparator ringing).
+  stale_after_s:
+    type: int
+    default: 0
+    description: >-
+      Seconds with no pulse before the sensor is reported stale (stale_param
+      true, and a log line); the next pulse clears it. 0 (default) = off.
+      Must exceed the longest normal gap between uses (86400 = a day). A cut
+      wire on a floating input can read as noise pulses: with stale_after_s
+      set, give the pin a pull toward its inactive level (pulldown when
+      active_level is 1).
 
 driver_params:
   activity_param:
     type: u16
     required: true
     description: >-
-      Activity in pulses per minute over the last window (0 = still). A
-      level for behaviors/cycle_done_detector, not a yes/no.
+      Activity in pulses PER MINUTE (not per second, not per window) over
+      the last window, 0 = still. A level for behaviors/cycle_done_detector,
+      not a yes/no.
+  stale_param:
+    type: bool
+    required: false
+    description: >-
+      Optional — true once no pulse has been seen for stale_after_s, false
+      again at the next pulse (false from boot). For a "sensor disconnected"
+      alert: device_types/generic_binary_sensor with device_class problem, or
+      a notification trigger.
+
+facts:
+  activity_unit: "The activity level is in pulses per minute, whatever the counting window: a requirement of N pulses per second is a level of N x 60 (2 pulses a second = 120), and that is the number to give any threshold that reads this activity."
+  stale_alert: "For a \"sensor disconnected\" or \"no vibration for N hours\" alert, set stale_after_s and bind stale_param (true after that long with no pulse, false at the next one); it runs on its own clock, separate from any cycle detection, so product code needs no timer of its own."
+  stale_limit: "It cannot tell a dead or unplugged sensor from a machine that has simply not run for that long, so the alert means \"no vibration seen for N hours\", not a proven fault, and stale_after_s must exceed the longest normal gap between uses."

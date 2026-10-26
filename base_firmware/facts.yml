@@ -5,4 +5,5 @@
 facts:
   console: "Every product has a serial console over its USB port with three built-in commands: `reboot`, `mem` (free memory) and `factory_reset` (erases every saved setting — Wi-Fi, pairing, calibration — and reboots)."
   reset_controls: "A factory reset WITHOUT the console is not built in; when the owner wants one, it is one of three catalog behaviours — hold a button for a few seconds (factory_reset_long_press), hold two buttons together (factory_reset_button_combo), or power it off and on several times quickly (factory_reset_power_cycle, for a sealed device)."
+  factory_reset_hook: "To clear more on a factory reset (the product's own NVS namespaces or partitions, such as values loaded from the fctry partition), product code defines void app_factory_reset_hook(void) (app_utils.h) in a file under components/app_logic: every factory reset, console or button or power cycle, runs it before erasing. A product never registers another factory_reset command."
 console_commands: [reboot, mem, factory_reset]

@@ -11,6 +11,7 @@ description: "AWS IoT Core connectivity — brings up the network and holds one 
 chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
 # Needs a radio? true — an internet connection is the entire point.
 radio: true
+provides_internet: true
 
 # THIS BLOCK IS A PIPE, NOT A DEVICE MODEL.
 #

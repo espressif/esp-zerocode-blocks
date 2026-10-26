@@ -29,7 +29,7 @@ Catalog of all code_blocks and product_configurations under
 |---|---|---|
 | `driver` | 63 | Hardware peripherals — relay, PWM LED, fan, button, I2C sensors, encoder, I2S mic/speaker, etc. |
 | `device_type` | 60 | Cross-framework device types — light, dimmable_light, fan, thermostat, occupancy_sensor, … (per-framework bindings via matter_* slots; rainmaker_* planned) |
-| `behavior` | 37 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
+| `behavior` | 44 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
 | `peripheral` | 7 | Shared bus/unit init — I2C, SPI, OneWire, UART, ADC, GPIO ISR service, PCNT |
 | `framework` | 16 | matter / rainmaker / zigbee / ble_mesh / audio / mqtt / aws_iot / display / vision / ble_hid / espnow / webui / agents / sound / ml / lm — each owns its `app_<framework>/` component |
 | `partition_table` | 5 | 2mb / 4mb / 8mb / 8mb-voice / 16mb-voice partition CSVs |
@@ -60,16 +60,24 @@ Chips).
 `led-strip-cct`, `ceiling-panel-light`, `outdoor-flood-light`,
 `in-wall-dimmer`
 
-### Sensors (10)
+### Sensors (11)
 `temp-humidity-sensor`, `motion-sensor`, `contact-sensor`,
 `water-leak-sensor`, `ambient-light-sensor`, `air-quality-monitor`,
 `smoke-co-alarm`, `thread-contact-sensor`, `environment-sensor-hub`,
-`laundry-done-monitor`
+`laundry-done-monitor`, `washer-done-telegram`
 
 `laundry-done-monitor` watches a washer (MPU6050 `activity_param`) and a dryer
 (`drivers/vibration_switch`, an SW-420 module) with one
 `behaviors/cycle_done_detector` each, and lights a lamp per machine when its
-cycle is done. It is where those three blocks are built.
+cycle is done. It is where those three blocks are built. A cycle running when
+the device restarts is dropped, not reported done (`resume_after_reboot`
+carries it on instead), and `stale_after_s` on the vibration switch flags a
+sensor that has seen no pulse for that long.
+
+`washer-done-telegram` sends a Telegram message when the washer's cycle ends
+(`drivers/vibration_switch` → `behaviors/cycle_done_detector` →
+`behaviors/telegram_notify`), framework-less, on Wi-Fi from
+`behaviors/wifi_station`. It is where those two network blocks are built.
 
 `environment-sensor-hub` is a multi-probe station on ONE I2C bus: three
 temperature/humidity probes at different heights (SHT4x @0x44, SHT3x @0x45,
@@ -467,6 +475,15 @@ no params, device_energy_management). Full key names in discovery JSON,
 plain payload values, never value_template. First framework the EMULATOR verifies end-to-end
 (esp-emu --net user; boot + unconfigured path proven on a virtual esp32c3).
 
+`device_types/generic_binary_sensor` and `generic_sensor` carry a PRODUCT'S own
+flag or reading (needs water, filter due, a counter) as its own entity, with
+the Home Assistant device_class / unit / state_class chosen per instance —
+where a specific device type's class is fixed (water_leak_detector and
+rain_sensor read Wet/Dry). MQTT, web page, display and RainMaker; no Matter or
+Zigbee binding. `plant-moisture-mqtt` uses one for its reservoir float switch
+(class problem), and `behaviors/mqtt_republish` to send its reading every 10
+minutes even while it does not change.
+
 `battery-door-sensor` — a reed switch on battery: `behaviors/deep_sleep_cycle`
 wakes it on either edge of the contact (and hourly), sleeps once the broker has
 acknowledged the retained state, and signs off cleanly so Home Assistant keeps
@@ -569,6 +586,9 @@ its product-specific drivers/device types:
 - `behaviors/network_status_log` — Wi-Fi / IP transition logging
 - `behaviors/sntp_time` — wall clock: timezone + SNTP, optional bus bool on first sync; coexists with RainMaker's own SNTP (observes it)
 - `behaviors/wifi_disconnect_recovery` — log a Wi-Fi outage; reboot after N seconds offline only when `reboot_after_seconds > 0` (opt-in)
+- `behaviors/wifi_station` — Wi-Fi station for a product with no networking framework: credentials from the console (`wifi-setup` guided, or `wifi-set`) kept in NVS, reconnect with backoff; stands aside when a framework owns Wi-Fi
+- `behaviors/mqtt_republish` — MQTT only: re-sends every entity's current retained state (device types and product entities) every `republish_s` seconds, from the framework's own task; `only_on_schedule: true` holds changes for that schedule (first value and reconnects still at once) — "report every N minutes"; `app_mqtt_set_republish_s()` / `app_mqtt_set_republish_only_on_schedule()` underneath
+- `behaviors/telegram_notify` — Telegram bot messages: `telegram_notify_send()` queues and returns, a TLS task sends, undelivered messages persist in NVS and retry (backoff capped by `max_retry_s`); `telegram_notify_send_keyed()` replaces a waiting message with the same key, and a full queue drops keyed messages first; optional replies (`telegram_notify_on_reply`) with the backlog skipped at boot; chat id learnt with `tg-learn`
 
 **Status LED + identify**
 - `drivers/status_led` — LED hardware (default GPIO 15)

@@ -1,0 +1,56 @@
+description: >-
+  Wi-Fi station for a product with no networking framework: joins the owner's
+  network with credentials typed at the serial console (wifi-setup asks for
+  them, wifi-set takes them in one line), keeps them on the device, and
+  reconnects with backoff after every drop. Compose it
+  under any block that needs the internet (behaviors/telegram_notify) when no
+  framework brings up Wi-Fi. Beside one that does (matter, rainmaker, mqtt,
+  agents, aws_iot) it stands aside at run time and is not needed.
+
+# RUNTIME OWNERSHIP. It runs after every framework's init, so if esp_wifi is
+# already initialised somebody else owns the radio: it logs that and does
+# nothing more. Otherwise it creates the default station netif, starts Wi-Fi
+# in station mode and connects when credentials are stored.
+#
+# CREDENTIALS live in NVS (namespace zc_wifi, keys ssid / pass), never in the
+# image. A factory reset erases them. The Wi-Fi driver's own flash copy is
+# off (WIFI_STORAGE_RAM) so there is one place they are kept.
+#
+# RECONNECT. Every disconnect schedules the next attempt 1 s later, doubling
+# to max_backoff_s; an address resets it. Attempts never stop.
+#
+# Chips with no Wi-Fi (esp32h2) compile the body out and log once; the P4 uses
+# its companion radio over esp_wifi_remote (radio: true keeps it in the tree).
+
+radio: true
+provides_internet: true
+singleton: true
+
+params:
+  max_backoff_s:
+    type: int
+    default: 300
+    description: Longest wait between reconnect attempts, in seconds (attempts start 1 s apart and double)
+
+cmake_priv_requires:
+  app_logic: [esp_wifi, esp_netif, esp_event, nvs_flash, esp_timer, console, app_console]
+
+onboarding:
+  console:
+    setup: "wifi-setup — guided: asks for the Wi-Fi network name, then its password"
+    commands:
+      - "wifi-set <ssid> [password]"
+      - "wifi-status"
+    note: "Beside a framework that brings up Wi-Fi (matter, rainmaker, mqtt, agents, aws_iot) the network is onboarded through that framework; wifi-setup still stores a network but does not join it."
+
+console_commands:
+  - "wifi-setup"
+  - "wifi-set <ssid> [password]"
+  - "wifi-status"
+
+facts:
+  setup: "The owner sets the Wi-Fi network once over the USB serial console: wifi-setup asks for the network name and then the password (typed as stars; - for an open network), or wifi-set <network name> <password> does it in one line (quote a name with spaces); it is kept on the device and used at every boot."
+  reconnect: "After the network drops it keeps trying to reconnect by itself, waiting a little longer between attempts up to 5 minutes, and never gives up."
+  status: "wifi-status prints the network name, whether it is connected, the device's IP address and the signal strength."
+  band: "It joins 2.4 GHz networks (and 5 GHz on chips that have it, such as the ESP32-C5); WPA3-only enterprise networks and captive-portal guest networks are not supported."
+  reset: "A factory reset erases the stored Wi-Fi network."

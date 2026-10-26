@@ -21,10 +21,9 @@
         }
         ESP_LOGI(TAG, "{{prefix_lc}}: power-cycle count = %u/%u", {{prefix_lc}}_pc, {{prefix}}_PC_THRESHOLD);
         if ({{prefix_lc}}_pc >= {{prefix}}_PC_THRESHOLD) {
-            ESP_LOGW(TAG, "{{prefix_lc}}: threshold reached — erasing NVS and rebooting");
+            ESP_LOGW(TAG, "{{prefix_lc}}: threshold reached — factory reset");
             nvs_close({{prefix_lc}}_pc_h);
-            nvs_flash_erase();
-            esp_restart();
+            app_utils_factory_reset();
         }
         nvs_set_u8({{prefix_lc}}_pc_h, {{prefix}}_PC_NVS_KEY, {{prefix_lc}}_pc);
         nvs_commit({{prefix_lc}}_pc_h);

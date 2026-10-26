@@ -33,6 +33,14 @@
     esp_timer_handle_t {{prefix_lc}}_vib_timer = NULL;
     ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_vib_args, &{{prefix_lc}}_vib_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_vib_timer, (uint64_t){{prefix}}_VIB_WINDOW_MS * 1000ULL));
+{{#if cfg.stale_param}}
+    /* Healthy until stale_after_s passes with no pulse. */
+    app_driver_param_val_t {{prefix_lc}}_vib_fresh = { .b = false };
+    app_driver_set_param({{cfg.stale_param}}, {{prefix_lc}}_vib_fresh, APP_DRIVER_SOURCE_LOCAL);
+    if ({{prefix}}_VIB_STALE_MS == 0) {
+        ESP_LOGW(TAG, "Vibration switch {{prefix_lc}}: stale_param is bound but stale_after_s is 0 — it never turns true");
+    }
+{{/if}}
     ESP_LOGI(TAG, "Vibration switch {{prefix_lc}}: GPIO %d, active=%d, %d ms window",
              {{prefix}}_VIB_GPIO, {{prefix}}_VIB_ACTIVE_LEVEL, {{prefix}}_VIB_WINDOW_MS);
 }

@@ -12,8 +12,29 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
+#include <nvs_flash.h>
 #include <esp_heap_caps.h>
 #include <soc/soc_caps.h>
+
+/* C linkage from the declaration in app_utils.h. A product's strong
+ * definition replaces it at link time. */
+__attribute__((weak)) void app_factory_reset_hook(void)
+{
+}
+
+esp_err_t app_utils_factory_reset(void)
+{
+    ESP_LOGW("factory_reset", "factory reset: product hook, then erasing NVS");
+    app_factory_reset_hook();
+    esp_err_t err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE("factory_reset", "NVS erase failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI("factory_reset", "NVS erased - rebooting");
+    esp_restart();
+    return ESP_OK; /* unreachable */
+}
 
 void app_utils_print_mem(const char *label)
 {

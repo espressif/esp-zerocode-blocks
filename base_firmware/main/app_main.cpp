@@ -53,6 +53,10 @@ extern "C" void app_main(void)
      * own logic, so it can rely on persistence, console, diagnostics being up */
     ESP_ERROR_CHECK(zc_behaviors_init());
 
+    /* The product's listeners register from here on: hand each the readings
+     * the drivers already took, or a value that never changes is never seen */
+    app_driver_replay_on_register(true);
+
     /* Initialize business logic */
     ESP_ERROR_CHECK(app_logic_init());
 

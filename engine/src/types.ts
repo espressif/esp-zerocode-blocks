@@ -232,10 +232,11 @@ export interface Block {
    *  by CI to pick which framework x chip cells to compile; the platform's
    *  framework registry is kept in step with it. */
   chips?: string[]
-  /** FRAMEWORK blocks only: whether the framework needs a radio (a transport,
-   *  a mesh, a BLE link, the internet) or is entirely on-device (a screen, a
-   *  speaker, a microphone). The generator drops the ESP32-P4's hosted radio
-   *  stack from a tree whose frameworks all say false. */
+  /** Whether the block needs a radio (a transport, a mesh, a BLE link, the
+   *  internet). Required on FRAMEWORK blocks, where false means entirely
+   *  on-device (a screen, a speaker, a microphone); a behavior that brings up
+   *  Wi-Fi itself says true. The generator drops the ESP32-P4's hosted radio
+   *  stack from a tree in which no block says true. */
   radio?: boolean
   /** FRAMEWORK blocks only: what a product's first build needs before its own
    *  blocks exist (see earlyBuildComposition). */
@@ -246,6 +247,19 @@ export interface Block {
   /** Per-device values this block's firmware reads from the `fctry` NVS
    *  partition — see DeviceDataDecl. */
   device_data?: DeviceDataDecl
+  /** The block reaches the internet (an HTTPS API) and brings no network of
+   *  its own: a product composing it needs a block or framework that
+   *  `provides_internet`. */
+  needs_internet?: boolean
+  /** The block (or framework) brings up an internet-capable station. */
+  provides_internet?: boolean
+  /** At most one instance per product (it owns fixed C symbols or one
+   *  radio). */
+  singleton?: boolean
+  /** The block works only beside one of these frameworks: its code is all in
+   *  that framework's slots, so without it the block generates nothing and
+   *  the product is silently without it. */
+  requires_frameworks?: string[]
   slots?: Record<string, string>
 }
 

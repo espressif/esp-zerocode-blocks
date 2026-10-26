@@ -41,8 +41,7 @@ static void {{prefix_lc}}_long_press_cb(void *arg, void *usr_data)   { (void)arg
 static void {{prefix_lc}}_factory_reset_cb(void *arg, void *usr_data)
 {
     (void)arg; (void)usr_data;
-    ESP_LOGW(TAG, "{{prefix_lc}}: held {{cfg.factory_reset_ms}} ms — erasing NVS and rebooting");
-    nvs_flash_erase();
-    esp_restart();
+    ESP_LOGW(TAG, "{{prefix_lc}}: held {{cfg.factory_reset_ms}} ms — factory reset");
+    app_utils_factory_reset();
 }
 {{/if}}

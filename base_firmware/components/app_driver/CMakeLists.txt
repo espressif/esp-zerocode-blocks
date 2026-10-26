@@ -8,8 +8,18 @@
 # agents write C at runtime against these headers, and making each one a CMake
 # dependency puzzle would spend their budget debugging the build system instead
 # of the product. `driver` stays for the legacy i2c the sensor blocks use.
+# Every .c / .cpp in this directory is compiled, so a new source file needs
+# no edit here (CONFIGURE_DEPENDS re-globs at build time). IDF's requirement
+# scan runs this file in script mode, where the flag is refused and no
+# sources are needed.
+set(app_driver_srcs)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    file(GLOB app_driver_srcs CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_LIST_DIR}/*.c" "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+endif()
+
 idf_component_register(
-    SRCS "app_driver.cpp" "app_driver_cb.cpp"
+    SRCS ${app_driver_srcs}
     INCLUDE_DIRS "include"
     PRIV_REQUIRES app_config app_utils driver nvs_flash esp_timer espressif__button
                   esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi

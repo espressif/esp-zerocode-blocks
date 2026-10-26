@@ -23,4 +23,7 @@ driver_params:
     required: true
     description: Driver param ID for contact state (boolean — true if contact closed)
 
+facts:
+  fixed_class: "Over MQTT its Home Assistant class is fixed to door (Open while the contact is open, Closed while closed), so it is only for a real door or window contact; a product's own flag belongs in device_types/generic_binary_sensor with the class that fits."
+
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

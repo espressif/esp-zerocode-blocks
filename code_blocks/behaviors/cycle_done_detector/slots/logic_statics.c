@@ -12,8 +12,9 @@ static uint32_t s_{{prefix_lc}}_cyc_active = 0;    /* active seconds in the ring
 static int64_t s_{{prefix_lc}}_cyc_uptime_s = 0;   /* ticks since boot */
 static uint32_t s_{{prefix_lc}}_cyc_idle_x64 = 0;  /* learned idle, x64 (64 s average) */
 static bool s_{{prefix_lc}}_cyc_running = false;
-static int64_t s_{{prefix_lc}}_cyc_start_s = 0;
-static int64_t s_{{prefix_lc}}_cyc_busy_s = 0;     /* last tick the machine was busy */
+static int64_t s_{{prefix_lc}}_cyc_start_s = 0;    /* first active second of the run */
+static int64_t s_{{prefix_lc}}_cyc_busy_s = 0;     /* last active second of the run */
+static int64_t s_{{prefix_lc}}_cyc_last_active_s = 0; /* last active second seen at all */
 
 static void {{prefix_lc}}_cyc_save(bool running)
 {
@@ -30,6 +31,26 @@ static void {{prefix_lc}}_cyc_publish(bool running, bool done)
     app_driver_set_param({{cfg.running_param}}, rv, APP_DRIVER_SOURCE_LOCAL);
     app_driver_param_val_t dv = { .b = done };
     app_driver_set_param({{cfg.done_param}}, dv, APP_DRIVER_SOURCE_LOCAL);
+}
+
+/* At boot: whether a cycle that was running when the device went down carries
+ * on (resume_after_reboot) or is dropped (the default). */
+static bool {{prefix_lc}}_cyc_restore(bool was_running, bool resume_after_reboot)
+{
+    return was_running && resume_after_reboot;
+}
+
+/* The oldest active second still in the window: the one a run that starts now
+ * started at. The slot at s_pos is the oldest (the tick that just ran wrote the
+ * one before it). */
+static int64_t {{prefix_lc}}_cyc_first_active(int64_t now_s)
+{
+    for (uint32_t i = 0; i < {{prefix}}_CYC_WINDOW_S; i++) {
+        if (s_{{prefix_lc}}_cyc_ring[(s_{{prefix_lc}}_cyc_pos + i) % {{prefix}}_CYC_WINDOW_S]) {
+            return now_s - (int64_t)({{prefix}}_CYC_WINDOW_S - 1 - i);
+        }
+    }
+    return now_s;
 }
 
 static uint32_t {{prefix_lc}}_cyc_threshold(void)
@@ -57,6 +78,7 @@ static void {{prefix_lc}}_cyc_tick_cb(void *arg)
     s_{{prefix_lc}}_cyc_ring[s_{{prefix_lc}}_cyc_pos] = active;
     s_{{prefix_lc}}_cyc_active += active;
     s_{{prefix_lc}}_cyc_pos = (s_{{prefix_lc}}_cyc_pos + 1) % {{prefix}}_CYC_WINDOW_S;
+    if (active) s_{{prefix_lc}}_cyc_last_active_s = now_s;
 
     if (!s_{{prefix_lc}}_cyc_running) {
         /* Learn idle only from a still window, never in the first one. */
@@ -68,8 +90,8 @@ static void {{prefix_lc}}_cyc_tick_cb(void *arg)
         }
         if (s_{{prefix_lc}}_cyc_active >= {{prefix}}_CYC_START_S) {
             s_{{prefix_lc}}_cyc_running = true;
-            s_{{prefix_lc}}_cyc_start_s = now_s;
-            s_{{prefix_lc}}_cyc_busy_s = now_s;
+            s_{{prefix_lc}}_cyc_start_s = {{prefix_lc}}_cyc_first_active(now_s);
+            s_{{prefix_lc}}_cyc_busy_s = s_{{prefix_lc}}_cyc_last_active_s;
             {{prefix_lc}}_cyc_save(true);
             {{prefix_lc}}_cyc_publish(true, false);
             ESP_LOGI(TAG, "{{prefix_lc}}: cycle started (activity %lu, threshold %lu)",
@@ -78,13 +100,22 @@ static void {{prefix_lc}}_cyc_tick_cb(void *arg)
         return;
     }
 
-    if (s_{{prefix_lc}}_cyc_active >= {{prefix}}_CYC_BUSY_S) s_{{prefix_lc}}_cyc_busy_s = now_s;
+    /* The run's last active second moves only while the window is busy, so a
+     * lone knock during the quiet time does not hold a finished cycle open. */
+    if (s_{{prefix_lc}}_cyc_active >= {{prefix}}_CYC_BUSY_S) {
+        s_{{prefix_lc}}_cyc_busy_s = s_{{prefix_lc}}_cyc_last_active_s;
+    }
     if (now_s - s_{{prefix_lc}}_cyc_busy_s < {{prefix}}_CYC_QUIET_S) return;
 
-    /* Quiet long enough: the run is over. */
-    int64_t run_s = s_{{prefix_lc}}_cyc_busy_s - s_{{prefix_lc}}_cyc_start_s;
+    /* quiet_minutes since the last active second: the run is over. Its length
+     * is first to last active second, both counted. */
+    int64_t run_s = s_{{prefix_lc}}_cyc_busy_s - s_{{prefix_lc}}_cyc_start_s + 1;
     bool done = run_s >= {{prefix}}_CYC_MIN_RUN_S;
     s_{{prefix_lc}}_cyc_running = false;
+    /* The window may still hold the run's last active seconds (a quiet time
+     * shorter than the window); counted again they would start a new run. */
+    memset(s_{{prefix_lc}}_cyc_ring, 0, sizeof(s_{{prefix_lc}}_cyc_ring));
+    s_{{prefix_lc}}_cyc_active = 0;
     {{prefix_lc}}_cyc_save(false);
     {{prefix_lc}}_cyc_publish(false, done);
     if (done) {

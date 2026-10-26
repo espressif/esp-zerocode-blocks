@@ -13,6 +13,10 @@ description: Sets the wall clock — timezone + SNTP — so anything the product
 cmake_priv_requires:
   app_logic: [esp_netif, lwip]
 
+# The SDK calls this block makes for the product: product code calling one
+# while the block is not composed re-implements it (check_code names the block).
+wraps: [esp_netif_sntp_init, esp_sntp_init, esp_sntp_setoperatingmode, sntp_init]
+
 params:
   tz:
     type: string
