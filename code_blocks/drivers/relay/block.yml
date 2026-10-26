@@ -59,3 +59,6 @@ bmgr:
         # means active_level is 1 here, and a computed value would quietly
         # become wrong the day the guard is relaxed.
         default_level: 0
+
+facts:
+  boot_state: "The output is off at boot and its param is written false (as state) inside app_driver_init, before any framework or product code runs, so app_driver_param_seen is true and the state is known from the start; a value restored by nvs_persist_bool replaces it, so a saved ON still comes back on."

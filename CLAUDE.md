@@ -245,6 +245,7 @@ indent.
 |---|---|---|
 | `config_defines` | `app_config.h` | GPIO numbers, channel IDs, `#define`s |
 | `driver_includes` / `driver_statics` / `driver_init` / `driver_apply_cases` | `app_driver.cpp` | hardware init + per-param HW writes |
+| `driver_boot_state` | `app_driver_init()`, after every driver's init (never replaced by the board manager) | an on/off output writes the state it left its output in onto its param, guarded on `!app_driver_param_seen`, so the param is known from boot (`drivers/relay`, `relay_with_button`, `board_gpio_ctrl`) |
 | `matter_includes` / `matter_statics` | `app_matter.cpp` | per-endpoint includes + state |
 | `matter_endpoint_create` | inside `app_matter_init()` | endpoint creation |
 | `matter_init` | inside `app_matter_init()`, right after the framework registers on the bus (before the node, before `esp_matter::start()`) | register a listener on the framework's own params (`behaviors/commissioning_led` on `APP_DRIVER_PARAM_MATTER_COMMISSIONED`) so the boot value reaches it |

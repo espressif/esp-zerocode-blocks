@@ -1166,6 +1166,13 @@ function genAppDriverCpp(rendered: RenderedInstance[]): string {
     fns.push(`static void zc_${name}_driver_init(void)\n{\n${indentText(unwrapInitBody(r.slots['driver_init']), 4)}\n}`)
     calls.push(`    zc_${name}_driver_init();`)
   }
+  // driver_boot_state: an output driver writes the state it left its output
+  // in onto its param, after EVERY init (its own driver_init, or the board
+  // manager's, which replaces that slot) and before any framework registers,
+  // so the param counts as written from boot instead of "never written" until
+  // product code first switches it.
+  const boot = collectSlot(rendered, 'driver_boot_state', 4)
+  const bootState = boot ? `\n    /* Boot state of the outputs above, onto their params */\n${boot}\n` : '\n'
   return `#include "app_driver.h"
 #include "app_config.h"
 
@@ -1181,7 +1188,7 @@ ${fns.join('\n\n')}
 esp_err_t app_driver_init(void)
 {
 ${calls.join('\n')}
-
+${bootState}
     ESP_LOGI(TAG, "Hardware drivers initialized");
     return ESP_OK;
 }

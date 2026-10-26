@@ -83,6 +83,8 @@ slots:
     /* BLOCK-OWNED INIT for {{prefix_lc}} on gpio {{cfg.gpio}} */
   driver_apply_cases: |
     /* apply {{prefix_lc}} */
+  driver_boot_state: |
+    /* boot state of {{prefix_lc}} */
 `
 
 /** A block with no bmgr: at all — the untouched majority. */
@@ -275,6 +277,10 @@ test('a replaced slot is NOT rendered when the board manager owns the line', asy
   // Only the NAMED slot goes. Everything else the block contributes stays, or
   // "hand the init over" would quietly mean "delete the block".
   assert.ok(driver.includes('/* apply app */'))
+  // The boot state goes onto the param inside app_driver_init, after the
+  // board manager brought the line up, whoever owns the init.
+  const init = driver.slice(driver.indexOf('esp_err_t app_driver_init(void)'), driver.indexOf('esp_err_t app_driver_apply_param'))
+  assert.ok(init.includes('/* boot state of app */'))
 })
 
 test('a block with no mapping keeps its init even on a board product', async (t) => {

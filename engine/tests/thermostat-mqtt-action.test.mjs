@@ -86,10 +86,13 @@ int main(int argc, char **argv)
         return 0;
     }
     if (strcmp(argv[1], "fresh") == 0) {
-        /* Nothing set yet: connect, then HA sets the mode, then the output. */
+        /* A fresh device: only the heat output is written at boot (its driver
+           writes the off it drives the pin to). Connect, then HA sets the
+           mode, then the output switches on. */
+        g_param[P_HEAT].b = false; g_seen[P_HEAT] = true;
         create();
         cmd("mode/cmd", "heat");
-        set(P_HEAT, 0);
+        set(P_HEAT, 1);
         return 0;
     }
     /* Restored before connect: target 20 °C, mode heat, output off. */
@@ -157,15 +160,16 @@ test('thermostat mqtt: without heating_param the discovery has no action topic a
   assert.ok(steps.flat().every(([topic]) => topic !== ACTION))
 })
 
-test('thermostat mqtt: on connect nothing is seeded that was never set, so HA shows unknown rather than a false 0', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
+test('thermostat mqtt: on connect nothing is seeded that was never set, and the action appears as soon as the mode is known', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
   const steps = run(t, CFG, 'fresh')
   const topics = steps[0].map(([topic]) => topic)
   assert.ok(topics.includes('homeassistant/climate/zc_abc123_thermo/config'))
+  // The output is known from boot, the mode is not: no action yet either.
   for (const sub of ['curr', 'temp/state', 'mode/state', 'action']) assert.ok(!topics.includes(`zerocode/abc123/thermo/${sub}`), sub)
-  // The mode is set: published; the output has never been set: still no action.
-  assert.deepEqual(steps[1], [['zerocode/abc123/thermo/mode/state', 'heat']])
-  // The output is set: the action follows.
-  assert.deepEqual(steps[2], [[ACTION, 'idle']])
+  // The mode is set: published, and with the output known the action follows at once.
+  assert.deepEqual(steps[1], [['zerocode/abc123/thermo/mode/state', 'heat'], [ACTION, 'idle']])
+  // The output switches on.
+  assert.deepEqual(steps[2], [[ACTION, 'heating']])
   // Once set, connect seeds them (the other test's scenario).
   const seeded = run(t, CFG, 'seeded')[0]
   assert.deepEqual(seeded.filter(([topic]) => !topic.startsWith('homeassistant/') && !topic.endsWith('/curr')).map(([topic, v]) => `${topic.split('/thermo/')[1] ?? topic}=${v}`),
