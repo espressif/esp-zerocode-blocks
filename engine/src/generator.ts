@@ -1034,6 +1034,15 @@ function spliceLine(text: string, marker: string, replacement: string): string {
 function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; type: ValueType }> {
   const map = new Map<string, ValueType>()
   for (const r of rendered) {
+    for (const [paramName, valType] of Object.entries(r.block.owned_params ?? {})) {
+      const prev = map.get(paramName)
+      if (prev && prev !== valType) {
+        throw new Error(`param ${paramName}: conflicting types ${prev} vs ${valType} (block ${r.block.id})`)
+      }
+      map.set(paramName, valType)
+    }
+  }
+  for (const r of rendered) {
     for (const [cfgKey, valType] of Object.entries(r.block.param_refs ?? {})) {
       const paramName = String(r.cfg[cfgKey] ?? '')
       if (!paramName) {
@@ -1177,6 +1186,80 @@ ${collectSlot(rendered, 'driver_apply_cases', 8)}
 `
 }
 
+/** The params frameworks/matter publishes about itself (its `owned_params`),
+ *  emitted only for the ones the framework block declares — the declaration is
+ *  what puts them in the param enum. Every write runs on the Matter thread: a
+ *  scheduled work item right after esp_matter::start() for the boot value, the
+ *  event handler afterwards, so the fabric table and the commissioning window
+ *  are read under the stack lock and in event order. */
+const MATTER_COMMISSIONED_PARAM = 'APP_DRIVER_PARAM_MATTER_COMMISSIONED'
+const MATTER_PAIRING_OPEN_PARAM = 'APP_DRIVER_PARAM_MATTER_PAIRING_OPEN'
+
+function matterStateCode(rendered: RenderedInstance[]): { statics: string; eventCases: string; afterStart: string } {
+  const owned = new Set(rendered.filter(r => isFramework(r, 'matter')).flatMap(r => Object.keys(r.block.owned_params ?? {})))
+  const commissioned = owned.has(MATTER_COMMISSIONED_PARAM)
+  const pairing = owned.has(MATTER_PAIRING_OPEN_PARAM)
+  if (!commissioned && !pairing) return { statics: '', eventCases: '', afterStart: '' }
+  const fns: string[] = []
+  const boot: string[] = []
+  const cases: string[] = []
+  if (commissioned) {
+    fns.push(`/* True while the device is on at least one fabric. Read from the fabric
+ * table, never inferred from an event: a fabric removed while others remain
+ * leaves it true, a cancelled pairing never set it. */
+static void zc_matter_publish_commissioned(void)
+{
+    app_driver_param_val_t v = {};
+    v.b = chip::Server::GetInstance().GetFabricTable().FabricCount() > 0;
+    app_driver_set_param(${MATTER_COMMISSIONED_PARAM}, v, s_handle);
+}`)
+    boot.push('    zc_matter_publish_commissioned();')
+    cases.push(`    case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
+    case chip::DeviceLayer::DeviceEventType::kFabricCommitted:
+    case chip::DeviceLayer::DeviceEventType::kFabricRemoved:
+        zc_matter_publish_commissioned();
+        break;`)
+  }
+  if (pairing) {
+    fns.push(`/* True while the device advertises itself for pairing (BLE / DNS-SD): from
+ * the window opening until a phone connects to pair, the window times out or
+ * is closed. A failed attempt that re-advertises sets it again. */
+static void zc_matter_publish_pairing_open(bool open)
+{
+    app_driver_param_val_t v = {};
+    v.b = open;
+    app_driver_set_param(${MATTER_PAIRING_OPEN_PARAM}, v, s_handle);
+}`)
+    boot.push('    zc_matter_publish_pairing_open(chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen());')
+    cases.push(`    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowOpened:
+        zc_matter_publish_pairing_open(true);
+        break;
+    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowClosed:
+        zc_matter_publish_pairing_open(false);
+        break;`)
+  }
+  const statics = `${fns.join('\n\n')}
+
+static void zc_matter_publish_boot_state(intptr_t)
+{
+${boot.join('\n')}
+}
+
+`
+  const eventCases = `    switch (event->Type) {
+${cases.join('\n')}
+    default:
+        break;
+    }
+`
+  const afterStart = `    /* The boot value, on the Matter thread after everything start() queued. */
+    if (chip::DeviceLayer::PlatformMgr().ScheduleWork(zc_matter_publish_boot_state, 0) != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "Failed to schedule the Matter state read");
+    }
+`
+  return { statics, eventCases, afterStart }
+}
+
 export function genAppMatterCpp(rendered: RenderedInstance[]): string {
   // Each endpoint's create block becomes its own static function — isolating
   // its `cfg`/`ep` locals (which would collide across endpoints in one scope)
@@ -1207,9 +1290,11 @@ export function genAppMatterCpp(rendered: RenderedInstance[]): string {
         app_factory_reset_hook();
         esp_matter::factory_reset();
     }`
+  const state = matterStateCode(rendered)
   return `#include "app_matter.h"
 #include "app_driver.h"
 #include "app_config.h"
+
 #include "app_utils.h"
 
 #include <esp_log.h>
@@ -1275,9 +1360,9 @@ ${collectSlot(rendered, 'matter_identify_cases', 4)}
     return ESP_OK;
 }
 
-static void app_matter_event_cb(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
+${state.statics}static void app_matter_event_cb(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
 {
-${lastFabricCases}
+${state.eventCases}${lastFabricCases}
 ${collectSlot(rendered, 'matter_event_cases', 4)}
 }
 
@@ -1332,7 +1417,7 @@ ${epCalls.join('\n')}
 #endif
 
     ESP_ERROR_CHECK(esp_matter::start(app_matter_event_cb));
-    ESP_LOGI(TAG, "Matter initialized");
+${state.afterStart}    ESP_LOGI(TAG, "Matter initialized");
     return ESP_OK;
 }
 `

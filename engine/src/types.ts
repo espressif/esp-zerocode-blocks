@@ -220,6 +220,11 @@ export interface Block {
   idf_components?: Record<string, string | Record<string, unknown>>
   params?: Record<string, BlockParam>
   param_refs?: Record<string, ValueType>
+  /** Params the block ITSELF writes under a fixed name, with no cfg behind
+   *  them (frameworks/matter: `APP_DRIVER_PARAM_MATTER_COMMISSIONED: bool`).
+   *  Every product composing the block gets them in its param enum, so product
+   *  code and other blocks' cfg can name them. */
+  owned_params?: Record<string, ValueType>
   cmake_priv_requires?: Record<string, string[]>
   sdkconfig?: Record<string, string>
   /** Marks a `sdkconfig_fragment` block as a CHIP's per-chip base rather than a

@@ -100,6 +100,19 @@ export function validateBlock(block: Block): ValidationResult {
     }
   }
 
+  for (const [name, type] of Object.entries(block.owned_params ?? {})) {
+    if (!/^APP_DRIVER_PARAM_[A-Z0-9_]+$/.test(name)) {
+      errors.push({ level: 'error', ...ctx, message: `owned_params.${name}: a param name is APP_DRIVER_PARAM_<NAME>` })
+    }
+    if (!VALUE_TYPES.includes(type as ValueType)) {
+      errors.push({
+        level: 'error',
+        ...ctx,
+        message: `owned_params.${name} has invalid type '${type}' (expected ${VALUE_TYPES.join('|')})`,
+      })
+    }
+  }
+
   // provides_bus / requires_bus: a declaration naming a param the block does
   // not have is worse than none — it resolves to an empty port and quietly
   // matches (or fails to match) the wrong thing. See BusDecl.
