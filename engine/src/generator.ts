@@ -497,7 +497,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   // A base without one (minimal test fixtures) gets the same glob.
   const logicCmakePath = path.join(outDir, 'components/app_logic/CMakeLists.txt')
   if (!(await fileExists(logicCmakePath))) {
-    await writeFileMk(logicCmakePath, `${componentSrcGlob('app_logic_srcs')}idf_component_register(\n    SRCS \${app_logic_srcs}\n    INCLUDE_DIRS "include"\n    PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer\n)\n`)
+    await writeFileMk(logicCmakePath, `${componentSrcGlob('app_logic_srcs')}${PRODUCT_CMAKE_HOOK}idf_component_register(\n    SRCS \${app_logic_srcs}\n    INCLUDE_DIRS "include"\n    PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer \${PRODUCT_PRIV_REQUIRES}\n)\n`)
   }
 
   const mainPath = path.join(outDir, 'main/app_main.cpp')
@@ -945,6 +945,17 @@ endif()
 
 `
 }
+
+/** app_logic's product-owned requirements: product.cmake beside its
+ *  CMakeLists sets PRODUCT_PRIV_REQUIRES. The engine never writes that file.
+ *  The glob re-runs CMake when it appears in a configured tree. */
+const PRODUCT_CMAKE_HOOK = `set(PRODUCT_PRIV_REQUIRES)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    file(GLOB product_cmake CONFIGURE_DEPENDS "\${CMAKE_CURRENT_LIST_DIR}/product.cmake")
+endif()
+include("\${CMAKE_CURRENT_LIST_DIR}/product.cmake" OPTIONAL)
+
+`
 
 /** CMake a framework block may ship under cmake/: included by the base
  *  CMakeLists before and after project(), only for selected frameworks. */
@@ -5270,7 +5281,7 @@ async function applyCmakePrivRequires(outDir: string, rendered: RenderedInstance
     }
     const extrasList = [...set].join(' ')
     const updated = body.replace(
-      /(PRIV_REQUIRES\s+)([^\n)]*)/,
+      /^(\s*PRIV_REQUIRES\s+)([^\n)]*)/m,
       (_match, prefix: string, existing: string) => {
         const have = new Set(existing.trim().split(/\s+/).filter(Boolean))
         for (const e of set) have.add(e)

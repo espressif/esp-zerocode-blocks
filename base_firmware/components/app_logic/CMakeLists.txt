@@ -25,6 +25,20 @@ if(NOT CMAKE_SCRIPT_MODE_FILE)
          "${CMAKE_CURRENT_LIST_DIR}/*.c" "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
 endif()
 
+# Components the PRODUCT's own code needs beyond these go in product.cmake,
+# beside this file, as a list in the variable set (and cleared) below — e.g.
+#     set(PRODUCT_PRIV_REQUIRES esp_http_client)
+# The generator never writes product.cmake, so a re-generated tree keeps it,
+# while edits to this generated file are lost. The include is outside the
+# script-mode guard on purpose: IDF's requirement scan must see the list too.
+# The glob makes a configured build re-run CMake when the file appears or goes
+# (an included file's own edits are tracked by CMake already).
+set(PRODUCT_PRIV_REQUIRES)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    file(GLOB product_cmake CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/product.cmake")
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/product.cmake" OPTIONAL)
+
 idf_component_register(
     SRCS ${app_logic_srcs}
     INCLUDE_DIRS "include"
@@ -32,4 +46,5 @@ idf_component_register(
     PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button
                   driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi
                   esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer
+                  ${PRODUCT_PRIV_REQUIRES}
 )

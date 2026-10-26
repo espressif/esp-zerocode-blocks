@@ -249,7 +249,7 @@ test('app_logic can include app_ble_mesh.h to define the hooks, and only on a me
   t.after(() => rmSync(dirname(tpl), { recursive: true, force: true }))
   const privRequires = (dir) => {
     const cmake = readAll(dir, 'components/app_logic/CMakeLists.txt')
-    const m = cmake.match(/PRIV_REQUIRES([^)]*)\)/)
+    const m = cmake.match(/^\s*PRIV_REQUIRES([^)]*)\)/m)
     assert.ok(m, 'app_logic has PRIV_REQUIRES')
     return m[1].split(/\s+/).filter(Boolean)
   }

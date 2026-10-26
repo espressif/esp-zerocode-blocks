@@ -78,7 +78,7 @@ test('the washer product generates with the API declared and every source globbe
     assert.match(cmake, /if\(NOT CMAKE_SCRIPT_MODE_FILE\)/, `${comp} skips the glob in script mode`)
     assert.doesNotMatch(cmake, /SRCS\s+"/, `${comp} lists no source by name`)
   }
-  assert.match(read('components/app_logic/CMakeLists.txt'), /PRIV_REQUIRES[^)]*esp_http_client[^)]*espressif__json_parser/)
+  assert.match(read('components/app_logic/CMakeLists.txt'), /^\s*PRIV_REQUIRES[^)]*esp_http_client[^)]*espressif__json_parser/m)
   assert.match(read('main/idf_component.yml'), /espressif\/json_parser/)
   assert.match(read('sdkconfig.defaults'), /CONFIG_MBEDTLS_GCM_C=y/)
   const control = read('components/app_logic/control.cpp')

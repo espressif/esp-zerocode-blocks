@@ -895,6 +895,18 @@ script-mode requirement scan, where the flag is an error). A product adds a
 source file there with no CMakeLists edit, and a new file is picked up on the
 next build; a stray copy of a file in either directory is compiled too.
 
+**A product's own component requirements go in `app_logic/product.cmake`.**
+Product code there that needs a component the generated list lacks
+(`esp_http_client`, `json`, …) sets `PRODUCT_PRIV_REQUIRES` in
+`components/app_logic/product.cmake`; the generated CMakeLists clears the
+variable, `include()`s the file `OPTIONAL`ly and appends it to `PRIV_REQUIRES` —
+outside the script-mode guard, so IDF's requirement scan sees it too. The
+engine never writes `product.cmake`, so a re-generate keeps it, while an edit
+to the generated CMakeLists is lost. `applyCmakePrivRequires` merges block
+requirements only into a line that STARTS with `PRIV_REQUIRES` (it used to take
+the first occurrence anywhere, comments included). Tested by
+`engine/tests/product-cmake.test.mjs` (a `cmake -P` stand-in for the scan).
+
 Watch out for these common authoring pitfalls:
 1. **Cross-TU statics.** `logic_*` slots are now grouped by concern into
    separate files under `app_logic/` (e.g. `persist.cpp`, `indicator.cpp`),
