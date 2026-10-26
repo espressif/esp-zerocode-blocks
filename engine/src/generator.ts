@@ -1394,7 +1394,7 @@ esp_openthread_platform_config_t zc_openthread_platform_config(void)
 esp_err_t app_matter_init(void)
 {
     s_handle = app_driver_register_solution("matter", matter_driver_cb, NULL);
-
+${collectSlot(rendered, 'matter_init', 4)}
     node::config_t node_config;
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     if (!node) {

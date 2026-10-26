@@ -58,8 +58,9 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `matter_event_cases` | components/app_matter (rendered only when frameworks includes matter) | 4× device_types · 3× behaviors |
 | `matter_identify_cases` | components/app_matter (rendered only when frameworks includes matter) | 3× behaviors |
 | `matter_includes` | components/app_matter (rendered only when frameworks includes matter) | 60× device_types · 5× behaviors |
+| `matter_init` | components/app_matter (rendered only when frameworks includes matter) | 1× behaviors |
 | `matter_last_fabric_cases` | components/app_matter (rendered only when frameworks includes matter) — **defaulted**: a contribution REPLACES the built-in handler (factory reset when the last fabric is removed — without some handler the device can never be commissioned again) | no blocks yet — engine default applies |
-| `matter_statics` | components/app_matter (rendered only when frameworks includes matter) | 60× device_types · 1× behaviors |
+| `matter_statics` | components/app_matter (rendered only when frameworks includes matter) | 60× device_types · 2× behaviors |
 | `mqtt_command_cases` | components/app_mqtt (only with mqtt) | 29× device_types |
 | `mqtt_device_create` | components/app_mqtt (only with mqtt) | 47× device_types |
 | `mqtt_driver_cb_cases` | components/app_mqtt (only with mqtt) | 47× device_types |

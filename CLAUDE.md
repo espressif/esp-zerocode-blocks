@@ -247,6 +247,7 @@ indent.
 | `driver_includes` / `driver_statics` / `driver_init` / `driver_apply_cases` | `app_driver.cpp` | hardware init + per-param HW writes |
 | `matter_includes` / `matter_statics` | `app_matter.cpp` | per-endpoint includes + state |
 | `matter_endpoint_create` | inside `app_matter_init()` | endpoint creation |
+| `matter_init` | inside `app_matter_init()`, right after the framework registers on the bus (before the node, before `esp_matter::start()`) | register a listener on the framework's own params (`behaviors/commissioning_led` on `APP_DRIVER_PARAM_MATTER_COMMISSIONED`) so the boot value reaches it |
 | `matter_driver_cb_cases` | `matter_driver_cb()` | param → attribute push |
 | `matter_attr_cb_cases` | `app_attribute_update_cb()` | attribute → param push |
 | `matter_identify_cases` / `matter_event_cases` | identify + chip event handlers | |

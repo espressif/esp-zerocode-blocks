@@ -12,6 +12,13 @@ description: Drives a u8 LED pattern_param from onboarding + connectivity state 
 # framework with none of these (aws_iot, espnow, webui alone) leaves the LED on
 # logic_init's slow blink: compose this block only with one of the five.
 #
+# On Matter, paired / unpaired is NOT inferred from events: matter_init
+# registers a listener on the framework's APP_DRIVER_PARAM_MATTER_COMMISSIONED
+# (the fabric table at boot, re-read on every fabric event), so a paired device
+# boots solid even with the router down, removal from one of several fabrics
+# leaves it paired, and connectivity changes only move a PAIRED device between
+# solid and breathe. The session events keep the fast blink while pairing.
+#
 # Standard mapping (shared vocabulary with drivers/status_led):
 #   - Boot, unprovisioned:     slow blink (2)  — "I'm waiting to be set up"
 #   - Onboarding in flight:    fast blink (3)  — "pairing/provisioning"
@@ -24,3 +31,6 @@ driver_params:
     type: u8
     required: true
     description: u8 LED pattern param (read by behaviors/blink_pattern or drivers/status_led wiring)
+
+facts:
+  matter_paired_state: "On a Matter product the LED takes paired or not from the framework's commissioned state (APP_DRIVER_PARAM_MATTER_COMMISSIONED, read from the fabric table at boot): a paired device shows solid from boot even before the network is up, slow blink only while it is on no fabric, fast blink while pairing, and breathe while a paired device has lost its network."
