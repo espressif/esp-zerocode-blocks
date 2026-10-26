@@ -23,3 +23,6 @@ driver_params:
   brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
   hue_param:        { type: u8, default: APP_DRIVER_PARAM_HUE }
   saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }
+
+facts:
+  on_off_gate: "The LED lights only while its on/off param (power_param) is true: hue, saturation and brightness change the colour it shows when on, and with the on/off param false or never written it stays dark."

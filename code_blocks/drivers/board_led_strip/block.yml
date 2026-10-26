@@ -93,3 +93,6 @@ driver_params:
     type: u8
     required: false
     description: Optional. Brightness 0-254. Unbound = 254. Without hue_param it dims the fixed red/green/blue colour.
+
+facts:
+  on_off_gate: "The LED lights only while its on/off param (param_id) is true: hue, saturation and brightness change the colour it shows when on, and with the on/off param false or never written it stays dark."
