@@ -18,7 +18,8 @@ radio: true
 # toggle (off = min, on = max) / slider / number (- and + by step, shown
 # divided by scale) / value / binary, polling GET /api/state and sending
 # POST /api/set with an X-ZC-Request header (a GET or a header-less request is
-# refused, so a page elsewhere cannot drive the device cross-site). Params
+# refused, so a page elsewhere cannot drive the device cross-site; a write to
+# a value or binary row is refused too — only controls take one). Params
 # travel BY NAME in the API, mapped to enums by a generated table.
 #
 # NETWORK: standalone products bring up a SoftAP — "ZeroCode-<id>", with a

@@ -144,3 +144,12 @@ test('a reading or target never written yet shows --, not 0', async () => {
   assert.equal(find(r2.root, 'Thermostat temperature (°C)').children[1].textContent, '0.00')
   assert.equal(find(r2.root, 'Thermostat target (°C)').children[1].children[1].textContent, '21.4')
 })
+
+test('the server refuses a write to a read-only row (value, binary) before it touches the bus', () => {
+  const cpp = generate(CFG)
+  const body = cpp.slice(cpp.indexOf('static esp_err_t set_post'), cpp.indexOf('static void webui_start_server'))
+  const guard = body.indexOf('if (strcmp(e->kind, "toggle") != 0 && strcmp(e->kind, "slider") != 0 && strcmp(e->kind, "number") != 0) {')
+  assert.ok(guard > 0, 'read-only guard in set_post')
+  assert.match(body.slice(guard, guard + 300), /HTTPD_403_FORBIDDEN, "read-only"\);\s*return ESP_FAIL;/)
+  assert.ok(guard > body.indexOf('strcmp(e->param_name, pname)') && guard < body.indexOf('app_driver_set_param'))
+})
