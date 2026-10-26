@@ -5075,6 +5075,13 @@ extern "C" {
  * Returns NULL on failure. */
 button_handle_t app_button_get_or_create(int gpio_num, int active_level, int long_press_ms);
 
+/* The factory-reset hold armed on a registry button (behaviors/
+ * factory_reset_long_press records it), so a control button on the same pin
+ * can toggle on any press released before it instead of on the click alone.
+ * app_button_reset_hold_ms() is 0 for a button with no reset hold. */
+void app_button_set_reset_hold(button_handle_t handle, int hold_ms);
+int app_button_reset_hold_ms(button_handle_t handle);
+
 #ifdef __cplusplus
 }
 #endif
@@ -5090,6 +5097,7 @@ static const char *TAG = "button_registry";
 typedef struct {
     int gpio_num;
     button_handle_t handle;
+    int reset_hold_ms;
 } app_button_entry_t;
 
 static app_button_entry_t s_buttons[APP_BUTTON_REGISTRY_MAX];
@@ -5123,9 +5131,28 @@ button_handle_t app_button_get_or_create(int gpio_num, int active_level, int lon
     }
     s_buttons[s_button_count].gpio_num = gpio_num;
     s_buttons[s_button_count].handle = handle;
+    s_buttons[s_button_count].reset_hold_ms = 0;
     s_button_count++;
     ESP_LOGI(TAG, "created shared button device on GPIO %d", gpio_num);
     return handle;
+}
+
+void app_button_set_reset_hold(button_handle_t handle, int hold_ms)
+{
+    for (int i = 0; i < s_button_count; i++) {
+        if (s_buttons[i].handle == handle) {
+            s_buttons[i].reset_hold_ms = hold_ms;
+            return;
+        }
+    }
+}
+
+int app_button_reset_hold_ms(button_handle_t handle)
+{
+    for (int i = 0; i < s_button_count; i++) {
+        if (s_buttons[i].handle == handle) return s_buttons[i].reset_hold_ms;
+    }
+    return 0;
 }
 `
 

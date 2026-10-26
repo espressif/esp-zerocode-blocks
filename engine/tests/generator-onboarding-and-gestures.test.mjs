@@ -204,7 +204,9 @@ test('board_button with no target param leaves every gesture to the product', as
   const control = read('components/app_logic/control.cpp')
   assert.ok(!control.includes('#define KEY_SINGLE_CLICK_TOGGLES'))
   assert.ok(!/app_driver_set_param/.test(control.slice(control.indexOf('key_board_button_cb'))), 'a click toggles nothing')
-  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    key_on_single_click\(\);/)
+  assert.match(control, /static void key_click\(void\)\n\{\n    key_on_single_click\(\);\n\}/)
+  assert.match(control, /#define KEY_TOGGLE_BEFORE_RESET 0\n/, 'no target: the click is the click, nothing waits for the press end')
+  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    if \(KEY_TOGGLE_BEFORE_RESET\) return;[^\n]*\n    key_click\(\);/)
 })
 
 /* ── the board's own LED: colour ─────────────────────────────────────── */

@@ -2,7 +2,8 @@ description: >-
   Use a button the BOARD already declares — its BOOT button, an AI button —
   through esp-board-manager, with gestures: single click, double click
   (double press), long press and an optional hold-to-factory-reset. A single
-  click can toggle a boolean driver param; every gesture also calls a hook the
+  click can toggle a boolean driver param — with a factory-reset hold, any
+  press released before the hold does; every gesture also calls a hook the
   product overrides (`<prefix>_on_single_click`, `_on_double_click`,
   `_on_long_press`). Board-only: it states no pin, because the pin is the
   board's.
@@ -95,6 +96,19 @@ params:
       after it and before factory_reset_ms, app_factory_reset_hold_cancelled()
       runs. 0 = long_press_ms when that is shorter than factory_reset_ms
       (the long press fires first, then the feedback), else 1000.
+  toggle_before_reset:
+    type: bool
+    default: true
+    description: >-
+      With target_param and factory_reset_ms set: any press released before
+      the reset hold toggles target_param exactly once (and calls
+      <prefix>_on_single_click) — a click at the end of the click, a longer
+      press at its release — and a press that reaches the reset does not.
+      Without it the toggle was the click alone, which ends at the board's
+      long-press time (1.5-2 s), so a 3 s press toggled nothing. A double
+      press stays a double click, and a long press the product's
+      <prefix>_on_long_press override handles is that gesture, not a toggle
+      (an unhandled one still toggles). false keeps the click-only toggle.
 
 driver_params:
   target_param:
@@ -120,6 +134,13 @@ driver_params:
 # default logs "<prefix>: <gesture> (no handler)", which is how a missing or
 # misspelled override shows up in a device log instead of not at all.
 #
+# TOGGLE BEFORE THE RESET. With target_param and factory_reset_ms set, the
+# toggle (and btn_on_single_click) runs for ANY single press released before
+# the reset hold — at BUTTON_PRESS_END, which for a click is the moment
+# SINGLE_CLICK fires and for a longer press its release — because the click
+# alone ends at the board's long-press time and a 3 s press toggled nothing.
+# toggle_before_reset: false restores the click-only toggle.
+#
 # RESET FEEDBACK. With factory_reset_ms set, the block also calls the base's
 # app_factory_reset_hold_started() at reset_cue_ms and
 # app_factory_reset_hold_cancelled() on an early release (app_utils.h). A
@@ -137,4 +158,5 @@ driver_params:
 # on the board's device is this block's.
 
 facts:
+  toggle_until_reset: "With target_param and factory_reset_ms set, any press released before the reset hold toggles once (a click after the double-click window, a longer press at its release) and a hold that reaches the reset resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold 10 s to reset\" is target_param + factory_reset_ms, no button code of the product's own."
   reset_hold_feedback: "With factory_reset_ms set, a press held past reset_cue_ms calls app_factory_reset_hold_started() and an early release app_factory_reset_hold_cancelled() (app_utils.h, weak, defined in app_logic) — feedback during the hold goes there; the block's own callbacks are never unregistered or re-registered, so its click, long press and reset keep working."

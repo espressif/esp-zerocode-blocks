@@ -25,6 +25,12 @@
                 ESP_LOGE(TAG, "{{prefix_lc}}: single click not bound — check the button timings (a hold must be longer than the double-click window)");
                 {{prefix_lc}}_bound = false;
             }
+            if (iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_DOWN, NULL, {{prefix_lc}}_press_down_cb, NULL) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_UP, NULL, {{prefix_lc}}_press_up_cb, NULL) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_END, NULL, {{prefix_lc}}_press_end_cb, NULL) != ESP_OK) {
+                ESP_LOGE(TAG, "{{prefix_lc}}: press tracking not bound");
+                {{prefix_lc}}_bound = false;
+            }
             if (iot_button_register_cb({{prefix_lc}}_btn, BUTTON_DOUBLE_CLICK, NULL, {{prefix_lc}}_double_click_cb, NULL) != ESP_OK) {
                 ESP_LOGE(TAG, "{{prefix_lc}}: double click not bound — check the button timings (a hold must be longer than the double-click window)");
                 {{prefix_lc}}_bound = false;

@@ -9,6 +9,9 @@
         button_event_args_t {{prefix_lc}}_lp_args = {};
         {{prefix_lc}}_lp_args.long_press.press_time = {{prefix}}_FR_HOLD_MS;
         iot_button_register_cb(s_{{prefix_lc}}_fr_btn, BUTTON_LONG_PRESS_START, &{{prefix_lc}}_lp_args, {{prefix_lc}}_factory_reset_cb, NULL);
+        /* A control button on this pin toggles on any press released before
+           the hold (its toggle_before_reset), read from here at the press. */
+        app_button_set_reset_hold(s_{{prefix_lc}}_fr_btn, {{prefix}}_FR_HOLD_MS);
         const esp_timer_create_args_t {{prefix_lc}}_cue_args = {
             .callback = &{{prefix_lc}}_fr_cue_cb,
             .arg = NULL,

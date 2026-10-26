@@ -234,6 +234,25 @@ without touching the button block's callbacks. The cue is a one-shot
 fires one shorter than the DEVICE's long-press time, which on a shared pin is
 whoever created the device. Tested by `engine/tests/factory-reset-hold.test.mjs`.
 
+A control button beside a reset hold on the same button toggles on ANY press
+released before the hold, not on the click alone (`toggle_before_reset`, on by
+default, on `board_button`, `button`, `relay_with_button`,
+`multi_event_button`). iot_button reports a click only for a press released
+before the DEVICE's long-press time (1.5-2 s, the board's or the first
+creator's), so "press to toggle, hold 10 s to reset" did nothing for a 2-10 s
+press — the hold cue started and was cancelled with no toggle. The toggle now
+runs at `BUTTON_PRESS_END` of a gesture of one press shorter than the hold: a
+click at the same moment `SINGLE_CLICK` fires (after the double-click window,
+so a double press stays a double click), a longer press at its release, and a
+press that reaches the reset never. A gpio block learns the hold at the press
+from the button registry (`factory_reset_long_press` records it with
+`app_button_set_reset_hold`), so instance order does not matter; without a
+hold on the pin the click toggles as before. A long press the product's
+`<prefix>_on_long_press` override handles is that gesture, not a toggle — the
+weak default marks the press unhandled, so an unhandled one still toggles.
+The simulator in the same test models the click window, repeats and
+`PRESS_END` as iot_button 4.2 does.
+
 ## Block slots
 
 Each block contributes code via named `slots` in `block.yml`. The

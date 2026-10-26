@@ -39,7 +39,13 @@ typedef int esp_err_t;
 static const char *TAG = "test";
 static char g_trace[256];
 static void trace(const char *s) { strcat(g_trace, s); }
-static void log_line(const char *fmt) { if (strstr(fmt, "long press (no handler)")) trace("L"); }
+static void log_line(const char *fmt)
+{
+    if (strstr(fmt, "long press (no handler)") || strstr(fmt, "long-press (no handler installed)")) trace("L");
+    if (strstr(fmt, "double click (no handler)") || strstr(fmt, "double-click (no handler installed)")) trace("D");
+}
+/* For a product override compiled in a second translation unit. */
+extern "C" void trace_ext(const char *s) { trace(s); }
 #define ESP_LOGI(tag, fmt, ...) ((void)(tag), log_line(fmt))
 #define ESP_LOGW ESP_LOGI
 #define ESP_LOGE ESP_LOGI
@@ -76,12 +82,12 @@ static int64_t esp_timer_get_time(void) { return g_now_ms * 1000; }
 #define ESP_ERROR_CHECK(x) do { if ((x) != ESP_OK) { printf("ESP_ERROR_CHECK\n"); } } while (0)
 
 /* Simulated iot_button: one device per pin. */
-typedef enum { BUTTON_PRESS_DOWN, BUTTON_PRESS_UP, BUTTON_SINGLE_CLICK, BUTTON_DOUBLE_CLICK, BUTTON_LONG_PRESS_START, BUTTON_EVENT_MAX } button_event_t;
+typedef enum { BUTTON_PRESS_DOWN, BUTTON_PRESS_UP, BUTTON_SINGLE_CLICK, BUTTON_DOUBLE_CLICK, BUTTON_LONG_PRESS_START, BUTTON_PRESS_END, BUTTON_EVENT_MAX } button_event_t;
 #define BUTTON_SHORT_PRESS_TIME_MS 1
 typedef void (*button_cb_t)(void *, void *);
 typedef struct { struct { uint16_t press_time; } long_press; } button_event_args_t;
 struct sim_cb { button_event_t ev; int press_time; button_cb_t cb; };
-struct sim_button { int long_press_ms; sim_cb cbs[16]; int n; bool pressed; int64_t down_ms; bool reached_long; };
+struct sim_button { int long_press_ms; int window_ms; sim_cb cbs[24]; int n; bool pressed; int64_t down_ms; bool reached_long; int repeat; bool in_window; int64_t up_ms; int reset_hold_ms; };
 typedef sim_button *button_handle_t;
 static sim_button g_button;
 static bool g_button_made = false;
@@ -91,27 +97,51 @@ static esp_err_t iot_button_register_cb(button_handle_t b, button_event_t ev, bu
     b->cbs[b->n++] = { ev, pt, cb };
     return ESP_OK;
 }
-static esp_err_t iot_button_set_param(button_handle_t, int, void *) { return ESP_OK; }
+static esp_err_t iot_button_set_param(button_handle_t b, int param, void *v) { if (param == BUTTON_SHORT_PRESS_TIME_MS) b->window_ms = (int)(intptr_t)v; return ESP_OK; }
 static void fire(button_event_t ev) { for (int i = 0; i < g_button.n; i++) if (g_button.cbs[i].ev == ev) g_button.cbs[i].cb(&g_button, NULL); }
 static button_handle_t app_button_get_or_create(int, int, int long_press_ms)
 {
     if (!g_button_made) { g_button_made = true; g_button.long_press_ms = long_press_ms ? long_press_ms : 1500; }
     return &g_button;
 }
+/* The registry's record of the reset hold armed on a button. */
+static void app_button_set_reset_hold(button_handle_t b, int hold_ms) { if (b) b->reset_hold_ms = hold_ms; }
+static int app_button_reset_hold_ms(button_handle_t b) { return b ? b->reset_hold_ms : 0; }
 static int g_level[64];
 #define GPIO_ACTIVE 0
-static void press(void) { g_button.pressed = true; g_button.down_ms = g_now_ms; g_button.reached_long = false; g_level[ACTIVE_A] = GPIO_ACTIVE; g_level[ACTIVE_B] = GPIO_ACTIVE; fire(BUTTON_PRESS_DOWN); }
+/* iot_button 4.x: a press released before the device's long-press time opens
+ * the click window (short press time); another press inside it is a repeat.
+ * When the window closes: one press = SINGLE_CLICK, two = DOUBLE_CLICK, then
+ * PRESS_END. A press that reached the long press ends at its release (PRESS_UP,
+ * PRESS_END, no click); so does a repeat press held past the window. */
+static void press(void)
+{
+    g_button.repeat = g_button.in_window ? g_button.repeat + 1 : 1;
+    g_button.in_window = false;
+    g_button.pressed = true; g_button.down_ms = g_now_ms; g_button.reached_long = false; g_level[ACTIVE_A] = GPIO_ACTIVE; g_level[ACTIVE_B] = GPIO_ACTIVE; fire(BUTTON_PRESS_DOWN);
+}
 static void release(void)
 {
     g_button.pressed = false; g_level[ACTIVE_A] = !GPIO_ACTIVE; g_level[ACTIVE_B] = !GPIO_ACTIVE;
     fire(BUTTON_PRESS_UP);
-    if (!g_button.reached_long) fire(BUTTON_SINGLE_CLICK);
+    int window = g_button.window_ms ? g_button.window_ms : 180;
+    bool ended = g_button.repeat == 1 ? g_button.reached_long : (g_now_ms - g_button.down_ms) >= window;
+    if (ended) { g_button.repeat = 0; fire(BUTTON_PRESS_END); }
+    else { g_button.in_window = true; g_button.up_ms = g_now_ms; }
 }
 static void advance(int ms)
 {
     for (int i = 0; i < ms; i++) {
         g_now_ms++;
-        if (g_button.pressed) {
+        int window = g_button.window_ms ? g_button.window_ms : 180;
+        if (g_button.in_window && g_now_ms - g_button.up_ms > window) {
+            g_button.in_window = false;
+            if (g_button.repeat == 1) fire(BUTTON_SINGLE_CLICK);
+            else if (g_button.repeat == 2) fire(BUTTON_DOUBLE_CLICK);
+            g_button.repeat = 0;
+            fire(BUTTON_PRESS_END);
+        }
+        if (g_button.pressed && g_button.repeat == 1) {
             int held = (int)(g_now_ms - g_button.down_ms);
             if (held >= g_button.long_press_ms) g_button.reached_long = true;
             for (int k = 0; k < g_button.n; k++)
@@ -171,11 +201,18 @@ ${body}
 }
 `
 
-function run(t, program) {
+// `product` is a second translation unit: the product's overrides of a block's
+// weak hooks, as on the device (a strong definition in its own file).
+function run(t, program, product) {
   const dir = mkdtempSync(join(tmpdir(), 'zc-fr-hold-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   writeFileSync(join(dir, 'main.cpp'), program)
-  execFileSync(CXX, ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-Wno-gnu-zero-variadic-macro-arguments', join(dir, 'main.cpp'), '-o', join(dir, 'p')], { stdio: 'pipe' })
+  const sources = [join(dir, 'main.cpp')]
+  if (product) {
+    writeFileSync(join(dir, 'product.cpp'), 'extern "C" void trace_ext(const char *s);\n' + product)
+    sources.push(join(dir, 'product.cpp'))
+  }
+  execFileSync(CXX, ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-Wno-gnu-zero-variadic-macro-arguments', ...sources, '-o', join(dir, 'p')], { stdio: 'pipe' })
   const r = spawnSync(join(dir, 'p'), { encoding: 'utf-8' })
   assert.equal(r.status, 0, r.stdout + r.stderr)
   assert.equal(r.stdout.trim(), 'ok')
@@ -183,14 +220,14 @@ function run(t, program) {
 
 const skip = !haveCxx && 'no host C++ compiler'
 
-test('board_button: feedback from the cue to the reset or the release; click and long press unchanged', { skip }, (t) => {
-  const cfg = { device: 'boot_button', double_click_ms: 0, long_press_ms: 2000, factory_reset_ms: 5000, reset_cue_ms: 0, target_param: 'PARAM_POWER' }
+test('board_button: feedback from the cue to the reset or the release; every press released before the reset toggles', { skip }, (t) => {
+  const cfg = { device: 'boot_button', double_click_ms: 0, long_press_ms: 2000, factory_reset_ms: 5000, reset_cue_ms: 0, toggle_before_reset: true, target_param: 'PARAM_POWER' }
   const pre = '#define ACTIVE_A 0\n#define ACTIVE_B 0\n#define BOARD_LONG_PRESS_MS 1500\n'
   const body = String.raw`
     hold(100);   EXPECT("a click toggles, no feedback", "K");
-    hold(1800);  EXPECT("past the device long press, before the cue: nothing", "");
-    hold(3000);  EXPECT("cue (= long press 2 s) then release: long press, started, cancelled", "LSC");
-    hold(6000);  EXPECT("held to the reset: started then reset, no cancel", "LSR");
+    hold(1800);  EXPECT("past the device long press, before the cue: toggles at the release", "K");
+    hold(3000);  EXPECT("cue (= long press 2 s) then release: long press, started, cancelled, toggled", "LSCK");
+    hold(6000);  EXPECT("held to the reset: started then reset, no cancel, no toggle", "LSR");
     g_reset_result = ESP_FAIL;
     hold(6000);  EXPECT("a failed erase ends the feedback once", "LSRC");
     g_reset_result = ESP_OK;
@@ -201,11 +238,13 @@ test('board_button: feedback from the cue to the reset or the release; click and
 })
 
 test('board_button: an explicit reset_cue_ms before the long press', { skip }, (t) => {
-  const cfg = { device: 'boot_button', double_click_ms: 0, long_press_ms: 2000, factory_reset_ms: 5000, reset_cue_ms: 1600, target_param: 'PARAM_POWER' }
+  const cfg = { device: 'boot_button', double_click_ms: 0, long_press_ms: 2000, factory_reset_ms: 5000, reset_cue_ms: 1600, toggle_before_reset: false, target_param: 'PARAM_POWER' }
   const pre = '#define ACTIVE_A 0\n#define ACTIVE_B 0\n#define BOARD_LONG_PRESS_MS 1500\n'
   const body = String.raw`
-    hold(1550);  EXPECT("before the cue: nothing", "");
+    hold(1550);  EXPECT("before the cue (toggle_before_reset off): nothing", "");
     hold(1700);  EXPECT("past the cue, released: started, cancelled", "SC");
+    hold(3000);  EXPECT("toggle_before_reset off: a long press does not toggle", "SLC");
+    hold(100);   EXPECT("toggle_before_reset off: a click still toggles", "K");
 `
   run(t, STUBS.replace('#define GPIO_ACTIVE', pre + '#define GPIO_ACTIVE') + slots('drivers/board_button', ['logic_statics.c'], cfg) + `\nstatic void boot(void)\n${slots('drivers/board_button', ['logic_init.c'], cfg)}\n` + MAIN(body))
 })
@@ -254,4 +293,112 @@ test('factory_reset_button_combo: started once both are held past the cue, cance
     + slots('behaviors/factory_reset_button_combo', ['config_defines.h', 'logic_statics.c'], cfg)
     + `\nstatic void boot(void)\n${slots('behaviors/factory_reset_button_combo', ['logic_init.c'], cfg)}\n` + MAIN(body)
   run(t, program)
+})
+
+// "A press released before the 10 s factory-reset hold toggles the output;
+// holding to 10 s resets." The board's own long-press time (1.5 s here) ends a
+// click, so with the toggle on the click alone a 2-10 s press did nothing.
+const BOARD = (cfg) => (t, body, product) => {
+  const pre = '#define ACTIVE_A 0\n#define ACTIVE_B 0\n#define BOARD_LONG_PRESS_MS 1500\n'
+  run(t, STUBS.replace('#define GPIO_ACTIVE', pre + '#define GPIO_ACTIVE') + slots('drivers/board_button', ['logic_statics.c'], cfg) + `\nstatic void boot(void)\n${slots('drivers/board_button', ['logic_init.c'], cfg)}\n` + MAIN(body), product)
+}
+const board10s = { device: 'boot_button', double_click_ms: 0, long_press_ms: 2000, factory_reset_ms: 10000, reset_cue_ms: 0, toggle_before_reset: true, target_param: 'PARAM_POWER' }
+
+test('board_button with a 10 s reset hold: 0.2 s, 3 s and 9.9 s releases toggle once; 10 s resets without a toggle', { skip }, (t) => {
+  BOARD(board10s)(t, String.raw`
+    hold(200);   EXPECT("0.2 s: a click", "K");
+    hold(3000);  EXPECT("3 s: long press, started, cancelled, one toggle", "LSCK");
+    hold(9900);  EXPECT("9.9 s: long press, started, cancelled, one toggle", "LSCK");
+    hold(10000); EXPECT("10 s: started, reset, no toggle", "LSR");
+    g_reset_result = ESP_FAIL;
+    hold(10500); EXPECT("a failed erase: cancelled, still no toggle", "LSRC");
+    g_reset_result = ESP_OK;
+    hold(200);   EXPECT("then a click toggles again", "K");
+    if (g_param[PARAM_POWER].b) { printf("FAIL: four toggles leave the output off\n"); fails++; }
+`)
+})
+
+test('board_button with a double-click window: a double press is a double click, never a toggle; single presses still toggle', { skip }, (t) => {
+  BOARD({ ...board10s, double_click_ms: 400 })(t, String.raw`
+    press(); advance(100); release(); advance(150); press(); advance(100); release(); advance(1000);
+                 EXPECT("double press: the double-click hook alone", "D");
+    hold(200);   EXPECT("0.2 s, after the window: a click", "K");
+    hold(3000);  EXPECT("3 s: one toggle at the release", "LSCK");
+`)
+})
+
+test('board_button: a long press the product handles is its own gesture, not a toggle', { skip }, (t) => {
+  BOARD(board10s)(t, String.raw`
+    hold(200);   EXPECT("a click toggles", "K");
+    hold(1800);  EXPECT("released before the long press: a toggle", "K");
+    hold(3000);  EXPECT("the product's long press, the cue, no toggle", "PSC");
+    hold(10000); EXPECT("10 s: the reset", "PSR");
+`, 'void app_on_long_press(void) { trace_ext("P"); }\n')
+})
+
+// A gpio control button and behaviors/factory_reset_long_press on the same pin:
+// the reset block records its hold on the shared device, and the control
+// button toggles on any press released before it.
+function gpioPair(t, control, controlCfg, ownerFirst, body, product) {
+  const fr = { gpio: 9, active_level: 0, hold_time_ms: 10000, reset_cue_ms: 1500 }
+  const pre = '#define ACTIVE_A 9\n#define ACTIVE_B 9\n#define BOARD_LONG_PRESS_MS 1500\n'
+  const order = ownerFirst ? 'control_init(); fr_init();' : 'fr_init(); control_init();'
+  const program = STUBS.replace('#define GPIO_ACTIVE', pre + '#define GPIO_ACTIVE')
+    + slots(control, ['config_defines.h', 'logic_statics.c'], controlCfg)
+    + slots('behaviors/factory_reset_long_press', ['config_defines.h', 'logic_statics.c'], fr)
+    + `\nstatic void control_init(void)\n${slots(control, ['logic_init.c'], controlCfg)}\n`
+    + `\nstatic void fr_init(void)\n${slots('behaviors/factory_reset_long_press', ['logic_init.c'], fr)}\n`
+    + `static void boot(void) { ${order} }\n` + MAIN(body)
+  run(t, program, product)
+}
+const TEN_S = String.raw`
+    hold(200);   EXPECT("0.2 s: a click", "K");
+    hold(3000);  EXPECT("3 s: started, cancelled, one toggle", "SCK");
+    hold(9900);  EXPECT("9.9 s: started, cancelled, one toggle", "SCK");
+    hold(10000); EXPECT("10 s: started, reset, no toggle", "SR");
+    g_reset_result = ESP_FAIL;
+    hold(10500); EXPECT("a failed erase: cancelled, still no toggle", "SRC");
+`
+for (const ownerFirst of [true, false]) {
+  const which = ownerFirst ? 'control button first' : 'reset block first'
+  test(`relay_with_button + factory_reset_long_press (${which}): releases before 10 s toggle once, 10 s resets`, { skip }, (t) => {
+    gpioPair(t, 'drivers/relay_with_button', { relay_gpio: 7, relay_active_level: 1, button_gpio: 9, button_active_level: 0, toggle_before_reset: true, param_id: 'PARAM_POWER' }, ownerFirst, TEN_S)
+  })
+  test(`button + factory_reset_long_press (${which}): releases before 10 s toggle once, 10 s resets`, { skip }, (t) => {
+    gpioPair(t, 'drivers/button', { gpio: 9, active_level: 0, toggle_before_reset: true, target_param: 'PARAM_POWER' }, ownerFirst, TEN_S)
+  })
+}
+
+test('multi_event_button + factory_reset_long_press: an unhandled long press still toggles; a double press does not', { skip }, (t) => {
+  gpioPair(t, 'drivers/multi_event_button', { gpio: 9, active_level: 0, long_press_ms: 2000, toggle_before_reset: true, target_param: 'PARAM_POWER' }, true, String.raw`
+    hold(200);   EXPECT("0.2 s: a click", "K");
+    hold(3000);  EXPECT("3 s: cue, long press (no handler), cancelled, one toggle", "SLCK");
+    hold(10000); EXPECT("10 s: reset, no toggle", "SLR");
+    press(); advance(60); release(); advance(80); press(); advance(60); release(); advance(1000);
+                 EXPECT("double press: the double-click hook alone", "D");
+`)
+})
+
+test('multi_event_button: a long press the product handles is not a toggle', { skip }, (t) => {
+  gpioPair(t, 'drivers/multi_event_button', { gpio: 9, active_level: 0, long_press_ms: 2000, toggle_before_reset: true, target_param: 'PARAM_POWER' }, true, String.raw`
+    hold(1800);  EXPECT("before the long press: a toggle", "SCK");
+    hold(3000);  EXPECT("the product's long press: no toggle", "SPC");
+`, 'void app_on_long_press(void) { trace_ext("P"); }\n')
+})
+
+test('a gpio control button with no reset hold on its pin: a long press toggles nothing, as before', { skip }, (t) => {
+  const cfg = { relay_gpio: 7, relay_active_level: 1, button_gpio: 9, button_active_level: 0, toggle_before_reset: true, param_id: 'PARAM_POWER' }
+  const pre = '#define ACTIVE_A 9\n#define ACTIVE_B 9\n#define BOARD_LONG_PRESS_MS 1500\n'
+  run(t, STUBS.replace('#define GPIO_ACTIVE', pre + '#define GPIO_ACTIVE') + slots('drivers/relay_with_button', ['config_defines.h', 'logic_statics.c'], cfg)
+    + `\nstatic void boot(void)\n${slots('drivers/relay_with_button', ['logic_init.c'], cfg)}\n` + MAIN(String.raw`
+    hold(200);   EXPECT("a click", "K");
+    hold(3000);  EXPECT("a long press: nothing", "");
+`))
+})
+
+test('toggle_before_reset false: a gpio control button keeps the click-only toggle beside a reset hold', { skip }, (t) => {
+  gpioPair(t, 'drivers/relay_with_button', { relay_gpio: 7, relay_active_level: 1, button_gpio: 9, button_active_level: 0, toggle_before_reset: false, param_id: 'PARAM_POWER' }, true, String.raw`
+    hold(200);   EXPECT("a click", "K");
+    hold(3000);  EXPECT("3 s: started, cancelled, no toggle", "SC");
+`)
 })
