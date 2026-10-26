@@ -45,12 +45,20 @@
         if (app_driver_param_seen({{cfg.local_temp_param}})) {
             zc_mqtt_publish(s_{{prefix_lc}}_curr_topic, buf, 0, 1, true);
         }
-        app_driver_get_param({{cfg.heat_setpoint_param}}, &init);
-        snprintf(buf, sizeof(buf), "%.2f", (double)init.i16 / 100.0);
-        zc_mqtt_publish(s_{{prefix_lc}}_temp_state_topic, buf, 0, 1, true);
-        /* Seed the mode too, or HA shows it unknown until someone changes it. */
-        app_driver_get_param({{cfg.system_mode_param}}, &init);
-        zc_mqtt_publish(s_{{prefix_lc}}_mode_state_topic, init.u8 == 0 ? "off" : "heat", 0, 1, true);
+        /* The target and the mode are seeded the same way: only once something
+         * set them (a restore, a command, a screen). Before that the bus holds a
+         * zero nobody chose, and a retained 0.00 target or "off" mode would be a
+         * false state HA keeps; unseeded, HA shows it unknown until the first
+         * real value, which the normal publish path sends. */
+        if (app_driver_param_seen({{cfg.heat_setpoint_param}})) {
+            app_driver_get_param({{cfg.heat_setpoint_param}}, &init);
+            snprintf(buf, sizeof(buf), "%.2f", (double)init.i16 / 100.0);
+            zc_mqtt_publish(s_{{prefix_lc}}_temp_state_topic, buf, 0, 1, true);
+        }
+        if (app_driver_param_seen({{cfg.system_mode_param}})) {
+            app_driver_get_param({{cfg.system_mode_param}}, &init);
+            zc_mqtt_publish(s_{{prefix_lc}}_mode_state_topic, init.u8 == 0 ? "off" : "heat", 0, 1, true);
+        }
 {{#if cfg.heating_param}}
         {{prefix_lc}}_publish_action();
 {{/if}}

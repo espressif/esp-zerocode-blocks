@@ -75,9 +75,19 @@ static void cmd(const char *sub, const char *payload)
     mqtt_handle_data(topic, (int)strlen(topic), payload, (int)strlen(payload));
 }
 static void set(int id, int v) { app_driver_param_val_t x = {}; if (id == P_HEAT) x.b = v; else if (id == P_MODE) x.u8 = (uint8_t)v; else x.i16 = (int16_t)v; g_param[id] = x; g_seen[id] = true; printf("--\n"); driver_cb(id, x); }
-int main(void)
+int main(int argc, char **argv)
 {
-    g_param[P_MODE].u8 = 4; g_param[P_SET].i16 = 2000;
+    (void)argc;
+    if (strcmp(argv[1], "fresh") == 0) {
+        /* Nothing set yet: connect, then HA sets the mode, then the output. */
+        create();
+        cmd("mode/cmd", "heat");
+        set(P_HEAT, 0);
+        return 0;
+    }
+    /* Restored before connect: target 20 °C, mode heat, output off. */
+    g_param[P_MODE].u8 = 4; g_param[P_SET].i16 = 2000; g_param[P_HEAT].b = false;
+    g_seen[P_MODE] = g_seen[P_SET] = g_seen[P_HEAT] = true;
     create();
     set(P_HEAT, 1);
     set(P_HEAT, 0);
@@ -96,12 +106,12 @@ int main(void)
 
 const CFG = { label: 'Thermostat', local_temp_param: 'P_TEMP', heat_setpoint_param: 'P_SET', system_mode_param: 'P_MODE', heating_param: 'P_HEAT' }
 
-function run(t, cfg) {
+function run(t, cfg, scenario = 'seeded') {
   const dir = mkdtempSync(join(tmpdir(), 'zc-thermo-mqtt-'))
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   writeFileSync(join(dir, 'main.cpp'), program(cfg))
   execFileSync(CXX, ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-parameter', '-Wno-unused-variable', join(dir, 'main.cpp'), '-o', join(dir, 'p')], { stdio: 'pipe' })
-  const out = spawnSync(join(dir, 'p'), { encoding: 'utf-8' })
+  const out = spawnSync(join(dir, 'p'), [scenario], { encoding: 'utf-8' })
   assert.equal(out.status, 0, out.stdout + out.stderr)
   // One array of publishes per step: [create, then each set()].
   return out.stdout.trim().split('--\n').map(chunk => chunk.trim().split('\n').filter(Boolean).map(l => l.split('|')))
@@ -138,4 +148,19 @@ test('thermostat mqtt: without heating_param the discovery has no action topic a
   assert.equal(json.action_topic, undefined)
   assert.equal(json.mode_command_topic, 'zerocode/abc123/thermo/mode/cmd')
   assert.ok(steps.flat().every(([topic]) => topic !== ACTION))
+})
+
+test('thermostat mqtt: on connect nothing is seeded that was never set, so HA shows unknown rather than a false 0', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
+  const steps = run(t, CFG, 'fresh')
+  const topics = steps[0].map(([topic]) => topic)
+  assert.ok(topics.includes('homeassistant/climate/zc_abc123_thermo/config'))
+  for (const sub of ['curr', 'temp/state', 'mode/state', 'action']) assert.ok(!topics.includes(`zerocode/abc123/thermo/${sub}`), sub)
+  // The mode is set: published; the output has never been set: still no action.
+  assert.deepEqual(steps[1], [['zerocode/abc123/thermo/mode/state', 'heat']])
+  // The output is set: the action follows.
+  assert.deepEqual(steps[2], [[ACTION, 'idle']])
+  // Once set, connect seeds them (the other test's scenario).
+  const seeded = run(t, CFG, 'seeded')[0]
+  assert.deepEqual(seeded.filter(([topic]) => !topic.startsWith('homeassistant/') && !topic.endsWith('/curr')).map(([topic, v]) => `${topic.split('/thermo/')[1] ?? topic}=${v}`),
+    ['temp/state=20.00', 'mode/state=heat', 'action=idle'])
 })
