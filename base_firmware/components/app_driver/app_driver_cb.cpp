@@ -21,6 +21,7 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <freertos/task.h>
 #include <esp_timer.h>
 #include <string.h>
 
@@ -321,4 +322,112 @@ int64_t app_driver_param_written_us(app_driver_param_id_t id)
     int64_t at = s_param_written_us[id];
     portEXIT_CRITICAL(&s_lock);
     return at;
+}
+
+/* ──── SERIALIZED DECISIONS ───────────────────────────────────────────── */
+
+/* Listeners run on the writer's task, so a product decision made in one runs
+ * on several tasks at once. app_driver_run_serialized() queues it for ONE task
+ * instead. Why not simply hold a dispatch mutex around the listeners: the
+ * Matter, Zigbee and LVGL tasks call set_param while holding their stack lock,
+ * and their own listeners take that lock — a bus-wide mutex held across the
+ * listeners inverts that order and deadlocks. Here nothing is held while a
+ * decision runs; the table below is touched only under the spinlock. */
+typedef struct {
+    app_driver_serial_fn_t fn;
+    void *arg;
+    bool pending;
+} serial_req_t;
+
+static serial_req_t s_serial[APP_DRIVER_SERIAL_SLOTS];
+static TaskHandle_t s_serial_task = NULL;
+static bool s_serial_started = false;
+
+#ifndef APP_DRIVER_SERIAL_STACK
+#define APP_DRIVER_SERIAL_STACK 6144
+#endif
+#ifndef APP_DRIVER_SERIAL_PRIORITY
+#define APP_DRIVER_SERIAL_PRIORITY 5
+#endif
+
+static void serial_task(void *unused)
+{
+    (void)unused;
+    for (;;) {
+        /* Passes over the table until a pass finds nothing waiting: each
+         * request runs at most once per pass, so one asked for again and again
+         * cannot starve the others. A request re-made while it runs is pending
+         * again and runs on the next pass. */
+        bool ran;
+        do {
+            ran = false;
+            for (int i = 0; i < APP_DRIVER_SERIAL_SLOTS; i++) {
+                app_driver_serial_fn_t fn = NULL;
+                void *arg = NULL;
+                portENTER_CRITICAL(&s_lock);
+                if (s_serial[i].pending) {
+                    s_serial[i].pending = false;
+                    fn = s_serial[i].fn;
+                    arg = s_serial[i].arg;
+                }
+                portEXIT_CRITICAL(&s_lock);
+                if (fn) {
+                    fn(arg);
+                    ran = true;
+                }
+            }
+        } while (ran);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    }
+}
+
+esp_err_t app_driver_run_serialized(app_driver_serial_fn_t fn, void *arg)
+{
+    if (fn == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    int slot = -1;
+    int free_slot = -1;
+    portENTER_CRITICAL(&s_lock);
+    for (int i = 0; i < APP_DRIVER_SERIAL_SLOTS; i++) {
+        if (s_serial[i].fn == fn && s_serial[i].arg == arg) { slot = i; break; }
+        if (free_slot < 0 && !s_serial[i].pending) free_slot = i;
+    }
+    if (slot < 0) slot = free_slot;
+    if (slot >= 0) {
+        s_serial[slot].fn = fn;
+        s_serial[slot].arg = arg;
+        s_serial[slot].pending = true;
+    }
+    bool start = slot >= 0 && !s_serial_started;
+    if (start) s_serial_started = true;
+    TaskHandle_t task = s_serial_task;
+    portEXIT_CRITICAL(&s_lock);
+
+    if (slot < 0) {
+        ESP_LOGE(TAG, "run_serialized: %d different requests already waiting — not queued",
+                 APP_DRIVER_SERIAL_SLOTS);
+        return ESP_ERR_NO_MEM;
+    }
+    if (start) {
+        TaskHandle_t created = NULL;
+        if (xTaskCreate(serial_task, "app_serial", APP_DRIVER_SERIAL_STACK, NULL,
+                        APP_DRIVER_SERIAL_PRIORITY, &created) != pdPASS) {
+            portENTER_CRITICAL(&s_lock);
+            s_serial_started = false;
+            s_serial[slot].pending = false;
+            portEXIT_CRITICAL(&s_lock);
+            ESP_LOGE(TAG, "run_serialized: could not create the serial task");
+            return ESP_ERR_NO_MEM;
+        }
+        portENTER_CRITICAL(&s_lock);
+        s_serial_task = created;
+        portEXIT_CRITICAL(&s_lock);
+        /* A request made between the start and the store above saw no task
+         * and did not notify; this wake covers it. */
+        xTaskNotifyGive(created);
+    } else if (task) {
+        xTaskNotifyGive(task);
+    }
+    return ESP_OK;
 }

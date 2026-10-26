@@ -37,6 +37,11 @@
 extern "C" {
 #endif
 
+/** Distinct app_driver_run_serialized() requests that can wait at once. */
+#ifndef APP_DRIVER_SERIAL_SLOTS
+#define APP_DRIVER_SERIAL_SLOTS 16
+#endif
+
 /**
  * Source for a write that RESTORES remembered state at boot (an NVS persist
  * behavior putting back the last power/level). Use it as the `source` of
@@ -212,6 +217,38 @@ bool app_driver_param_seen(app_driver_param_id_t id);
  * @return esp_timer_get_time() of its last write, or 0
  */
 int64_t app_driver_param_written_us(app_driver_param_id_t id);
+
+/** A product decision run by app_driver_run_serialized(). */
+typedef void (*app_driver_serial_fn_t)(void *arg);
+
+/**
+ * Run fn(arg) on the bus's ONE serial task, never at the same time as another
+ * request made through this call.
+ *
+ * Listeners run on whichever task wrote the param — a sensor poll, MQTT, the
+ * web server, the console, Matter — so a decision made inside a listener
+ * (read mode + target + temperature, write the relay) runs on several tasks at
+ * once and an older decision can land last. Make the listener ask for the
+ * decision instead, and let the decision read every param it needs itself:
+ *
+ *   static void decide(void *arg) { ...get_param x3..., set_param(RELAY) }
+ *   static void cb(id, val, src, ctx) { if (id is an input) app_driver_run_serialized(decide, NULL); }
+ *
+ * Requests run in turn on one task. A request for the same fn + arg that is
+ * still waiting is merged into it (the decision re-reads the params when it
+ * runs, so one run covers every write before it); one made while that
+ * decision is running — from its own set_param's listeners, or from inside it
+ * — runs again after it. Never hold a mutex of your own across
+ * app_driver_set_param() instead: a listener on the Matter, Zigbee or LVGL
+ * task that waits for it while you wait for that task's lock deadlocks both.
+ * Not callable from an ISR. The task is created on the first call.
+ *
+ * @param fn   Decision to run (not NULL)
+ * @param arg  Passed to fn; part of the identity for merging
+ * @return ESP_OK, ESP_ERR_INVALID_ARG for a NULL fn, ESP_ERR_NO_MEM when
+ *         APP_DRIVER_SERIAL_SLOTS different requests are already waiting
+ */
+esp_err_t app_driver_run_serialized(app_driver_serial_fn_t fn, void *arg);
 
 #ifdef __cplusplus
 }

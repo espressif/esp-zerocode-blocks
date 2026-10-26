@@ -148,6 +148,31 @@ false after a failed one), and `app_driver_param_written_us(id)` — the
 included, 0 if never written. Each sensor driver says so in its `facts:`, and
 `base_firmware/facts.yml` carries the rule for every product.
 
+### Listeners run on the writer's task — decisions go through one task
+
+`set_param` calls listeners outside the bus lock, on whichever task wrote: a
+sensor poll, the esp_timer task, MQTT, the web server, the console, Matter,
+Zigbee, LVGL. A product decision made inside a listener (read mode + target +
+temperature, write the relay) therefore runs on two tasks at once, and the
+older decision can land last. The bus does NOT serialize listener delivery, on
+purpose: Matter's attribute callback, Zigbee's action handler and LVGL's event
+callbacks call `set_param` while holding their stack lock, and the matter /
+zigbee / display listeners take that same lock — a bus-wide dispatch mutex held
+across listeners inverts the order and deadlocks (A holds dispatch, waits for
+the CHIP lock; the CHIP task holds the CHIP lock, waits for dispatch). A
+product mutex held across `set_param` deadlocks the same way.
+
+Instead, `app_driver_run_serialized(fn, arg)` runs `fn(arg)` on ONE lazily
+created task (`app_serial`, 6 KB, priority 5): the listener only asks, the
+decision reads every param it needs and writes. A request still waiting for the
+same `fn + arg` is merged (the decision re-reads, so one run covers every write
+before it); one made while it runs — from inside it, or from its own write's
+listeners — runs again after it, never nested. Nothing is held while a decision
+runs, so it may write params whose listeners take any stack lock. More than
+`APP_DRIVER_SERIAL_SLOTS` (16) distinct waiting requests return
+`ESP_ERR_NO_MEM`. Tested with two writer threads, re-entry and merging in
+`base_firmware/components/app_driver/test/test_run_serialized.cpp`.
+
 ### A late listener is handed the current values
 
 Drivers and behaviors take their first reading during init, before
