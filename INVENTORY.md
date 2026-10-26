@@ -289,6 +289,11 @@ http://192.168.4.1 — or shared-net when a Wi-Fi transport is co-selected
 page's own X-ZC-Request header required), params addressed BY NAME. esp32c3, dimmable pwm light +
 DHT22 temperature.
 
+`probe-thermostat` — `frameworks: [webui, mqtt]` heating thermostat on a
+DS18B20 probe (peripherals/onewire_bus + drivers/ds18b20) and a heat relay as
+the thermostat's heating_param: the catalog product that compiles the
+1-Wire probe driver.
+
 ### BLE HID (1)
 `ble-media-remote` — first `frameworks: [ble_hid]` product, and the first
 built ON the controller device types every other framework leaves orphaned:
