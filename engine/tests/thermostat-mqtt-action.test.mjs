@@ -78,6 +78,13 @@ static void set(int id, int v) { app_driver_param_val_t x = {}; if (id == P_HEAT
 int main(int argc, char **argv)
 {
     (void)argc;
+    if (strcmp(argv[1], "target") == 0) {
+        /* Targets from Home Assistant: out of range, off the 0.5 step, fine. */
+        create();
+        const char *targets[] = { "40", "21.3", "2", "22.75", "21.5" };
+        for (const char *tg : targets) { cmd("temp/cmd", tg); printf("applied|%d\n", (int)g_param[P_SET].i16); }
+        return 0;
+    }
     if (strcmp(argv[1], "fresh") == 0) {
         /* Nothing set yet: connect, then HA sets the mode, then the output. */
         create();
@@ -163,4 +170,16 @@ test('thermostat mqtt: on connect nothing is seeded that was never set, so HA sh
   const seeded = run(t, CFG, 'seeded')[0]
   assert.deepEqual(seeded.filter(([topic]) => !topic.startsWith('homeassistant/') && !topic.endsWith('/curr')).map(([topic, v]) => `${topic.split('/thermo/')[1] ?? topic}=${v}`),
     ['temp/state=20.00', 'mode/state=heat', 'action=idle'])
+})
+
+test('thermostat mqtt: a target command is clamped and snapped to the 0.5 step, and the state topic echoes what was applied', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
+  const steps = run(t, CFG, 'target').slice(1)
+  const STATE = 'zerocode/abc123/thermo/temp/state'
+  assert.deepEqual(steps.map((s) => [s.find(([topic]) => topic === STATE)?.[1], s.find(([topic]) => topic === 'applied')?.[1]]), [
+    ['35.00', '3500'],
+    ['21.50', '2150'],
+    ['5.00', '500'],
+    ['23.00', '2300'],
+    ['21.50', '2150'],
+  ])
 })
