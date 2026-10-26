@@ -50,12 +50,12 @@ function el(tag) {
 }
 
 /** Run the page once against `state`; returns the root and the POSTed URLs. */
-async function runPage(script, state) {
+async function runPage(script, state, activeElement = null) {
   const posts = []
   const root = el('div')
   root.__defineSetter__('textContent', function () { this.children = [] })
   const ctx = {
-    document: { activeElement: null, createElement: el, getElementById: () => root },
+    document: { activeElement, createElement: el, getElementById: () => root },
     fetch: (url, opts) => {
       if (opts && opts.method === 'POST') { posts.push(url); return Promise.resolve({}) }
       return Promise.resolve({ json: () => state })
@@ -118,4 +118,29 @@ test('the server makes any non-min toggle value its max and snaps a stepped valu
   assert.match(cpp, /if \(strcmp\(e->kind, "toggle"\) == 0\) raw = \(raw != e->min\) \? e->max : e->min;/)
   assert.match(cpp, /if \(e->step > 1\) raw = e->min \+ \(\(raw - e->min \+ e->step \/ 2\) \/ e->step\) \* e->step;/)
   assert.match(cpp, /\\"step\\":%ld/)
+})
+
+test('a focused checkbox does not stop the refresh; a focused slider does', async () => {
+  const script = pageScript(generate(CFG))
+  const box = { tagName: 'INPUT', type: 'checkbox' }
+  assert.equal((await runPage(script, structuredClone(STATE), box)).root.children.length, 4)
+  const range = { tagName: 'INPUT', type: 'range' }
+  assert.equal((await runPage(script, structuredClone(STATE), range)).root.children.length, 0)
+})
+
+test('a reading or target never written yet shows --, not 0', async () => {
+  const cpp = generate(CFG)
+  assert.match(cpp, /\\"seen\\":%s\}/)
+  assert.match(cpp, /app_driver_param_seen\(e->param\) \? "true" : "false"/)
+  const unseen = structuredClone(STATE)
+  unseen.entities[0] = { ...unseen.entities[0], value: 0, seen: false }
+  unseen.entities[1] = { ...unseen.entities[1], value: 0, seen: false }
+  const { root } = await runPage(pageScript(cpp), unseen)
+  assert.equal(find(root, 'Thermostat temperature (°C)').children[1].textContent, '--')
+  assert.equal(find(root, 'Thermostat target (°C)').children[1].children[1].textContent, '--')
+  const seen = structuredClone(STATE)
+  seen.entities[0] = { ...seen.entities[0], value: 0, seen: true }
+  const r2 = await runPage(pageScript(cpp), seen)
+  assert.equal(find(r2.root, 'Thermostat temperature (°C)').children[1].textContent, '0.00')
+  assert.equal(find(r2.root, 'Thermostat target (°C)').children[1].children[1].textContent, '21.4')
 })
