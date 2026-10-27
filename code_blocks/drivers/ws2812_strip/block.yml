@@ -24,5 +24,8 @@ driver_params:
   hue_param:        { type: u8, default: APP_DRIVER_PARAM_HUE }
   saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }
 
+reacts:
+  driver: "A change of {{cfg.power_param}}, {{cfg.brightness_param}}, {{cfg.hue_param}} or {{cfg.saturation_param}} repaints every LED of the strip with the resulting colour (dark while power is false); product code writes the params and never calls led_strip itself."
+
 facts:
   on_off_gate: "The LED lights only while its on/off param (power_param) is true: hue, saturation and brightness change the colour it shows when on, and with the on/off param false or never written it stays dark."

@@ -32,6 +32,20 @@ KINDS = {'behaviors', 'device_types', 'drivers', 'partition-tables',
 errors: list[str] = []
 
 
+# Slot families whose dispatch SENDS something off the device or DRIVES an
+# output — the ones a writer would otherwise wire a second time. Reporting
+# families (mqtt/matter/zigbee state, display widgets) are not listed.
+REACTS_REQUIRED = {'driver', 'ble_hid', 'espnow', 'ble_mesh', 'zigbee_action'}
+
+
+def reacts_family(slot: str):
+    """The reacts: key of a dispatch slot (engine reactsKeyOf)."""
+    if slot == 'driver_apply_cases':
+        return 'driver'
+    m = re.match(r'^(.+?)(?:_driver_cb)?_cases$', slot)
+    return m.group(1) if m else None
+
+
 def err(where: str, msg: str) -> None:
     errors.append(f'{where}: {msg}')
 
@@ -186,6 +200,36 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                  f'neither requires_bus: nor provides_bus:. Undeclared, "some other '
                  f'instance configured this port" is convention only — the product '
                  f'builds and the device is silent. See CLAUDE.md → Shared buses.')
+
+    # ── A SLOT THAT SENDS OR DRIVES ON A PARAM CHANGE SAYS WHAT IT DOES. ──
+    # `reacts.<family>` is one sentence (cfg placeholders allowed) that
+    # apply_template hands the writer with the params the slot dispatches on.
+    # Without it, product code wires the same input a second time: a knob sent
+    # one volume key from its handler while the composed remote sent another.
+    reacts = d.get('reacts') or {}
+    if not isinstance(reacts, dict) or any(not isinstance(v, str) or not v.strip() for v in reacts.values()):
+        err(bid, 'reacts: must map a slot family to one non-empty sentence')
+        reacts = {}
+    for n in sorted(slot_names):
+        fam = reacts_family(n)
+        if fam not in REACTS_REQUIRED:
+            continue
+        if not re.search(r'\bcase\s+[^:]+:', slot_text[n]):
+            continue
+        if fam not in reacts:
+            err(bid, f'slots/{n} acts on a param change but the block has no reacts.{fam}: '
+                     f'say in one sentence what it sends or drives (cfg placeholders allowed) — '
+                     f'apply_template hands it to the writer so the input is not wired twice.')
+    for fam in reacts:
+        if not any(reacts_family(n) == fam for n in slot_names):
+            err(bid, f'reacts.{fam} names no slot of this block')
+    declared = set((d.get('params') or {}).keys()) | set((d.get('driver_params') or {}).keys())
+    for fam, text in reacts.items():
+        for ph in re.findall(r'\{\{\s*([^}]+?)\s*\}\}', text):
+            if ph in ('prefix', 'prefix_lc'):
+                continue
+            if not ph.startswith('cfg.') or ph[4:] not in declared:
+                err(bid, f'reacts.{fam} uses {{{{{ph}}}}}, which is not a declared param (params:/driver_params:)')
 
     # ── A FACTORY RESET GOES THROUGH app_utils_factory_reset(). ───────────
     # It runs the product's app_factory_reset_hook() before erasing; a block

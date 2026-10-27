@@ -35,6 +35,11 @@ driver_params:
     required: true
     description: Driver param ID for switch presses (uint8_t; each notification is one press at that position, 1..NumberOfPositions-1; 0 = no press)
 
+reacts:
+  ble_hid: "Each nonzero notification of {{cfg.position_param}} sends one press of consumer usage {{cfg.ble_hid_usage}} (0 sends nothing); product code only fires the param and never sends the key itself."
+  espnow: "A change of {{cfg.position_param}} (except a boot-time restore) broadcasts the value to the ESP-NOW peers under that param's name; product code only writes the param and never sends it to the peers itself."
+  ble_mesh: "Each nonzero press EVENT on {{cfg.position_param}} publishes one Generic OnOff Toggle to the ZeroCode mesh group (state writes and restores send nothing); product code only fires the param and never publishes to the mesh itself."
+
 # Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
 
 # MQTT binding: an HA device_trigger (controllers are inputs — they emit

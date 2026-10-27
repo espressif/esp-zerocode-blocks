@@ -24,3 +24,6 @@ driver_params:
   power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
   brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
   color_temp_param: { type: u16, default: APP_DRIVER_PARAM_COLOR_TEMP }
+
+reacts:
+  driver: "A change of {{cfg.power_param}}, {{cfg.brightness_param}} or {{cfg.color_temp_param}} (mireds) recomputes the warm and cool PWM duties from brightness and colour temperature (both 0 when off); product code writes the params and never drives the LED pins or LEDC channels itself."

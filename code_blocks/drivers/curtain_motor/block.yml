@@ -57,3 +57,6 @@ driver_params:
       closed). Written as a target
       (>5000 opens fully, otherwise closes fully); the driver writes back 0 or
       10000 when a limit is reached
+
+reacts:
+  driver: "A change of {{cfg.position_param}} runs the motor fully open (above 5000) or fully closed through the up/down pins, stopping at the limit switch or max_run_ms and writing back 10000 or 0; product code writes the target and never drives the motor pins or watches the limits itself."

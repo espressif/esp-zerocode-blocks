@@ -16,6 +16,9 @@ driver_params:
     default: APP_DRIVER_PARAM_POWER
     description: Driver param ID this relay reacts to (boolean)
 
+reacts:
+  driver: "A change of {{cfg.param_id}} drives the relay pin to match (active level per cfg); product code writes the param and never drives the pin itself."
+
 # esp-board-manager mapping — used ONLY by a product that names a `board:`.
 # Without one, nothing below is read and this block behaves exactly as it did.
 #

@@ -59,5 +59,8 @@ driver_params:
     default: APP_DRIVER_PARAM_POWER
     description: Driver param ID this output reacts to (boolean)
 
+reacts:
+  driver: "A change of {{cfg.param_id}} drives the board's '{{cfg.device}}' line on or off at the board's own active level; product code writes the param and never drives that pin itself."
+
 facts:
   boot_state: "The output is off at boot and its param is written false (as state) inside app_driver_init, before any framework or product code runs, so app_driver_param_seen is true and the state is known from the start; a value restored by nvs_persist_bool replaces it, so a saved ON still comes back on."

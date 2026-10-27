@@ -44,3 +44,6 @@ driver_params:
     type: u8
     required: true
     description: u8 — selects the pattern to play (see block description)
+
+reacts:
+  driver: "A change of {{cfg.pattern_param}} makes the block's own task play that preset pattern on the buzzer (0 silent, 3 loops until changed, other one-shots write the param back to 0 when done); product code writes the param and never drives the buzzer or times notes itself."

@@ -44,6 +44,9 @@ driver_params:
     default: APP_DRIVER_PARAM_SATURATION
     description: Driver param the remote's saturation input publishes (u8 0-254, consumed)
 
+reacts:
+  ble_hid: "A change of {{cfg.power_param}} sends the Mute consumer key (0xE2) and each rise or fall of {{cfg.level_param}} sends one Volume Up (0xE9) or Volume Down (0xEA) key; product code only writes the params and never sends these keys itself."
+
 # Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
 
 # MQTT-absent: controllers are inputs — over MQTT they would be button/event emitters, which HA models as device_triggers (a later, different binding).

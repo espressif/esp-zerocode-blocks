@@ -33,3 +33,6 @@ driver_params:
     type: u8
     default: APP_DRIVER_PARAM_FAN_SPEED
     description: Driver param ID for fan speed (uint8_t, 0-100)
+
+reacts:
+  driver: "A change of {{cfg.speed_param}} (0-100) sets the fan PWM duty to that percentage (output_invert applied); product code writes the param and never drives the fan pin or LEDC channel itself."

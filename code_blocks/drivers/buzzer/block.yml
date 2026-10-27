@@ -27,3 +27,6 @@ driver_params:
     type: u32
     required: true
     description: Tone frequency in Hz (uint32, 0 = silent). For kind active only zero / non-zero matters — the part sets the pitch.
+
+reacts:
+  driver: "A change of {{cfg.frequency_param}} sounds the buzzer at that pitch (passive: LEDC square wave at 50 % duty; active: the pin driven to its on level for any non-zero value) and 0 silences it; product code writes the param and never drives the pin or LEDC itself."

@@ -35,6 +35,11 @@ driver_params:
     default: APP_DRIVER_PARAM_BRIGHTNESS
     description: Driver param the remote's level input publishes (u8 0-254, consumed)
 
+reacts:
+  ble_hid: "A change of {{cfg.power_param}} sends the Mute consumer key (0xE2) and each rise or fall of {{cfg.level_param}} sends one Volume Up (0xE9) or Volume Down (0xEA) key; product code only writes the params and never sends these keys itself."
+  espnow: "A change of {{cfg.power_param}} or {{cfg.level_param}} (except a boot-time restore) broadcasts the new value to the ESP-NOW peers under that param's name; product code only writes the params and never sends them to the peers itself."
+  ble_mesh: "A change of {{cfg.power_param}} publishes Generic OnOff and a change of {{cfg.level_param}} publishes Generic Level to the ZeroCode mesh group (a boot-time restore sends nothing); product code only writes the params and never publishes to the mesh itself."
+
 # Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
 
 # MQTT binding: an HA device_trigger (controllers are inputs — they emit

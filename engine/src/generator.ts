@@ -106,6 +106,54 @@ export interface GenerateResult {
    *  Present only when there is one — this object is the apply_template
    *  result the writer reads, and an empty list on every product is noise. */
   warnings?: string[]
+  /** What composed blocks already DO when a param changes — each declared
+   *  `reacts:` sentence with the params its slot dispatches on. Present only
+   *  when there is one. */
+  reactions?: Reaction[]
+}
+
+export interface Reaction {
+  block: string
+  prefix: string
+  /** The slot family: a framework id (`ble_hid`), `driver`, … */
+  on: string
+  /** The params the slot's `case` labels dispatch on, as rendered. */
+  params: string[]
+  does: string
+}
+
+/** The `reacts:` key a dispatch slot belongs to: `ble_hid_driver_cb_cases` →
+ *  `ble_hid`, `driver_apply_cases` → `driver`, `zigbee_action_cases` →
+ *  `zigbee_action`. Null for a slot that is not a dispatch. */
+export function reactsKeyOf(slot: string): string | null {
+  if (slot === 'driver_apply_cases') return 'driver'
+  const m = /^(.+?)(?:_driver_cb)?_cases$/.exec(slot)
+  return m ? m[1]! : null
+}
+
+/** The declared reactions of the rendered instances, for the slot families
+ *  this product actually consumes (`driver`, or a framework it selected). */
+export function collectReactions(rendered: RenderedInstance[], frameworks: readonly string[]): Reaction[] {
+  const out: Reaction[] = []
+  for (const r of rendered) {
+    const reacts = r.block.reacts
+    if (!reacts) continue
+    for (const [slot, text] of Object.entries(r.slots)) {
+      const key = reactsKeyOf(slot)
+      if (!key || !reacts[key] || !text.trim()) continue
+      if (key !== 'driver' && !frameworks.some((f) => key === f || key.startsWith(`${f}_`))) continue
+      const params = [...new Set([...text.matchAll(/\bcase\s+(APP_DRIVER_PARAM_\w+)\s*:/g)].map((m) => m[1]!))]
+      const ctx = { cfg: r.cfg, prefix: r.prefix, prefix_lc: r.prefix.toLowerCase() }
+      // Soft: an optional param the product left unset reads as its key name
+      // ("volume_param, when set") rather than failing the whole generate.
+      const does = reacts[key]!.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr: string) => {
+        const v = lookupSoft(expr, ctx)
+        return v === undefined || v === null || v === '' ? expr.trim().replace(/^cfg\./, '') : String(v)
+      }).trim()
+      out.push({ block: r.block.id, prefix: r.prefix, on: key, params, does })
+    }
+  }
+  return out
 }
 
 /** A block with `target: <chip>` applies ONLY when generating for that chip; a
@@ -752,12 +800,14 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   await fs.writeFile(path.join(outDir, 'main/idf_component.yml'), mergedYml)
 
   const warnings = rendered.filter(r => r.bmgrFallback).map(r => r.bmgrFallback!)
+  const reactions = collectReactions(rendered, product.frameworks ?? [])
   return {
     productId: product.id,
     outDir,
     blocks: product.instances.map(i => i.block),
     deviceData: deviceData.rows,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(reactions.length > 0 ? { reactions } : {}),
   }
 }
 

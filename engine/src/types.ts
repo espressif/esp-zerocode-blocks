@@ -225,6 +225,16 @@ export interface Block {
    *  Every product composing the block gets them in its param enum, so product
    *  code and other blocks' cfg can name them. */
   owned_params?: Record<string, ValueType>
+  /** What the block DOES when a param it reacts to changes, per slot family:
+   *  the key names the slot (`ble_hid` → its `ble_hid_driver_cb_cases`,
+   *  `driver` → `driver_apply_cases`, `zigbee_action` → `zigbee_action_cases`),
+   *  the value is one sentence rendered with the instance's cfg. Returned in
+   *  GenerateResult.reactions, so product code knows an input is already
+   *  wired to an action before it wires it a second time (a knob whose
+   *  product code sent a volume key per detent while the composed remote sent
+   *  one too: two steps a detent). check.py requires it for every slot family
+   *  that SENDS or DRIVES something (REACTS_REQUIRED there). */
+  reacts?: Record<string, string>
   cmake_priv_requires?: Record<string, string[]>
   sdkconfig?: Record<string, string>
   /** Marks a `sdkconfig_fragment` block as a CHIP's per-chip base rather than a
