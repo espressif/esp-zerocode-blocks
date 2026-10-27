@@ -58,7 +58,7 @@ esp_err_t app_driver_apply_param(app_driver_param_id_t, app_driver_param_val_t) 
 static int g_fabrics = 0;
 static std::string g_trace;
 static void app_factory_reset_hook(void) {}
-namespace esp_matter { static void factory_reset(void) { g_trace += "reset "; } }
+static void app_utils_factory_reset(void) { app_factory_reset_hook(); g_trace += "reset "; }
 namespace chip {
 struct FabricTable { int FabricCount() const { return g_fabrics; } };
 struct CommissioningWindowManager { bool IsCommissioningWindowOpen() const { return false; } };

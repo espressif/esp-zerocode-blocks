@@ -215,8 +215,9 @@ Every factory-reset path — the base console's `factory_reset`, the
 `factory_reset_*` behaviors, `board_button`'s `factory_reset_ms` hold — calls
 `app_utils_factory_reset()` (base `app_utils`): it runs the weak
 `app_factory_reset_hook()`, erases the default NVS partition and reboots.
-Matter's removal from the last fabric calls the hook itself, on the Matter
-thread, before `esp_matter::factory_reset()`. A
+Matter's removal from the last fabric takes the same call, on the Matter
+thread — `esp_matter::factory_reset()` clears only Matter's own namespaces, so
+a product's saved state survived it. A
 product that keeps data elsewhere (its own partition, the fctry values) defines
 the hook in a file under `components/app_logic/` (WHOLE_ARCHIVE, so a file
 holding only the definition is linked) with C linkage. It never registers a

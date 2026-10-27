@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Removing a Matter device from its last fabric factory-resets it through
-// esp_matter::factory_reset(). The product's app_factory_reset_hook() runs
-// first, as on every other reset path, and app_matter links app_utils for it
+// app_utils_factory_reset(), the reset every other path takes: the product's
+// hook, then the whole NVS partition (the product's saved state included), and
+// app_matter links app_utils for it
 // on every Matter tree — the engine's CMakeLists replaces a catalog copy that
 // lacks it, with or without device types.
 import { test } from 'node:test'
@@ -18,10 +19,11 @@ import { fileURLToPath } from 'node:url'
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const eng = await import(join(ROOT, 'engine/dist/index.js'))
 
-test('the last-fabric reset runs the product hook before esp_matter::factory_reset()', () => {
+test('the last-fabric reset is the full factory reset, not Matter\'s own namespaces only', () => {
   const src = eng.genAppMatterCpp([])
   assert.match(src, /#include "app_utils\.h"/)
-  assert.match(src, /FabricCount\(\) == 0\) \{\n[^\n]*\n\s+app_factory_reset_hook\(\);\n\s+esp_matter::factory_reset\(\);/)
+  assert.match(src, /FabricCount\(\) == 0\) \{\n[^\n]*\n\s+app_utils_factory_reset\(\);\n\s+\}/)
+  assert.doesNotMatch(src, /esp_matter::factory_reset\(\)/)
 })
 
 test('a framework-only Matter tree links app_utils, even from a catalog whose CMakeLists does not', async () => {

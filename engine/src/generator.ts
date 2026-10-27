@@ -1298,15 +1298,16 @@ export function genAppMatterCpp(rendered: RenderedInstance[]): string {
   // Defaulted slot: a `matter_last_fabric_cases` contribution replaces this code.
   // Some handler must exist — with none, a device removed from its last fabric
   // can never be commissioned again.
-  // The product's own factory-reset hook runs first, as on every other reset
-  // path (app_utils_factory_reset): esp_matter::factory_reset() erases NVS and
-  // reboots without it.
+  // The same reset as every other path (console, button, power cycle):
+  // app_utils_factory_reset runs the product hook, erases the WHOLE NVS
+  // partition and reboots. esp_matter::factory_reset() clears only Matter's
+  // and CHIP's namespaces, so a product's saved state (a relay restored at
+  // power-up) came back after "out-of-box".
   const lastFabricCases = collectSlot(rendered, 'matter_last_fabric_cases', 4) ||
 `    if (event->Type == chip::DeviceLayer::DeviceEventType::kFabricRemoved &&
         chip::Server::GetInstance().GetFabricTable().FabricCount() == 0) {
         ESP_LOGW(TAG, "Last fabric removed — factory reset to out-of-box state");
-        app_factory_reset_hook();
-        esp_matter::factory_reset();
+        app_utils_factory_reset();
     }`
   const state = matterStateCode(rendered)
   return `#include "app_matter.h"

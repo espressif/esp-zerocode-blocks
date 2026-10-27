@@ -65,7 +65,7 @@ esp_err_t app_utils_ledc_timer_config(ledc_timer_config_t *cfg, uint32_t *max_du
  *
  * It may run on any task (a button's timer task), at boot (a power-cycle
  * reset, before the product's own init) and on the Matter thread (removal
- * from the last fabric, just before esp_matter::factory_reset()), so it must
+ * from the last fabric, which takes this same reset), so it must
  * not block for long, wait on Matter work, or rely on the product being
  * initialized. Nothing it does can stop the reset.
  */
