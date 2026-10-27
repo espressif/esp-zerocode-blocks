@@ -204,8 +204,8 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
     # ── A SLOT THAT SENDS OR DRIVES ON A PARAM CHANGE SAYS WHAT IT DOES. ──
     # `reacts.<family>` is one sentence (cfg placeholders allowed) that
     # apply_template hands the writer with the params the slot dispatches on.
-    # Without it, product code wires the same input a second time: a knob sent
-    # one volume key from its handler while the composed remote sent another.
+    # Without it, product code wires the same input a second time and the
+    # action happens twice.
     reacts = d.get('reacts') or {}
     if not isinstance(reacts, dict) or any(not isinstance(v, str) or not v.strip() for v in reacts.values()):
         err(bid, 'reacts: must map a slot family to one non-empty sentence')

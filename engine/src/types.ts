@@ -232,9 +232,9 @@ export interface Block {
    *  `driver` → `driver_apply_cases`, `zigbee_action` → `zigbee_action_cases`),
    *  the value is one sentence rendered with the instance's cfg. Returned in
    *  GenerateResult.reactions, so product code knows an input is already
-   *  wired to an action before it wires it a second time (a knob whose
-   *  product code sent a volume key per detent while the composed remote sent
-   *  one too: two steps a detent). check.py requires it for every slot family
+   *  wired to an action before it wires it a second time — a key sent from
+   *  product code beside the block's own is sent twice. check.py requires it
+   *  for every slot family
    *  that SENDS or DRIVES something (REACTS_REQUIRED there). */
   reacts?: Record<string, string>
   cmake_priv_requires?: Record<string, string[]>

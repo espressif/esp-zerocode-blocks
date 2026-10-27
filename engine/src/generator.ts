@@ -2964,8 +2964,8 @@ const ESPNOW_WIRE_TYPE: Record<ValueType, number> = { bool: 0, u8: 1, i16: 2, u1
  * After the listener device types' own cases: any OTHER param of this product
  * that arrives by name lands on the bus as an EVENT (so a second identical
  * ring still rings), with espnow's own handle as the source so it is never
- * sent back out. Without it a product's own param — a doorbell's ring — was
- * sent by one board and silently dropped by the other. Framework-owned params
+ * sent back out. Without it a product's own param, such as a ring, would be
+ * sent by one board and dropped by the other. Framework-owned params
  * (owned_params: Matter's commissioned state) never come from a peer.
  */
 function espnowRecvFallback(rendered: RenderedInstance[]): string {

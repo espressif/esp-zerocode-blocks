@@ -54,9 +54,8 @@ static void {{prefix_lc}}_board_strip_render(void)
     }
     /* With a colour or brightness param bound, the product steers the LED
        through those; an on/off param nothing has ever written does not hold
-       it dark (a CO2 alert set its hue and brightness and never lit, because
-       its on/off param was a name no code wrote). Once anything writes the
-       on/off param, it gates as before. */
+       it dark, so a product that only sets a colour and brightness sees it.
+       Once anything writes the on/off param, it gates as before. */
     bool lit = s_{{prefix_lc}}_on;
 {{#if cfg.hue_param}}    if (!app_driver_param_seen({{cfg.param_id}})) lit = true;
 {{/if}}{{#if cfg.brightness_param}}    if (!app_driver_param_seen({{cfg.param_id}})) lit = true;
