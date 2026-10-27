@@ -1,0 +1,64 @@
+description: "One setting or reading of the product in the ESP RainMaker app for any driver param — the product's own setting (a mode, a limit, a time of day) or reading — as its own tile: a toggle, slider, number, read-only value or HH:MM time."
+
+# Device types bring their own RainMaker params. A param that belongs to the
+# PRODUCT — a schedule time, a mode switch, a limit — had no way into the app
+# but esp_rmaker_param_create by hand, where the type and UI are easy to get
+# wrong (a NAME-typed param is the device's name to the app) and a PERSIST
+# flag replays the last value at boot. This block is that param, as data. One
+# instance per setting; each shows as its own tile named after `label`.
+#
+# The param bus is the one source of truth: the tile shows the bus value at
+# start (restored by a nvs_persist_* block if the product keeps it), a write
+# from the app lands on the bus, and a bus change is reported back. RainMaker
+# itself persists nothing here, so an action param (a press, a feed) is never
+# replayed at boot — unlike a device type's standard power param, which
+# RainMaker persists and applies again at start-up. A momentary action from the
+# app (a press, a feed) belongs here as a toggle the product resets.
+#
+# Kinds:
+#   toggle — on/off (bool)
+#   slider — a value between min and max
+#   number — a value between min and max, typed in
+#   value  — a read-only reading
+#   time   — a time of day as HH:MM text, the param holding minutes since
+#            midnight (0-1439)
+
+requires_frameworks: [rainmaker]
+
+params:
+  label:
+    type: string
+    required: true
+    description: The tile's name in the app (plain text, no quotes)
+  kind:
+    type: string
+    default: value
+    enum: [toggle, slider, number, value, time]
+    description: How the app shows it; toggle, slider, number and time take writes from the app
+  param:
+    type: string
+    required: true
+    description: Driver param the tile shows (and, for a control, writes) — APP_DRIVER_PARAM_<NAME>
+  value_kind:
+    type: string
+    default: u8
+    enum: [bool, u8, i16, u16, u32]
+    description: The param's value type (bool for a toggle, u16 for a time)
+  min:
+    type: int
+    default: 0
+    description: Lowest value a slider or number writes
+  max:
+    type: int
+    default: 100
+    description: Highest value a slider or number writes
+  step:
+    type: int
+    default: 1
+    description: A slider's step
+
+param_refs:
+  param: "{{cfg.value_kind}}"
+
+reacts:
+  rainmaker_write_cb: "A write from the RainMaker app to the '{{cfg.label}}' tile lands on {{cfg.param}} as state; product code reads the param and never creates its own RainMaker param for it."
