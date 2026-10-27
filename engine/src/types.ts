@@ -219,7 +219,9 @@ export interface Block {
   matter_wiring_note?: string
   idf_components?: Record<string, string | Record<string, unknown>>
   params?: Record<string, BlockParam>
-  param_refs?: Record<string, ValueType>
+  /** cfg key holding a param id → its value type, or `{{cfg.<key>}}` when the
+   *  instance picks the type (behaviors/webui_row: `{{cfg.value_kind}}`). */
+  param_refs?: Record<string, ValueType | `{{cfg.${string}}}`>
   /** Params the block ITSELF writes under a fixed name, with no cfg behind
    *  them (frameworks/matter: `APP_DRIVER_PARAM_MATTER_COMMISSIONED: bool`).
    *  Every product composing the block gets them in its param enum, so product

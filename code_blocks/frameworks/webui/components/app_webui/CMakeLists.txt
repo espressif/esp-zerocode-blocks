@@ -10,5 +10,6 @@
 idf_component_register(
     SRCS "app_webui.cpp"
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES esp_http_server esp_wifi esp_netif esp_event nvs_flash espressif__mdns app_driver app_config
+    REQUIRES esp_http_server
+    PRIV_REQUIRES esp_wifi esp_netif esp_event nvs_flash espressif__mdns app_driver app_config
 )

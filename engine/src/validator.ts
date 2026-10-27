@@ -84,7 +84,19 @@ export function validateBlock(block: Block): ValidationResult {
   }
 
   for (const [refKey, refType] of Object.entries(block.param_refs ?? {})) {
-    if (!VALUE_TYPES.includes(refType as ValueType)) {
+    // `{{cfg.<key>}}`: the type is the instance's choice — that key must be a
+    // declared param whose enum lists only value types.
+    const fromCfg = /^\{\{\s*cfg\.(\w+)\s*\}\}$/.exec(String(refType))
+    if (fromCfg) {
+      const src = block.params?.[fromCfg[1]!]
+      if (!src?.enum || src.enum.some((v) => !VALUE_TYPES.includes(v as ValueType))) {
+        errors.push({
+          level: 'error',
+          ...ctx,
+          message: `param_refs.${refKey} takes its type from cfg.${fromCfg[1]}, which must be a param with an enum of value types (${VALUE_TYPES.join('|')})`,
+        })
+      }
+    } else if (!VALUE_TYPES.includes(refType as ValueType)) {
       errors.push({
         level: 'error',
         ...ctx,
@@ -805,7 +817,11 @@ export function validateProduct(
       }
     }
 
-    for (const [refKey, refType] of Object.entries(block.param_refs ?? {})) {
+    for (const [refKey, declaredType] of Object.entries(block.param_refs ?? {})) {
+      const fromCfg = /^\{\{\s*cfg\.(\w+)\s*\}\}$/.exec(String(declaredType))
+      const refType = (fromCfg
+        ? String(cfg[fromCfg[1]!] ?? block.params?.[fromCfg[1]!]?.default ?? '')
+        : declaredType) as ValueType
       const paramId = String(cfg[refKey] ?? block.params?.[refKey]?.default ?? '')
       if (!paramId) {
         // Optional param left empty = feature disabled (its {{#if cfg.X}} slot is
