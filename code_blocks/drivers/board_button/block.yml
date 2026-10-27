@@ -117,6 +117,15 @@ driver_params:
     description: >-
       Optional. A boolean driver param a single click toggles. Leave it out
       when the product decides what every gesture does itself (in the hooks).
+  press_param:
+    type: u8
+    required: false
+    description: >-
+      Optional. A driver param FIRED with value 1 on every press, at the
+      moment it goes down, whatever the gesture becomes (a click, a double
+      click, a hold) — an event, so two presses are two notifications. For a
+      doorbell, a counter or a chime, and device_types/scene_button's
+      position_param; it does not replace target_param or the hooks.
 
 # GESTURE HOOKS — weak C++ functions defined in the generated control.cpp; the
 # product overrides any of them with a C++ definition of the same signature in
@@ -158,5 +167,6 @@ driver_params:
 # on the board's device is this block's.
 
 facts:
+  every_press: "Something that should happen on EVERY press — a ring, a count — is press_param: it fires once per press as the button goes down, so a quick second press or a hold is never lost; the single-click hook alone misses both, because a second quick press is reported as a double click and a hold as a long press."
   toggle_until_reset: "With target_param and factory_reset_ms set, any press released before the reset hold toggles once (a click after the double-click window, a longer press at its release) and a hold that reaches the reset resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold 10 s to reset\" is target_param + factory_reset_ms, no button code of the product's own."
   reset_hold_feedback: "With factory_reset_ms set, a press held past reset_cue_ms calls app_factory_reset_hold_started() and an early release app_factory_reset_hold_cancelled() (app_utils.h, weak, defined in app_logic) — feedback during the hold goes there; the block's own callbacks are never unregistered or re-registered, so its click, long press and reset keep working."

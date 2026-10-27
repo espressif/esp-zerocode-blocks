@@ -26,6 +26,15 @@ driver_params:
     type: bool
     required: true
     description: Driver param ID this button toggles (must be boolean)
+  press_param:
+    type: u8
+    required: false
+    description: >-
+      Optional. A driver param FIRED with value 1 on every press, at the
+      moment it goes down, whatever the gesture becomes — an event, so two
+      presses are two notifications (a ring, a count, scene_button's
+      position_param).
 
 facts:
+  every_press: "Something that should happen on EVERY press — a ring, a count — is press_param: it fires once per press as the button goes down, so a quick second press or a hold is never lost."
   toggle_until_reset: "With behaviors/factory_reset_long_press on the same pin, any press released before its hold toggles once and a press that reaches the hold resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold N s to reset\" needs no button code of the product's own."

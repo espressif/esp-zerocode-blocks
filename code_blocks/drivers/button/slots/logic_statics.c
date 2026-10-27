@@ -31,7 +31,10 @@ static void {{prefix_lc}}_press_down_cb(void *arg, void *usr_data)
     (void)arg; (void)usr_data;
     s_{{prefix_lc}}_presses++;
     s_{{prefix_lc}}_down_us = esp_timer_get_time();
-}
+{{#if cfg.press_param}}    /* Every press is one event, whatever gesture it becomes. */
+    app_driver_param_val_t {{prefix_lc}}_pv = { .u8 = 1 };
+    app_driver_fire_event({{cfg.press_param}}, {{prefix_lc}}_pv, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}}
 static void {{prefix_lc}}_press_up_cb(void *arg, void *usr_data)
 {
     (void)arg; (void)usr_data;
