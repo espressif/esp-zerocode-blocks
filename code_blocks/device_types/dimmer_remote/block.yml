@@ -46,3 +46,6 @@ reacts:
 # events for automations, not stateful entities).
 
 # Display-absent: a controller device type is itself an input — on a touchscreen the SCREEN is the controller, so bind the actuator/sensor types directly.
+
+facts:
+  one_switch: "One dimmer remote is the whole switch: its on/off and its brightness both go to the lights it controls, from one place, so turning them on and off needs no second button device — a second one (a scene button) is a separate control the lights must be bound to on their own."
