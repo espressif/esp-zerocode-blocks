@@ -4909,10 +4909,13 @@ static model_iface_data_t *s_mn_data = NULL;
 
 ${collectSlot(rendered, 'audio_statics')}
 
-/* Recognized phrase -> hardware. Device types own the cases. */
-static void audio_apply_command(int phrase_id)
+/* Recognized command -> hardware. Device types own the cases, keyed by the
+ * command id each phrase was registered with (esp_mn_commands_add) — not
+ * MultiNet's phrase_id, which is the phrase's index in its list and differs
+ * once a second device or a synonym phrase is registered. */
+static void audio_apply_command(int command_id)
 {
-    switch (phrase_id) {
+    switch (command_id) {
 ${collectSlot(rendered, 'audio_command_cases', 4)}
     default:
         break;
@@ -4920,7 +4923,7 @@ ${collectSlot(rendered, 'audio_command_cases', 4)}
     /* Reached only when no case claimed the phrase — every device-type case
      * returns. A phrase registered with no matching case means the block's
      * audio_commands_register and audio_command_cases disagree. */
-    ESP_LOGW(TAG, "phrase %d recognized but no device type claims it", phrase_id);
+    ESP_LOGW(TAG, "command %d recognized but no device type claims it", command_id);
 }
 
 /* Listening-state transitions. Behavior blocks hook these via
@@ -4996,8 +4999,8 @@ static void audio_detect_task(void *arg)
         if (st == ESP_MN_STATE_DETECTED) {
             esp_mn_results_t *mn = s_mn->get_results(s_mn_data);
             if (mn && mn->num > 0) {
-                ESP_LOGI(TAG, "command phrase %d", mn->phrase_id[0]);
-                audio_apply_command(mn->phrase_id[0]);
+                ESP_LOGI(TAG, "command %d (phrase %d)", mn->command_id[0], mn->phrase_id[0]);
+                audio_apply_command(mn->command_id[0]);
             }
         } else if (st == ESP_MN_STATE_TIMEOUT) {
             ESP_LOGI(TAG, "no command heard — sleeping until next wake word");
