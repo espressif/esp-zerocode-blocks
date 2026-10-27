@@ -53,7 +53,8 @@ onboarding:
 # promise. Copied into every product's seed.
 facts:
   role: "Devices talk to each other directly over the radio and never join a Wi-Fi network, so there is no internet, phone app, web page or network time."
-  what_talks: "In the catalog a dimmer remote sends on/off and a brightness level, a scene button sends a scene number, and a light, dimmable light or smart plug obeys on/off (a dimmable light also brightness); no catalog device obeys a scene number."
+  what_talks: "In the catalog a dimmer remote sends on/off and a brightness level, a scene button sends a scene number, and a light, dimmable light or smart plug obeys on/off (a dimmable light also brightness)."
+  own_signals: "Boards built from the same product share its own signals too: a press, ring or reading one board sends (through a scene button or a dimmer remote) arrives on the other as the same signal, every time it is sent, so the other board's own behaviour — a chime, a light — can react to it."
   state_not_toggle: "A remote sends the on/off state and level it holds itself, never \"toggle\" or \"brighter\", so a light changed some other way can disagree with the remote until the remote is used again."
   missed_messages: "A message goes out once, when the control changes: a device that is off or out of range then misses it and is not told later, and the sender never learns whether it arrived."
   limits: "A device remembers at most 8 paired devices, and messages are not encrypted, paired or not."

@@ -2952,6 +2952,42 @@ export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
  * encryption (ESP-NOW cannot encrypt broadcast frames). Trusted spaces
  * only; pairing + per-peer LMK is v2.
  */
+/** Wire type codes (the shared tag vocabulary). */
+const ESPNOW_WIRE_TYPE: Record<ValueType, number> = { bool: 0, u8: 1, i16: 2, u16: 3, u32: 4 }
+
+/**
+ * After the listener device types' own cases: any OTHER param of this product
+ * that arrives by name lands on the bus as an EVENT (so a second identical
+ * ring still rings), with espnow's own handle as the source so it is never
+ * sent back out. Without it a product's own param — a doorbell's ring — was
+ * sent by one board and silently dropped by the other. Framework-owned params
+ * (owned_params: Matter's commissioned state) never come from a peer.
+ */
+function espnowRecvFallback(rendered: RenderedInstance[]): string {
+  const owned = new Set(rendered.flatMap(r => Object.keys(r.block.owned_params ?? {})))
+  const params = collectParamIds(rendered).filter(p => !owned.has(p.name))
+  if (params.length === 0) return ''
+  const rows = params.map(p => `        { "${p.name}", ${p.name}, ${ESPNOW_WIRE_TYPE[p.type]} },`).join('\n')
+  const member = (t: number) => ({ 0: 'v.b = (msg.value != 0)', 1: 'v.u8 = (uint8_t)msg.value', 2: 'v.i16 = (int16_t)msg.value', 3: 'v.u16 = (uint16_t)msg.value', 4: 'v.u32 = msg.value' } as Record<number, string>)[t]
+  return `    /* Any other param of this product, by name: as an event, never re-sent. */
+    static const struct { const char *name; app_driver_param_id_t id; uint8_t type; } s_now_params[] = {
+${rows}
+    };
+    for (size_t i = 0; i < sizeof(s_now_params) / sizeof(s_now_params[0]); i++) {
+        if (s_now_params[i].type != msg.type || hash != zc_now_hash(s_now_params[i].name)) continue;
+        app_driver_param_val_t v = {};
+        switch (msg.type) {
+            case 0: ${member(0)}; break;
+            case 1: ${member(1)}; break;
+            case 2: ${member(2)}; break;
+            case 3: ${member(3)}; break;
+            default: ${member(4)}; break;
+        }
+        app_driver_fire_event(s_now_params[i].id, v, s_handle);
+        return;
+    }`
+}
+
 function genAppEspnowCpp(rendered: RenderedInstance[]): string {
   return `#include "app_espnow.h"
 #include "app_driver.h"
@@ -3251,6 +3287,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     uint32_t hash = msg.name_hash;
     (void)hash;
 ${collectSlot(rendered, 'espnow_recv_cases', 4)}
+${espnowRecvFallback(rendered)}
 }
 
 /* Hardware/param bus -> broadcasts. Broadcaster device types own the cases. */
