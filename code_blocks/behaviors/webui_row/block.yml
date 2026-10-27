@@ -1,4 +1,4 @@
-description: "One row on the web UI page for any driver param — the product's own setting (a mode switch, a limit) or reading (a computed value) — in the page's row kinds: toggle, slider, number, value, binary."
+description: "One row on the web UI page for any driver param — the product's own setting (a mode switch, a limit, a time of day) or reading (a computed value) — in the page's row kinds: toggle, slider, number, value, binary, time."
 
 # Device types bring their own rows (webui_entities). A param that belongs to
 # the PRODUCT — an Auto/Manual switch its logic reads, the speed it decided, a
@@ -18,6 +18,8 @@ description: "One row on the web UI page for any driver param — the product's 
 #   number — the value with - and + buttons moving it by step
 #   value  — a read-only reading (shows -- until first written)
 #   binary — a read-only ACTIVE / clear state
+#   time   — a time of day the owner sets (HH:MM), stored as minutes since
+#            midnight (0-1439): a schedule's feeding, lights-on or watering time
 # The value is shown divided by scale (a temperature in centi-degrees: scale 100).
 
 requires_frameworks: [webui]
@@ -30,8 +32,8 @@ params:
   kind:
     type: string
     default: value
-    enum: [toggle, slider, number, value, binary]
-    description: How the page draws the row; toggle, slider and number take writes from the page
+    enum: [toggle, slider, number, value, binary, time]
+    description: How the page draws the row; toggle, slider, number and time take writes from the page
   param:
     type: string
     required: true

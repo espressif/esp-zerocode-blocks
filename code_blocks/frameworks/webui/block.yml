@@ -42,5 +42,5 @@ facts:
   lock: "A door lock's state is shown, but it cannot be locked or unlocked from the page."
   no_login: "The page has no login: anyone who can reach it (anyone on the device's own network, or anyone on the home network when it shares one) can operate every control on it."
   own_network_limits: "On its own network at most 4 phones or computers can join at once, and a phone joined to it has no internet while connected."
-  own_rows: "The page can also show the product's own settings and readings — a mode switch, a computed value, a limit — each as one more row of the same kinds."
+  own_rows: "The page can also show the product's own settings and readings — a mode switch, a computed value, a limit, a time of day for a schedule (set as HH:MM) — each as one more row."
   reset: "A factory reset makes a new network password, printed in the boot log again; the network name and page address stay the same because they come from the hardware address."
