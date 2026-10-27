@@ -2630,6 +2630,10 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
                     s_last_onoff = on;
                 }
                 ESP_LOGD(TAG, "OnOff status from 0x%04x: %s", src, on ? "ON" : "OFF");
+                /* Controller device types mirror what the lights report onto
+                 * their own params (written as this framework, so never sent
+                 * back out): product code reads the lights' state there. */
+${collectSlot(rendered, 'ble_mesh_onoff_status', 16)}
                 zc_ble_mesh_on_onoff_status(src, on);
                 return;
             }
@@ -2641,6 +2645,7 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
                 const esp_ble_mesh_gen_level_status_cb_t *st = &param->status_cb.level_status;
                 int16_t level = st->op_en ? st->target_level : st->present_level;
                 ESP_LOGD(TAG, "Level status from 0x%04x: %d", src, (int)level);
+${collectSlot(rendered, 'ble_mesh_level_status', 16)}
                 zc_ble_mesh_on_level_status(src, level);
                 return;
             }
