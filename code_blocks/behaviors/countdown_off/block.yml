@@ -1,0 +1,54 @@
+description: >-
+  An off-timer the owner sets at run time: writing N minutes to minutes_param
+  starts a countdown that switches target_param off when it ends; 0 cancels it.
+  minutes_param reads back 0 once the countdown ends or is cancelled, and
+  remaining_param shows the minutes left.
+
+# The "turn off in N minutes" control of smart plugs, heaters, warmers and
+# fans, set from any binding that can write a number (Matter, MQTT, RainMaker,
+# the web UI, a console command). behaviors/auto_off_timer is the other
+# shape: a FIXED time that starts whenever the target turns on.
+#
+#  - minutes_param := N (1..max_minutes) starts the countdown NOW, from N,
+#    whether the target is on or off; a new N restarts it.
+#  - minutes_param := 0 cancels it.
+#  - At the end target_param := false and minutes_param := 0.
+#  - target_param switched off by anything cancels a running countdown and
+#    clears minutes_param, unless off_cancels is false.
+#  - With turns_on, starting a countdown also switches the target on.
+#
+# minutes_param is not persisted: after a reboot no countdown runs.
+
+params:
+  max_minutes:
+    type: int
+    default: 1440
+    description: Longest countdown accepted; larger values are clamped
+  off_cancels:
+    type: bool
+    default: true
+    description: Switching the target off cancels a running countdown
+  turns_on:
+    type: bool
+    default: false
+    description: Starting a countdown also switches the target on
+
+driver_params:
+  target_param:
+    type: bool
+    required: true
+    description: Boolean param the countdown switches off (typically POWER)
+  minutes_param:
+    type: u16
+    required: true
+    description: The countdown length in minutes the owner sets (0 = none); reads 0 again when it ends or is cancelled
+  remaining_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) whole minutes left, rounded up (0 when no countdown runs). Empty disables.
+
+facts:
+  countdown: "Writing N minutes to the off-timer starts the countdown from N at once, whether the load is on or off, and a new value restarts it; 0 cancels it. When it ends the load switches off and the timer reads 0 again; switching the load off by hand also cancels it (off_cancels)."
+  wired: "The block listens to the off-timer and the load itself; product code writes the minutes and never runs its own off-timer, nor zeroes the param when the load is off."
+  not_kept: "A running countdown does not survive a reboot or power cut: the timer reads 0 after boot."
