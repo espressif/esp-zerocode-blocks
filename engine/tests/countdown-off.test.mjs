@@ -19,7 +19,7 @@ const CXX = process.env.CXX || 'c++'
 const haveCxx = spawnSync(CXX, ['--version']).status === 0
 const BUS = join(ROOT, 'base_firmware/components/app_driver')
 const SLOTS = join(ROOT, 'code_blocks/behaviors/countdown_off/slots')
-const cfg = { max_minutes: 1440, off_cancels: true, turns_on: false, target_param: 'APP_DRIVER_PARAM_POWER', minutes_param: 'APP_DRIVER_PARAM_OFF_TIMER', remaining_param: 'APP_DRIVER_PARAM_OFF_LEFT' }
+const cfg = { max_minutes: 60, off_cancels: true, turns_on: false, target_param: 'APP_DRIVER_PARAM_POWER', minutes_param: 'APP_DRIVER_PARAM_OFF_TIMER', remaining_param: 'APP_DRIVER_PARAM_OFF_LEFT' }
 const fill = (f) => eng.__substituteForTest(readFileSync(join(SLOTS, f), 'utf8'), { prefix: 'CD', prefix_lc: 'cd', cfg })
 
 async function generateTypes() {
@@ -78,6 +78,7 @@ ${init}
     set_b(APP_DRIVER_PARAM_POWER, true); set_u(APP_DRIVER_PARAM_OFF_TIMER, 5); seconds(10); set_b(APP_DRIVER_PARAM_POWER, false); mark();  /* off cancels */
     set_b(APP_DRIVER_PARAM_POWER, true); set_u(APP_DRIVER_PARAM_OFF_TIMER, 3); set_u(APP_DRIVER_PARAM_OFF_TIMER, 0); seconds(400); mark();      /* 0 cancels */
     set_u(APP_DRIVER_PARAM_OFF_TIMER, 1); set_u(APP_DRIVER_PARAM_OFF_TIMER, 2); seconds(90); mark(); seconds(31); mark();             /* a new value restarts */
+    set_u(APP_DRIVER_PARAM_OFF_TIMER, 500); mark();                                                     /* clamped to max_minutes and read back as such */
     printf("%s\n", out.c_str());
     return 0;
 }
@@ -93,7 +94,7 @@ test('countdown_off: set while off, end switches off and reads 0, off and 0 canc
       '-I', join(BUS, 'test/shims'), '-I', inc, '-I', join(BUS, 'include'),
       '-o', join(dir, 'a.out'), join(dir, 'main.cpp'), join(BUS, 'app_driver_cb.cpp')], { stdio: 'pipe' })
     const got = execFileSync(join(dir, 'a.out'), { encoding: 'utf8' }).trim()
-    assert.equal(got, '0/2/2 0/2/1 1/2/1 0/0/0 0/0/0 1/0/0 1/2/1 0/0/0')
+    assert.equal(got, '0/2/2 0/2/1 1/2/1 0/0/0 0/0/0 1/0/0 1/2/1 0/0/0 0/60/60')
   } finally {
     rmSync(dir, { recursive: true, force: true })
     cleanup()

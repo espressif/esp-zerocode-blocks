@@ -30,7 +30,12 @@ static void {{prefix_lc}}_cd_stop(bool clear_minutes)
 
 static void {{prefix_lc}}_cd_start(int minutes)
 {
-    if (minutes > {{prefix}}_CD_MAX_MIN) minutes = {{prefix}}_CD_MAX_MIN;
+    if (minutes > {{prefix}}_CD_MAX_MIN) {
+        /* Clamped: the param reads what actually runs, not what was asked. */
+        minutes = {{prefix}}_CD_MAX_MIN;
+        app_driver_param_val_t c = { .u16 = (uint16_t)minutes };
+        app_driver_set_param({{cfg.minutes_param}}, c, s_{{prefix_lc}}_cd_handle);
+    }
     portENTER_CRITICAL(&s_{{prefix_lc}}_cd_mux);
     s_{{prefix_lc}}_cd_deadline_us = esp_timer_get_time() + (int64_t)minutes * 60LL * 1000000LL;
     portEXIT_CRITICAL(&s_{{prefix_lc}}_cd_mux);
