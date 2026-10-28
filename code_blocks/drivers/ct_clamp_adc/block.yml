@@ -79,6 +79,7 @@ console_commands:
   - "ct-cal show|zero|reset [clamp]"
 
 facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."
   rms: "The current is a true RMS over 10 whole mains cycles with the bias removed per reading, published as whole mA; power is current x the configured mains voltage x power factor, in mW — the clamp measures current only, so voltage is not measured."
   zero_reference: "An idle clamp reads the ADC's own noise; the firmware subtracts a zero reference (the owner records it with nothing switched on by typing ct-cal zero on the USB serial console) and reads anything under min_current_ma as 0, so an empty outlet reads 0 W."
   reading_interval: "A reading is taken and published every second by default; listeners get a change only when the value changes."
