@@ -78,4 +78,5 @@ driver_params:
 
 facts:
   target_vs_current: "With current_param, commands (Matter Up/Down/GoToLiftPercentage, RainMaker, MQTT, voice, display) write position_param as the target and nothing else; the product writes current_param as the blind moves (0xFFFF while unknown, reported to Matter as a null CurrentPosition). Publishing the measured position on position_param instead makes it look like a new command."
+  repeat: "With current_param, every command reaches the controller as an event, so sending Close again to a blind that is not closed (after a fault, a stop or a move by hand) drives it again; without current_param a repeat of the stored position is dropped."
   stop: "With stop_param, a Matter StopMotion or MQTT STOP fires stop_param once; the product stops the motor there. Matter then sets Target to Current (or leaves it null when Current is unknown), which lands on position_param as the current position, so a stopped blind does not move again."

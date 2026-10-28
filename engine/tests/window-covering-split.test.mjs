@@ -44,6 +44,8 @@ test('split Matter covering: Current from current_param, Target mirror, Stop del
     assert.match(src, /if \(param_id == APP_DRIVER_PARAM_LIFT_POSITION && val\.u16 <= 10000 && source != s_handle\)[\s\S]*?TargetPositionLiftPercent100ths/)
     assert.match(src, /HandleStopMotion\(\) override[\s\S]*?app_driver_fire_event\(APP_DRIVER_PARAM_LIFT_STOP/)
     assert.match(src, /window_covering\.delegate = &s_shade_wc_delegate/)
+    assert.match(src, /#define SHADE_WC_COMMAND\(id, v, h\) app_driver_fire_event/)
+    assert.match(src, /SHADE_WC_COMMAND\(APP_DRIVER_PARAM_LIFT_POSITION, pv, s_handle\)/)
     const drv = g.read('components/app_driver/app_driver.cpp')
     assert.match(drv, /case APP_DRIVER_PARAM_LIFT_STOP:/)
     assert.match(drv, /app_driver_set_param\(APP_DRIVER_PARAM_LIFT_CURRENT/)
