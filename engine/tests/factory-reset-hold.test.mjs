@@ -278,13 +278,19 @@ for (const [label, ownerFirst] of [['a control button created the device', true]
 }
 
 test('factory_reset_button_combo: started once both are held past the cue, cancelled when either lets go', { skip }, (t) => {
-  const cfg = { gpio_a: 4, gpio_b: 5, active_level: 0, hold_time_ms: 5000, reset_cue_ms: 1000 }
+  const cfg = { gpio_a: 4, gpio_b: 5, active_level: 0, hold_time_ms: 5000, reset_cue_ms: 1000, together_ms: 1000 }
   const pre = '#define ACTIVE_A 4\n#define ACTIVE_B 5\n#define BOARD_LONG_PRESS_MS 1500\n'
   const body = String.raw`
     hold(800);   EXPECT("before the cue: nothing", "");
     hold(2000);  EXPECT("past the cue, released: started, cancelled", "SC");
     press(); g_level[5] = !GPIO_ACTIVE; advance(3000); release(); advance(500);
                  EXPECT("one button alone: nothing", "");
+    g_level[5] = GPIO_ACTIVE; advance(3000); g_level[4] = GPIO_ACTIVE; advance(6000);
+    g_level[4] = !GPIO_ACTIVE; g_level[5] = !GPIO_ACTIVE; advance(500);
+                 EXPECT("one button stuck, the other pressed later: not the combo", "");
+    g_level[5] = GPIO_ACTIVE; advance(600); g_level[4] = GPIO_ACTIVE; advance(6000);
+    g_level[4] = !GPIO_ACTIVE; g_level[5] = !GPIO_ACTIVE; advance(1000);
+                 EXPECT("pressed 0.6 s apart: the combo", "SR");
     hold(6000);  EXPECT("held to the reset: started, reset once", "SR");
     g_reset_result = ESP_FAIL;
     hold(6000);  EXPECT("a failed erase ends the feedback once, no retry while held", "SRC");
