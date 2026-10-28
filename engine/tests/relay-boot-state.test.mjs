@@ -82,6 +82,7 @@ function harness(persist) {
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <driver/gpio.h>
+#include <freertos/portmacro.h>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -121,7 +122,7 @@ function build(t, outDir, root) {
   const persist = between(persistSrc, '/* behaviors/nvs_persist_bool (PERSIST) */', 'void persist_logic_init')
   writeFileSync(join(root, 'main.cpp'), harness(persist))
   const bin = join(root, 'p')
-  execFileSync(CXX, ['-std=c++17', '-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-pthread',
+  execFileSync(CXX, ['-std=c++17', '-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-pthread', '-DAPP_DRIVER_POLL_NO_TASK',
     '-I', stubs, '-I', SHIMS, '-I', join(outDir, 'components/app_driver/include'), '-I', join(outDir, 'components/app_config/include'),
     join(root, 'main.cpp'), join(outDir, 'components/app_driver/app_driver.cpp'), join(outDir, 'components/app_driver/app_driver_cb.cpp'),
     '-o', bin], { stdio: 'pipe' })
@@ -147,7 +148,8 @@ for (const [id, driver] of Object.entries(DRIVERS)) {
     assert.equal(run('fresh'), 'seen=1 on=0 pin=1 nvs=-1 writes=0 seen=1 on=0 pin=1 nvs=-1 writes=0')
     // A saved ON is restored over the boot state and drives the relay, and NVS
     // keeps it (the restore's own change re-saves the same 1, as it always did).
-    assert.equal(run('saved-on'), 'seen=1 on=0 pin=1 nvs=1 writes=0 seen=1 on=1 pin=0 nvs=1 writes=1')
+    // writes=0: the persist block writes on the bus's poll task, never inside the restore.
+    assert.equal(run('saved-on'), 'seen=1 on=0 pin=1 nvs=1 writes=0 seen=1 on=1 pin=0 nvs=1 writes=0')
     assert.equal(run('saved-off'), 'seen=1 on=0 pin=1 nvs=0 writes=0 seen=1 on=0 pin=1 nvs=0 writes=0')
     // A value written before the driver's boot state is not overwritten with off.
     assert.match(run('written-first'), /^seen=1 on=1 pin=\d nvs=-1 writes=0 seen=1 on=1 pin=\d nvs=-1 writes=0$/)

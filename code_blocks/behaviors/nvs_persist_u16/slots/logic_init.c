@@ -1,5 +1,6 @@
 {
     app_driver_register_solution("{{prefix_lc}}_persist", {{prefix_lc}}_persist_cb, NULL);
+    (void)app_driver_poll_every(&{{prefix_lc}}_persist_write, NULL, {{prefix}}_PERSIST_MS);
     nvs_handle_t h;
     if (nvs_open({{prefix}}_NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         uint16_t saved = 0;
