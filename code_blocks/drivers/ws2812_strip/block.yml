@@ -1,8 +1,9 @@
-description: Addressable RGB LED strip driver (WS2812 / SK6812) via espressif/led_strip 2.5.x
+description: Addressable RGB LED strip driver (WS2812 / SK6812) via espressif/led_strip 3.x
 
 # Treats the whole strip as one logical RGB element (all LEDs the same color).
 # To address segments differently, replace the apply function post-generation.
-# IMPORTANT: led_strip MUST be ~2.5.0 (NOT ^3.0.0 — led_indicator 1.x uses 2.x APIs).
+# led_strip is pinned ~3.0.3 (idf_component.yml): the code uses the 3.x
+# color_component_format API and does not build against 2.x.
 
 params:
   gpio:
