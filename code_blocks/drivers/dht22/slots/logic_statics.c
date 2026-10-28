@@ -139,9 +139,13 @@ static void {{prefix_lc}}_dht_poll(void)
  * esp_timer task that delayed every other timer callback in the product. */
 static void {{prefix_lc}}_dht_task(void *arg)
 {
+    /* The first reading 2 s after start — the sensor does not answer within
+     * ~1-2 s of power-up — not one whole period later: with a long poll
+     * interval that left the product with no reading for minutes after
+     * every boot. Then every period. */
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    {{prefix_lc}}_dht_poll();
     TickType_t last = xTaskGetTickCount();
-    /* Wait one period (at least 2 s) first: the sensor does not answer
-     * within ~1-2 s of power-up. */
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS({{prefix}}_DHT_PERIOD_MS));
         {{prefix_lc}}_dht_poll();
