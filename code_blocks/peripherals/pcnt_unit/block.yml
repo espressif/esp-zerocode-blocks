@@ -2,7 +2,7 @@ description: >-
   Shared pulse-counter (PCNT) unit, CREATED but not enabled, for a block of
   your own to attach channels to through <prefix>_pcnt_handle() and then
   enable + start. No catalog driver uses it (encoder and hlw8012 make their
-  own unit). PCNT hardware is not on esp32c2/c3/c61.
+  own unit). PCNT hardware is not on esp32c2/c3/c61. <prefix>_pcnt_handle() is NULL when no unit could be created (the pool is shared) — check it.
 
 # Why the unit is left in the INIT state: ESP-IDF refuses pcnt_new_channel,
 # pcnt_unit_set_glitch_filter and pcnt_unit_register_event_callbacks once a
