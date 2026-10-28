@@ -54,3 +54,6 @@ driver_params:
   humidity_param:
     type: i16
     description: Optional — int16, hundredths of %RH, from the same measurement. Omit to skip publishing it.
+
+facts:
+  recovers: "A sensor that is missing at boot, or loses power while running, is told to start measuring again after three failed reads in a row (about 18 s), so readings come back by themselves; product code never restarts it."

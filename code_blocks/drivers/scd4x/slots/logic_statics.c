@@ -61,16 +61,37 @@ static uint8_t {{prefix_lc}}_aqi_from_co2(uint16_t ppm)
     return 5;                 /* VeryPoor */
 }
 
+/* Consecutive failed polls. A sensor that was absent at boot, or lost power,
+ * is idle and stays idle until it is told to measure again: started only at
+ * boot, it read nothing forever. After a few failures in a row the start is
+ * sent again — harmless to a sensor that is already measuring (it refuses it). */
+static uint32_t s_{{prefix_lc}}_scd_failures = 0;
+#define {{prefix}}_SCD_RESTART_AFTER 3
+
+static void {{prefix_lc}}_scd_failed(const char *what)
+{
+    s_{{prefix_lc}}_scd_failures++;
+    uint32_t per_minute = 60000UL / (uint32_t){{prefix}}_SCD_POLL_MS;
+    if (per_minute == 0) per_minute = 1;
+    if (s_{{prefix_lc}}_scd_failures == 1 || (s_{{prefix_lc}}_scd_failures % per_minute) == 0) {
+        ESP_LOGW(TAG, "SCD4x {{prefix_lc}}: %s failed, %lu consecutive", what, (unsigned long)s_{{prefix_lc}}_scd_failures);
+    }
+    if ((s_{{prefix_lc}}_scd_failures % {{prefix}}_SCD_RESTART_AFTER) == 0) {
+        (void){{prefix_lc}}_scd_send_cmd(0x21B1);   /* start periodic measurement again */
+    }
+}
+
 static void {{prefix_lc}}_scd_poll_cb(void *arg)
 {
-    if ({{prefix_lc}}_scd_send_cmd(0xEC05) != ESP_OK) return;
+    if (s_{{prefix_lc}}_i2c_dev == NULL) return;
+    if ({{prefix_lc}}_scd_send_cmd(0xEC05) != ESP_OK) { {{prefix_lc}}_scd_failed("read command"); return; }
     /* read_measurement needs 1 ms before the data can be read. Not
        vTaskDelay(pdMS_TO_TICKS(2)): that rounds DOWN to 0 ticks at the default
        100 Hz, so it never waited. A 1 ms busy-wait rather than a whole tick,
        because this runs on the shared esp_timer task. */
     esp_rom_delay_us(1000);
     uint8_t buf[9] = {0};
-    if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) return;
+    if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) { {{prefix_lc}}_scd_failed("read"); return; }
     /* Three words (CO2, T, RH), each followed by its CRC: a reading with a bad
        word is dropped whole rather than published half-right. */
     for (int i = 0; i < 9; i += 3) {
@@ -78,6 +99,10 @@ static void {{prefix_lc}}_scd_poll_cb(void *arg)
             ESP_LOGW(TAG, "SCD4x {{prefix_lc}}: CRC mismatch, reading dropped");
             return;
         }
+    }
+    if (s_{{prefix_lc}}_scd_failures) {
+        ESP_LOGI(TAG, "SCD4x {{prefix_lc}}: reading again after %lu failed poll(s)", (unsigned long)s_{{prefix_lc}}_scd_failures);
+        s_{{prefix_lc}}_scd_failures = 0;
     }
     uint16_t co2 = ((uint16_t)buf[0] << 8) | buf[1];
     if (co2 == 0) return; /* sensor still warming up */
