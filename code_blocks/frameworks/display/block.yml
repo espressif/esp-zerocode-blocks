@@ -60,5 +60,6 @@ facts:
   units: "Temperatures are shown in °C only."
   panel: "A board with its own screen uses that screen; otherwise the wired screen must be one the catalog drives: a 240x320 ILI9341 SPI screen (touch with an FT5x06/FT6x36), a 480x480 CO5300 with CST9220 touch, or the ESP32-P4 board's 7-inch 1024x600 screen, which has no touch yet."
   not_shown: "Remotes and switches (scene button, dimmer remote, colour remote, on/off light switch), doorbell, chime, heat pump and a few controller types have no card."
+  any_touch: "Every touch of the screen, wherever it lands, calls app_display_on_touch() (app_display.h) before any object sees it, so waking a dimmed screen or switching views on a tap needs only that function — objects of the product's own, even full-screen ones, cannot swallow it."
   screen_on: "The screen and backlight come on at boot and stay on; nothing dims or sleeps unless the spec asks for it."
   taps: "When the screen shows device cards, every tap on the card list also reaches the screen itself (the list passes clicks up so a screen-level handler sees them), so product code handles a tap on the screen or on its own objects, never both, or each tap is handled twice."

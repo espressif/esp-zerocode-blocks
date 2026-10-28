@@ -3699,6 +3699,16 @@ static app_driver_handle_t s_handle = 0;
 /* Assigned by the panel driver block's display_node_init slot. */
 static lv_display_t *s_disp = NULL;
 
+/* Weak: product code defines app_display_on_touch() (app_display.h) to act on
+ * any touch — wake a dimmed backlight, switch views. */
+extern "C" __attribute__((weak)) void app_display_on_touch(void) {}
+
+static void zc_display_touch_cb(lv_event_t *e)
+{
+    (void)e;
+    app_display_on_touch();
+}
+
 ${collectSlot(rendered, 'display_statics')}
 
 /* Hardware/param bus -> widgets. Runs OFF the LVGL task, so the whole
@@ -3749,6 +3759,18 @@ ${collectSlot(rendered, 'display_node_init', 4)}
         ESP_LOGE(TAG, "no display panel block in this product — add drivers/display_ili9341_spi");
         vTaskDelete(NULL);
         return;
+    }
+
+    /* Every touch, wherever it lands, reaches app_display_on_touch(): the
+     * hook sits on the input device, which LVGL tells before any object, so a
+     * full-screen object of the product's own cannot swallow it. */
+    if (lvgl_port_lock(0)) {
+        for (lv_indev_t *in = lv_indev_get_next(NULL); in != NULL; in = lv_indev_get_next(in)) {
+            if (lv_indev_get_type(in) == LV_INDEV_TYPE_POINTER) {
+                lv_indev_add_event_cb(in, zc_display_touch_cb, LV_EVENT_PRESSED, NULL);
+            }
+        }
+        lvgl_port_unlock();
     }
 
 ${cardCalls.length ? `    /* One scrollable column of device cards, built under the LVGL lock. */
