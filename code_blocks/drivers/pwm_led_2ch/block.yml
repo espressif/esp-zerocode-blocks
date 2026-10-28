@@ -2,7 +2,8 @@ description: 2-channel PWM driver for CCT (warm + cool white) lights with bright
 
 # Implements warm/cool channel mixing from a Matter color temperature in mireds.
 # Mireds map to a normalized warm fraction that's combined with brightness + on/off.
-# Cool channel is on a separate LEDC channel/timer from the warm channel.
+# Cool and warm are two LEDC channels sharing ONE timer (ledc_timer): same
+# frequency and resolution, independent duty.
 
 params:
   warm_gpio:

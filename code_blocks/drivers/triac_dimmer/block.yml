@@ -7,7 +7,8 @@ description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC
 # This driver:
 #  - Hooks a GPIO ISR on the ZCD edge
 #  - Schedules a one-shot timer to fire the gate after delay_us
-#  - delay_us = (half_cycle_us * (255 - brightness)) / 255
+#  - delay_us = ((half_cycle_us - 200) * (255 - brightness)) / 255 — the 200 us
+#    margin keeps the latest firing clear of the next zero-cross
 # Installs the shared GPIO ISR service itself if no earlier block did
 # (peripherals/gpio_isr_service is optional).
 
