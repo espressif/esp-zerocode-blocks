@@ -1,4 +1,8 @@
+#if {{prefix}}_WC_SPLIT
+if (param_id == {{#if cfg.current_param}}{{cfg.current_param}}{{/if}} && val.u16 <= 10000 && s_{{prefix_lc}}_zb_endpoint) {
+#else
 if (param_id == {{cfg.position_param}} && s_{{prefix_lc}}_zb_endpoint) {
+#endif
     /* Driver position is centi-percent OPEN (0-10000); ZCL lift percentage is
      * u8 percent CLOSED (0 = open, 100 = closed). */
     uint16_t centi = val.u16;

@@ -56,7 +56,22 @@ driver_params:
       Driver param ID for lift position (uint16, 0-10000 percent OPEN, 0 = fully
       closed). Written as a target
       (>5000 opens fully, otherwise closes fully); the driver writes back 0 or
-      10000 when a limit is reached
+      10000 when a limit is reached (on current_param instead, when set)
+  current_param:
+    type: u16
+    required: false
+    description: >-
+      Optional. The measured position (device_types/window_covering
+      current_param): the driver writes 10000 or 0 when a limit is reached and
+      0xFFFF (unknown) at boot away from both limits, when a run starts, on a
+      stop between the ends and when max_run_ms expires. position_param then
+      stays the target.
+  stop_param:
+    type: u8
+    required: false
+    description: >-
+      Optional. An event param (device_types/window_covering stop_param): when
+      it fires, the motor stops wherever it is.
 
 reacts:
-  driver: "A change of {{cfg.position_param}} runs the motor fully open (above 5000) or fully closed through the up/down pins, stopping at the limit switch or max_run_ms and writing back 10000 or 0; product code writes the target and never drives the motor pins or watches the limits itself."
+  driver: "A change of {{cfg.position_param}} runs the motor fully open (above 5000) or fully closed through the up/down pins, stopping at the limit switch or max_run_ms and writing back 10000 or 0 (on current_param when set; 0xFFFF while moving or lost); a firing of stop_param stops it where it is; product code writes the target and never drives the motor pins or watches the limits itself."

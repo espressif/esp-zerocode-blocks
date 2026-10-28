@@ -9,15 +9,26 @@
         esp_matter::cluster::window_covering::feature::lift::get_id() |
         esp_matter::cluster::window_covering::feature::position_aware_lift::get_id();
     /* Start from where the driver says the blind is. Matter counts percent
-     * CLOSED (0 = open, 10000 = closed); the driver counts percent OPEN. */
+     * CLOSED (0 = open, 10000 = closed); the driver counts percent OPEN. An
+     * unknown measured position starts both null. */
     {
         app_driver_param_val_t init = {};
+#if {{prefix}}_WC_SPLIT
+        app_driver_get_param({{#if cfg.current_param}}{{cfg.current_param}}{{/if}}, &init);
+#else
         app_driver_get_param({{cfg.position_param}}, &init);
-        uint16_t closed = (uint16_t)(10000 - (init.u16 > 10000 ? 10000 : init.u16));
-        {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = closed;
-        {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = closed;
+#endif
+        if (init.u16 <= 10000) {
+            uint16_t closed = (uint16_t)(10000 - init.u16);
+            {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = closed;
+            {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = closed;
+        } else {
+            {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = nullable<uint16_t>();
+            {{prefix_lc}}_cfg.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = nullable<uint16_t>();
+        }
     }
-    esp_matter::endpoint_t *ep = esp_matter::endpoint::window_covering::create(
+{{#if cfg.stop_param}}    {{prefix_lc}}_cfg.window_covering.delegate = &s_{{prefix_lc}}_wc_delegate;
+{{/if}}    esp_matter::endpoint_t *ep = esp_matter::endpoint::window_covering::create(
         node, &{{prefix_lc}}_cfg, ENDPOINT_FLAG_NONE, NULL);
     if (!ep) { ESP_LOGE(TAG, "Failed to create {{prefix_lc}} endpoint"); return ESP_FAIL; }
     s_{{prefix_lc}}_endpoint_id = esp_matter::endpoint::get_id(ep);
