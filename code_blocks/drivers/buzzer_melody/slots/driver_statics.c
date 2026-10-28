@@ -13,7 +13,7 @@ static TaskHandle_t s_{{prefix_lc}}_task = NULL;
 typedef struct { uint16_t freq; uint16_t ms; } {{prefix_lc}}_note_t;
 static const {{prefix_lc}}_note_t s_{{prefix_lc}}_chirp[]    = { {2500,80}, {0,0} };
 static const {{prefix_lc}}_note_t s_{{prefix_lc}}_three[]    = { {2500,80},{0,80}, {2500,80},{0,80}, {2500,80}, {0,0} };
-static const {{prefix_lc}}_note_t s_{{prefix_lc}}_alarm[]    = { {2200,500},{0,500} };
+static const {{prefix_lc}}_note_t s_{{prefix_lc}}_alarm[]    = { {2200,500},{0,500}, {0,0} };
 static const {{prefix_lc}}_note_t s_{{prefix_lc}}_chime_up[] = { {880,150},{1320,150},{1760,250}, {0,0} };
 static const {{prefix_lc}}_note_t s_{{prefix_lc}}_chime_dn[] = { {1760,150},{1320,150},{880,250},  {0,0} };
 
