@@ -39,6 +39,6 @@ facts:
   findable: "When nothing is connected it stays discoverable, so pairing needs no button press or pairing mode."
   repair: "If the phone or PC forgets the device, pairing again from it works."
   before_pairing: "Presses made while nothing is connected are dropped, not sent later."
-  keyboard: "The framework sends media keys, not keyboard keys; the chip itself can be a full Bluetooth keyboard (arrows, letters), but only with firmware written for the product beyond the catalog."
-  what_sends: "Only three kinds of control send anything: a scene button sends one chosen media key per press (play/pause, mute, next or previous track), and a dimmer or colour remote sends mute from its power button and volume up or down from its knob."
+  keyboard: "It sends media keys (play/pause, volume, mute, next/previous track) and keyboard keys (arrows, page up/down, space, letters), so a presentation clicker or a page turner works with no app; each button sends one key per press."
+  what_sends: "Only three kinds of control send anything: a scene button sends one chosen key per press (a media key such as play/pause or next track, or a keyboard key such as an arrow or page down), and a dimmer or colour remote sends mute from its power button and volume up or down from its knob."
   one_way: "It only sends key presses: it cannot see what is playing, the volume or whether the TV is on, it joins no Wi-Fi, and it appears in no app."

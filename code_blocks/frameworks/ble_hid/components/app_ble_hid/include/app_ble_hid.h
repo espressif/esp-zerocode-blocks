@@ -31,6 +31,14 @@ esp_err_t app_ble_hid_init(void);
  */
 void zc_ble_hid_send_consumer(uint16_t usage);
 
+/**
+ * Send a keyboard key (press + release) to the paired host: a USB HID
+ * Keyboard Page keycode — 0x4F right arrow, 0x50 left arrow, 0x4B page up,
+ * 0x4E page down, 0x2C space — with modifier bits (0x02 left shift, 0x01
+ * left control). Dropped when no host is connected.
+ */
+void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers);
+
 #ifdef __cplusplus
 }
 #endif

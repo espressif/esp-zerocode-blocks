@@ -3433,7 +3433,9 @@ static volatile bool s_host_connected = false;
 
 /* Consumer Control, report id 1: one 16-bit usage array. Press = usage,
  * release = 0. Covers play/pause, volume, mute, next/prev — everything a
- * media remote sends. */
+ * media remote sends. Keyboard, report id 2: the standard 8-byte input
+ * (modifiers, reserved, six keycodes) — arrows, page up/down, space, letters:
+ * a presentation clicker, a page turner. */
 static const uint8_t s_report_map[] = {
     0x05, 0x0C,       /* Usage Page (Consumer) */
     0x09, 0x01,       /* Usage (Consumer Control) */
@@ -3446,6 +3448,29 @@ static const uint8_t s_report_map[] = {
     0x75, 0x10,       /*   Report Size (16) */
     0x95, 0x01,       /*   Report Count (1) */
     0x81, 0x00,       /*   Input (Data, Array) */
+    0xC0,             /* End Collection */
+    0x05, 0x01,       /* Usage Page (Generic Desktop) */
+    0x09, 0x06,       /* Usage (Keyboard) */
+    0xA1, 0x01,       /* Collection (Application) */
+    0x85, 0x02,       /*   Report ID (2) */
+    0x05, 0x07,       /*   Usage Page (Keyboard/Keypad) */
+    0x19, 0xE0,       /*   Usage Minimum (Left Control) */
+    0x29, 0xE7,       /*   Usage Maximum (Right GUI) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x25, 0x01,       /*   Logical Maximum (1) */
+    0x75, 0x01,       /*   Report Size (1) */
+    0x95, 0x08,       /*   Report Count (8) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — modifiers */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x01,       /*   Report Count (1) */
+    0x81, 0x01,       /*   Input (Const) — reserved */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x06,       /*   Report Count (6) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x25, 0xFF,       /*   Logical Maximum (255) */
+    0x19, 0x00,       /*   Usage Minimum (0) */
+    0x29, 0xFF,       /*   Usage Maximum (255) */
+    0x81, 0x00,       /*   Input (Data, Array) — keys */
     0xC0,             /* End Collection */
 };
 
@@ -3463,6 +3488,22 @@ void zc_ble_hid_send_consumer(uint16_t usage)
     esp_hidd_dev_input_set(s_hid_dev, 0, 1, report, 2);
     uint8_t release[2] = { 0, 0 };
     esp_hidd_dev_input_set(s_hid_dev, 0, 1, release, 2);
+}
+
+/* A keyboard key, press + release: a USB HID Keyboard Page keycode (0x4F right
+ * arrow, 0x50 left, 0x4B page up, 0x4E page down, 0x2C space) with modifier
+ * bits (0x02 left shift). Dropped when no host is connected, like a consumer
+ * usage. */
+void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers)
+{
+    if (!s_host_connected || s_hid_dev == NULL) {
+        ESP_LOGD(TAG, "no host connected — dropping key 0x%02x", keycode);
+        return;
+    }
+    uint8_t report[8] = { modifiers, 0, keycode, 0, 0, 0, 0, 0 };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 2, report, 8);
+    uint8_t release[8] = { 0 };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 2, release, 8);
 }
 
 /* Hardware/param bus -> HID reports. Device types own the cases. */
