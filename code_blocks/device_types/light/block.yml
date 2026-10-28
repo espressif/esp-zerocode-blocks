@@ -48,3 +48,6 @@ driver_params:
     type: bool
     default: APP_DRIVER_PARAM_POWER
     description: Driver param ID this device maps to (boolean)
+
+facts:
+  is_a_light: "Every app shows this as a LIGHT (Matter On/Off Light, Zigbee On/Off Light, RainMaker light bulb). A switched socket, outlet or power strip is device_types/smart_plug, which every app shows as an outlet/plug."
