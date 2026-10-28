@@ -69,13 +69,10 @@ enum { P_CO2, P_AQ };
 #define APP_DRIVER_SOURCE_LOCAL 0
 static uint16_t g_co2 = 0;
 static int app_driver_set_param(int id, app_driver_param_val_t v, int) { if (id == P_CO2) g_co2 = v.u16; return 0; }
-typedef void (*esp_timer_cb_t)(void *);
-enum esp_timer_dispatch_t { ESP_TIMER_TASK };
-struct esp_timer_create_args_t { esp_timer_cb_t callback; void *arg; esp_timer_dispatch_t dispatch_method; const char *name; bool skip_unhandled_events; };
-typedef void *esp_timer_handle_t;
-static esp_timer_cb_t g_cb;
-static esp_err_t esp_timer_create(const esp_timer_create_args_t *a, esp_timer_handle_t *h) { g_cb = a->callback; *h = (void *)1; return ESP_OK; }
-static esp_err_t esp_timer_start_periodic(esp_timer_handle_t, uint64_t) { return ESP_OK; }
+/* The poll task: the test runs the registered poll by hand. */
+typedef void (*app_driver_poll_fn_t)(void *);
+static app_driver_poll_fn_t g_cb;
+static esp_err_t app_driver_poll_every(app_driver_poll_fn_t fn, void *, uint32_t) { g_cb = fn; return ESP_OK; }
 ${defines}
 ${statics}
 static std::string out;

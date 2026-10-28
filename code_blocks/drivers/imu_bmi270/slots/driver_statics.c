@@ -67,13 +67,72 @@ static uint8_t {{prefix_lc}}_orientation(int32_t x_mg, int32_t y_mg, int32_t z_m
     return 0;
 }
 
+/* Probe + configure, on the poll task (it waits). True once the BMI270 answers
+ * with its CHIP_ID and holds +/-2 g. Run until it succeeds — a part whose rail
+ * comes up late, or one bus glitch at boot, used to disable motion until the
+ * next power cycle — and again after repeated failed reads, since a
+ * power-cycled part forgets its configuration. */
+static bool {{prefix_lc}}_bring_up(void)
+{
+    uint8_t id = 0;
+    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_CHIP_ID, &id, 1) != ESP_OK ||
+        id != {{prefix}}_IMU_CHIP_ID_VAL) {
+        return false;
+    }
+    /* Accelerometer on, gyro and temperature off — see block.yml: the gyro
+       is what would need the licensed firmware blob, and nothing here reads
+       it. Leaving it off also saves the power an always-on panel cares about. */
+    /* Advanced power save OFF first. PWR_CONF resets to 0x03, and with
+       adv_power_save set the part needs >= 450 us between register writes —
+       the back-to-back ACC_CONF/ACC_RANGE pair below could drop the range
+       write and leave the reset +/-8 g, against a 16384 LSB/g scale. */
+    {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_CONF, 0x00);
+    esp_rom_delay_us(1000);
+    {{prefix_lc}}_wr({{prefix}}_IMU_REG_PWR_CTRL, 0x04);
+    /* 10 ms, not 5: pdMS_TO_TICKS() rounds DOWN, and under one tick it is 0. */
+    vTaskDelay(pdMS_TO_TICKS(10));
+    /* 100 Hz ODR, normal filter. Polling is slower on purpose. */
+    {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_CONF, 0xA8);
+    {{prefix_lc}}_wr({{prefix}}_IMU_REG_ACC_RANGE, 0x00);  /* +/-2 g */
+    vTaskDelay(pdMS_TO_TICKS(10));
+    /* Read the range back: every mg figure assumes +/-2 g, and a write that
+       did not land would read as motion forever. */
+    uint8_t range = 0xFF;
+    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_ACC_RANGE, &range, 1) != ESP_OK || (range & 0x03) != 0x00) {
+        ESP_LOGW(TAG, "{{prefix_lc}}: BMI270 ACC_RANGE reads 0x%02x, not +/-2 g — will retry", range);
+        return false;
+    }
+    return true;
+}
+
+static uint32_t s_{{prefix_lc}}_fails = 0;
+
 static void {{prefix_lc}}_poll_cb(void *arg)
 {
     (void)arg;
-    if (!s_{{prefix_lc}}_present) return;
+    if (!s_{{prefix_lc}}_present) {
+        if (!{{prefix_lc}}_bring_up()) {
+            if (s_{{prefix_lc}}_fails++ == 0) {
+                ESP_LOGW(TAG, "{{prefix_lc}}: no BMI270 at 0x%02x yet — retrying", {{prefix}}_IMU_ADDR);
+            }
+            return;
+        }
+        s_{{prefix_lc}}_present = true;
+        s_{{prefix_lc}}_fails = 0;
+        ESP_LOGI(TAG, "{{prefix_lc}}: BMI270 ready");
+    }
 
     uint8_t d[6] = {0};
-    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_DATA_ACC, d, sizeof(d)) != ESP_OK) return;
+    if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_DATA_ACC, d, sizeof(d)) != ESP_OK) {
+        /* Gone, or power-cycled and unconfigured: probe and configure again. */
+        if (++s_{{prefix_lc}}_fails >= 3) {
+            s_{{prefix_lc}}_present = false;
+            s_{{prefix_lc}}_fails = 0;
+            ESP_LOGW(TAG, "{{prefix_lc}}: BMI270 not answering — probing again");
+        }
+        return;
+    }
+    s_{{prefix_lc}}_fails = 0;
     int16_t x = (int16_t)((uint16_t)d[1] << 8 | d[0]);
     int16_t y = (int16_t)((uint16_t)d[3] << 8 | d[2]);
     int16_t z = (int16_t)((uint16_t)d[5] << 8 | d[4]);
