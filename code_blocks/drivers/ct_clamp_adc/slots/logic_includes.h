@@ -1,0 +1,13 @@
+#include <esp_timer.h>
+#include <esp_adc/adc_oneshot.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_console.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <nvs.h>
+#include <math.h>
+#include <soc/soc_caps.h>
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
