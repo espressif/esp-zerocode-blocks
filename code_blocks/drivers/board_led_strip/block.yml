@@ -95,4 +95,5 @@ driver_params:
     description: Optional. Brightness 0-254. Unbound = 254. Without hue_param it dims the fixed red/green/blue colour.
 
 facts:
+  board_leds_only: "It drives the LEDs soldered on the board, as many as the board defines (a devkit's one RGB LED); an LED strip the person wires is drivers/ws2812_strip on its own data pin and LED count, never the board's LED device."
   on_off_gate: "The LED lights while its on/off param (param_id) is true; with a hue or brightness param bound it also lights while that on/off param has never been written, so a product that only sets a colour and brightness sees it (brightness 0 is dark) — once anything writes the on/off param, that gates it."

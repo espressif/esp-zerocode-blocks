@@ -28,4 +28,5 @@ reacts:
   driver: "A change of {{cfg.power_param}}, {{cfg.brightness_param}}, {{cfg.hue_param}} or {{cfg.saturation_param}} repaints every LED of the strip with the resulting colour (dark while power is false); product code writes the params and never calls led_strip itself."
 
 facts:
+  own_strip: "A strip the person wires is this block on its own data pin with its LED count; a board\u2019s on-board RGB LED (drivers/board_led_strip) drives only the board\u2019s own LEDs, often a single one."
   on_off_gate: "The LED lights only while its on/off param (power_param) is true: hue, saturation and brightness change the colour it shows when on, and with the on/off param false or never written it stays dark."
