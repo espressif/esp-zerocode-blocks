@@ -1628,7 +1628,14 @@ ${collectSlot(rendered, 'rainmaker_node_init', 4)}
 `
 }
 
+/** frameworks/zigbee's own param: true while the device is on a Zigbee network
+ *  (joined, or rebooted onto the network it had joined), false while it looks
+ *  for one. Emitted only when the framework block declares it (owned_params). */
+const ZIGBEE_JOINED_PARAM = 'APP_DRIVER_PARAM_ZIGBEE_JOINED'
+
 function genAppZigbeeCpp(rendered: RenderedInstance[]): string {
+  const joined = rendered.some(r => isFramework(r, 'zigbee') && ZIGBEE_JOINED_PARAM in (r.block.owned_params ?? {}))
+  const pub = (v: boolean, pad: string) => joined ? `\n${pad}zc_zigbee_publish_joined(${v});` : ''
   // Mirror of genAppMatterCpp/genAppRainmakerCpp: each device-type instance's
   // zigbee_endpoint_create slot becomes its own static init function that adds
   // its endpoint to the shared device descriptor, called in sequence from the
@@ -1664,7 +1671,16 @@ ${collectSlot(rendered, 'zigbee_includes')}
 static const char *TAG = "app_zigbee";
 
 static app_driver_handle_t s_handle = 0;
-static volatile bool s_zb_started = false;
+static volatile bool s_zb_started = false;${joined ? `
+
+/* On a Zigbee network or not, on the param bus for product code (a status
+ * light): set from the stack's own join, reboot and leave signals. */
+static void zc_zigbee_publish_joined(bool on)
+{
+    app_driver_param_val_t v = {};
+    v.b = on;
+    app_driver_set_param(${ZIGBEE_JOINED_PARAM}, v, s_handle);
+}` : ''}
 
 ${collectSlot(rendered, 'zigbee_statics')}
 
@@ -1833,10 +1849,10 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
         case EZB_BDB_SIGNAL_DEVICE_REBOOT:
             if (err_status == EZB_BDB_STATUS_SUCCESS) {
                 if (ezb_bdb_is_factory_new()) {
-                    ESP_LOGI(TAG, "Start network steering — open pairing on your Zigbee hub");
+                    ESP_LOGI(TAG, "Start network steering — open pairing on your Zigbee hub");${pub(false, '                    ')}
                     (void)bdb_start_top_level_commissioning(EZB_BDB_MODE_NETWORK_STEERING);
                 } else {
-                    ESP_LOGI(TAG, "Device rebooted on network");
+                    ESP_LOGI(TAG, "Device rebooted on network");${pub(true, '                    ')}
                     zigbee_schedule_resync();
                 }
             } else {
@@ -1846,7 +1862,7 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
             break;
         case EZB_BDB_SIGNAL_STEERING:
             if (err_status == EZB_BDB_STATUS_SUCCESS) {
-                ESP_LOGI(TAG, "Joined network successfully");
+                ESP_LOGI(TAG, "Joined network successfully");${pub(true, '                ')}
                 zigbee_schedule_resync();
             } else {
                 ESP_LOGI(TAG, "Network steering not successful (status 0x%x), retrying in 1s",
@@ -1862,10 +1878,10 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
              * rejoin is the stack's own business: it rejoins by itself. */
             const ezb_zdo_signal_leave_params_t *leave = (const ezb_zdo_signal_leave_params_t *)signal_params;
             if (leave && leave->leave_type == EZB_ZDO_LEAVE_TYPE_RESET) {
-                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");
+                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");${pub(false, '                ')}
                 schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
             } else {
-                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");
+                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");${pub(false, '                ')}
             }
             break;
         }
