@@ -37,6 +37,11 @@
 extern "C" {
 #endif
 
+/** Polls app_driver_poll_every() can hold. */
+#ifndef APP_DRIVER_POLL_SLOTS
+#define APP_DRIVER_POLL_SLOTS 24
+#endif
+
 /** Distinct app_driver_run_serialized() requests that can wait at once. */
 #ifndef APP_DRIVER_SERIAL_SLOTS
 #define APP_DRIVER_SERIAL_SLOTS 16
@@ -249,6 +254,30 @@ typedef void (*app_driver_serial_fn_t)(void *arg);
  *         APP_DRIVER_SERIAL_SLOTS different requests are already waiting
  */
 esp_err_t app_driver_run_serialized(app_driver_serial_fn_t fn, void *arg);
+
+/** A device poll run by app_driver_poll_every(). */
+typedef void (*app_driver_poll_fn_t)(void *arg);
+
+/**
+ * Run fn(arg) now and then every period_ms on the bus's ONE poll task.
+ *
+ * For a block that reads a device: an I2C/SPI/1-Wire transfer, a conversion it
+ * has to wait for, a re-probe of a part that is missing. Those waits are fine
+ * here and nowhere near the shared esp_timer task, where a 10-30 ms wait or a
+ * 50 ms bus timeout stalled every other timer in the product. Polls run one at
+ * a time, in turn; a slow poll delays the next ones, never skips them. Not
+ * callable from an ISR. The task is created on the first call.
+ *
+ * @return ESP_OK, ESP_ERR_INVALID_ARG for a NULL fn or a 0 period,
+ *         ESP_ERR_NO_MEM when APP_DRIVER_POLL_SLOTS polls are registered
+ */
+esp_err_t app_driver_poll_every(app_driver_poll_fn_t fn, void *arg, uint32_t period_ms);
+
+/**
+ * One pass of the poll task: run every poll due at now_us, return when the
+ * next one is due (esp_timer_get_time() time base). Exposed for host tests.
+ */
+int64_t app_driver_poll_step(int64_t now_us);
 
 #ifdef __cplusplus
 }

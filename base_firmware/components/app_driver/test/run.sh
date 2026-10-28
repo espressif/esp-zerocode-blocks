@@ -10,7 +10,9 @@ CXX="${CXX:-c++}"
 dir="$(mktemp -d)"
 for t in test_*.cpp; do
   out="$dir/${t%.cpp}"
-  $CXX -std=c++17 -Wall -Wextra -O1 -pthread \
+  # A test may name extra flags on a line '// CXXFLAGS: ...'.
+  extra="$(sed -n 's|^// CXXFLAGS: ||p' "$t")"
+  $CXX -std=c++17 -Wall -Wextra -O1 -pthread $extra \
     -I shims -I . -I ../include \
     "$t" ../app_driver_cb.cpp \
     -o "$out"

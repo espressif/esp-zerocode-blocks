@@ -48,3 +48,7 @@ static inline uint32_t ulTaskNotifyTake(BaseType_t clear, TickType_t)
     t->count = clear ? 0 : n - 1;
     return n;
 }
+
+#ifndef pdMS_TO_TICKS
+#define pdMS_TO_TICKS(ms) ((TickType_t)(ms))
+#endif

@@ -431,3 +431,108 @@ esp_err_t app_driver_run_serialized(app_driver_serial_fn_t fn, void *arg)
     }
     return ESP_OK;
 }
+
+/* ── The poll task ──────────────────────────────────────────────────────
+ * One task for device polls (see app_driver_poll_every). Lower priority than
+ * the serial task: a reading may wait, a decision should not. */
+#ifndef APP_DRIVER_POLL_STACK
+#define APP_DRIVER_POLL_STACK 4096
+#endif
+#ifndef APP_DRIVER_POLL_PRIORITY
+#define APP_DRIVER_POLL_PRIORITY 2
+#endif
+
+typedef struct {
+    app_driver_poll_fn_t fn;
+    void *arg;
+    int64_t period_us;
+    int64_t due_us;
+} poll_slot_t;
+
+static poll_slot_t s_polls[APP_DRIVER_POLL_SLOTS];
+static int s_poll_count = 0;
+static bool s_poll_started = false;
+static TaskHandle_t s_poll_task = NULL;
+
+int64_t app_driver_poll_step(int64_t now_us)
+{
+    int64_t next = now_us + 1000000;   /* nothing due: look again in a second */
+    for (int i = 0;; i++) {
+        portENTER_CRITICAL(&s_lock);
+        if (i >= s_poll_count) { portEXIT_CRITICAL(&s_lock); break; }
+        poll_slot_t p = s_polls[i];
+        portEXIT_CRITICAL(&s_lock);
+        if (p.due_us <= now_us) {
+            p.fn(p.arg);
+            /* On schedule while it keeps up; a poll that fell behind (a slow
+             * transfer, a busy CPU) restarts from now rather than bursting. */
+            int64_t due = p.due_us + p.period_us;
+            int64_t after = esp_timer_get_time();
+            if (due <= after) due = after + p.period_us;
+            portENTER_CRITICAL(&s_lock);
+            s_polls[i].due_us = due;
+            portEXIT_CRITICAL(&s_lock);
+            p.due_us = due;
+        }
+        if (p.due_us < next) next = p.due_us;
+    }
+    return next;
+}
+
+static void poll_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        int64_t next = app_driver_poll_step(esp_timer_get_time());
+        int64_t wait_ms = (next - esp_timer_get_time() + 999) / 1000;
+        TickType_t ticks = pdMS_TO_TICKS(wait_ms > 0 ? wait_ms : 0);
+        /* A poll registered meanwhile is due now: the notify cuts the wait. */
+        ulTaskNotifyTake(pdTRUE, ticks > 0 ? ticks : 1);
+    }
+}
+
+esp_err_t app_driver_poll_every(app_driver_poll_fn_t fn, void *arg, uint32_t period_ms)
+{
+    if (fn == NULL || period_ms == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    portENTER_CRITICAL(&s_lock);
+    if (s_poll_count >= APP_DRIVER_POLL_SLOTS) {
+        portEXIT_CRITICAL(&s_lock);
+        ESP_LOGE(TAG, "poll_every: %d polls already registered", APP_DRIVER_POLL_SLOTS);
+        return ESP_ERR_NO_MEM;
+    }
+    poll_slot_t *p = &s_polls[s_poll_count];
+    p->fn = fn;
+    p->arg = arg;
+    p->period_us = (int64_t)period_ms * 1000;
+    p->due_us = 0;   /* now */
+    s_poll_count++;
+    bool start = !s_poll_started;
+    if (start) s_poll_started = true;
+    TaskHandle_t task = s_poll_task;
+    portEXIT_CRITICAL(&s_lock);
+
+#ifdef APP_DRIVER_POLL_NO_TASK   /* host tests drive app_driver_poll_step themselves */
+    (void)start; (void)task; (void)poll_task;
+    return ESP_OK;
+#endif
+    if (start) {
+        TaskHandle_t created = NULL;
+        if (xTaskCreate(poll_task, "app_poll", APP_DRIVER_POLL_STACK, NULL,
+                        APP_DRIVER_POLL_PRIORITY, &created) != pdPASS) {
+            portENTER_CRITICAL(&s_lock);
+            s_poll_started = false;
+            portEXIT_CRITICAL(&s_lock);
+            ESP_LOGE(TAG, "poll_every: could not create the poll task");
+            return ESP_ERR_NO_MEM;
+        }
+        portENTER_CRITICAL(&s_lock);
+        s_poll_task = created;
+        portEXIT_CRITICAL(&s_lock);
+        xTaskNotifyGive(created);
+    } else if (task) {
+        xTaskNotifyGive(task);
+    }
+    return ESP_OK;
+}
