@@ -30,27 +30,29 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `ble_hid_statics` | components/app_ble_hid (only with ble_hid) | 2× device_types |
 | `ble_mesh_driver_cb_cases` | components/app_ble_mesh (only with ble_mesh) | 4× device_types |
 | `ble_mesh_level_set_cases` | components/app_ble_mesh (only with ble_mesh) | 1× device_types |
+| `ble_mesh_level_status` | components/app_ble_mesh (only with ble_mesh) | 1× device_types |
 | `ble_mesh_node_init` | components/app_ble_mesh (only with ble_mesh) | 2× device_types · 1× behaviors |
 | `ble_mesh_onoff_set_cases` | components/app_ble_mesh (only with ble_mesh) | 2× device_types |
+| `ble_mesh_onoff_status` | components/app_ble_mesh (only with ble_mesh) | 1× device_types |
 | `ble_mesh_prov_cases` | components/app_ble_mesh (only with ble_mesh) | 2× behaviors |
 | `ble_mesh_statics` | components/app_ble_mesh (only with ble_mesh) | 1× behaviors |
 | `cmake_logic_requires` | see the generator (firmware/services/src/templates/generator.ts) | 1× drivers |
-| `config_defines` | components/app_config (generated header) | 63× drivers · 24× behaviors · 5× peripherals |
+| `config_defines` | components/app_config (generated header) | 65× drivers · 26× behaviors · 5× peripherals |
 | `display_driver_cb_cases` | components/app_display (only with display) | 47× device_types |
 | `display_includes` | components/app_display (only with display) | 5× drivers |
 | `display_node_init` | components/app_display (only with display) | 5× drivers |
 | `display_statics` | components/app_display (only with display) | 47× device_types |
 | `display_widget_create` | components/app_display (only with display) | 47× device_types |
 | `driver_apply_cases` | components/app_driver | 23× drivers |
-| `driver_boot_state` | components/app_driver | 3× drivers |
-| `driver_includes` | components/app_driver | 39× drivers · 7× peripherals |
-| `driver_init` | components/app_driver | 39× drivers · 7× peripherals |
-| `driver_statics` | components/app_driver | 29× drivers · 3× peripherals |
+| `driver_boot_state` | components/app_driver | 8× drivers |
+| `driver_includes` | components/app_driver | 41× drivers · 7× peripherals |
+| `driver_init` | components/app_driver | 41× drivers · 7× peripherals |
+| `driver_statics` | components/app_driver | 32× drivers · 3× peripherals |
 | `espnow_driver_cb_cases` | components/app_espnow (only with espnow) | 2× device_types |
 | `espnow_recv_cases` | components/app_espnow (only with espnow) | 3× device_types |
-| `logic_includes` | components/app_logic | 31× behaviors · 30× drivers |
-| `logic_init` | components/app_logic | 36× behaviors · 30× drivers |
-| `logic_statics` | components/app_logic | 31× behaviors · 30× drivers |
+| `logic_includes` | components/app_logic | 32× behaviors · 31× drivers |
+| `logic_init` | components/app_logic | 37× behaviors · 31× drivers |
+| `logic_statics` | components/app_logic | 32× behaviors · 31× drivers |
 | `main_includes` | main/app_main.cpp | 16× frameworks |
 | `main_init` | main/app_main.cpp | 16× frameworks |
 | `matter_attr_cb_cases` | components/app_matter (rendered only when frameworks includes matter) | 29× device_types |
@@ -65,23 +67,24 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `mqtt_command_cases` | components/app_mqtt (only with mqtt) | 29× device_types |
 | `mqtt_device_create` | components/app_mqtt (only with mqtt) | 47× device_types |
 | `mqtt_driver_cb_cases` | components/app_mqtt (only with mqtt) | 47× device_types |
+| `mqtt_driver_cb_watch` | components/app_mqtt (only with mqtt) | 5× device_types |
 | `mqtt_event_cases` | components/app_mqtt (only with mqtt) | 2× behaviors |
 | `mqtt_includes` | components/app_mqtt (only with mqtt) | 1× device_types |
 | `mqtt_node_init` | components/app_mqtt (only with mqtt) | 1× behaviors |
 | `mqtt_statics` | components/app_mqtt (only with mqtt) | 47× device_types · 1× behaviors |
-| `rainmaker_device_create` | components/app_rainmaker (only with rainmaker) | 50× device_types |
-| `rainmaker_driver_cb_cases` | components/app_rainmaker (only with rainmaker) | 48× device_types |
+| `rainmaker_device_create` | components/app_rainmaker (only with rainmaker) | 50× device_types · 1× behaviors |
+| `rainmaker_driver_cb_cases` | components/app_rainmaker (only with rainmaker) | 48× device_types · 1× behaviors |
 | `rainmaker_event_cases` | components/app_rainmaker (only with rainmaker) | 2× behaviors |
-| `rainmaker_includes` | components/app_rainmaker (only with rainmaker) | 1× behaviors |
+| `rainmaker_includes` | components/app_rainmaker (only with rainmaker) | 2× behaviors |
 | `rainmaker_node_init` | components/app_rainmaker (only with rainmaker) | 1× behaviors |
-| `rainmaker_statics` | components/app_rainmaker (only with rainmaker) | 50× device_types |
-| `rainmaker_write_cb_cases` | components/app_rainmaker (only with rainmaker) | 29× device_types |
+| `rainmaker_statics` | components/app_rainmaker (only with rainmaker) | 50× device_types · 1× behaviors |
+| `rainmaker_write_cb_cases` | components/app_rainmaker (only with rainmaker) | 29× device_types · 1× behaviors |
 | `sound_event_cases` | components/app_sound (only with sound) | 2× device_types |
 | `vision_event_cases` | components/app_vision (only with vision) | 1× device_types |
 | `vision_includes` | components/app_vision (only with vision) | 2× drivers |
 | `vision_node_init` | components/app_vision (only with vision) | 2× drivers |
 | `vision_statics` | components/app_vision (only with vision) | 2× drivers |
-| `webui_entities` | components/app_webui (only with webui) | 16× device_types |
+| `webui_entities` | components/app_webui (only with webui) | 16× device_types · 1× behaviors |
 | `zigbee_action_cases` | components/app_zigbee (only with zigbee) | 6× device_types · 1× behaviors |
 | `zigbee_attr_cb_cases` | components/app_zigbee (only with zigbee) | 23× device_types |
 | `zigbee_driver_cb_cases` | components/app_zigbee (only with zigbee) | 44× device_types |

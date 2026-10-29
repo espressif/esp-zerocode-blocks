@@ -4546,6 +4546,10 @@ static void mqtt_driver_cb(
     (void)ctx;
     (void)val;
     if (!s_connected || s_client == NULL) return;
+    /* Watches: a param several device types react to (a sensor's status
+     * shared by its temperature and humidity entities) is an \`if\`, not a
+     * \`case\` — two identical case labels would not compile. */
+${collectSlot(rendered, 'mqtt_driver_cb_watch', 4)}
     switch (param_id) {
 ${collectSlot(rendered, 'mqtt_driver_cb_cases', 4)}
     default:

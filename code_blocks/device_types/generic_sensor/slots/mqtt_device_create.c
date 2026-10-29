@@ -22,6 +22,8 @@
     if (app_driver_param_seen({{cfg.value_param}})) {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.value_param}}, &init);
-        {{prefix_lc}}_mqtt_publish_value(init.i16);
+        /* A sensor marked invalid seeds "None" (unknown), not a stale value. */
+        if (!{{prefix_lc}}_reading_valid()) zc_mqtt_publish(s_{{prefix_lc}}_state_topic, "None", 0, 1, true);
+        else {{prefix_lc}}_mqtt_publish_value(init.i16);
     }
 }

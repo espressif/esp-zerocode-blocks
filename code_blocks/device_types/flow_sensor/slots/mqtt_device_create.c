@@ -23,7 +23,10 @@
         /* A retained seed is a reading the broker keeps: only publish one once
          * the sensor has produced it — the zero the bus holds before that is not a
          * measurement. The normal publish path takes over on the first real value. */
-        if (app_driver_param_seen({{cfg.value_param}})) {
+        /* A sensor marked invalid seeds "None" (unknown), not a stale value. */
+        if (!{{prefix_lc}}_reading_valid()) {
+            zc_mqtt_publish(s_{{prefix_lc}}_flow_topic, "None", 0, 1, true);
+        } else if (app_driver_param_seen({{cfg.value_param}})) {
             zc_mqtt_publish(s_{{prefix_lc}}_flow_topic, buf, 0, 1, true);
         }
     }

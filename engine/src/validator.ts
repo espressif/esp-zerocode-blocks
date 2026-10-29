@@ -204,6 +204,7 @@ interface ParamRef {
   type: ValueType
   emittedBy: string[]
   consumedBy: string[]
+  sharedBy?: string[]
 }
 
 /* ── esp-board-manager board packs ────────────────────────────────────────
@@ -843,7 +844,7 @@ export function validateProduct(
       }
       let entry = paramMap.get(paramId)
       if (!entry) {
-        entry = { name: paramId, type: refType, emittedBy: [], consumedBy: [] }
+        entry = { name: paramId, type: refType, emittedBy: [], consumedBy: [], sharedBy: [] }
         paramMap.set(paramId, entry)
       } else if (entry.type !== refType) {
         errors.push({
@@ -853,7 +854,14 @@ export function validateProduct(
         })
       }
       if (block.kind === 'driver') entry.emittedBy.push(`${inst.block}/${inst.prefix}`)
-      else if (block.kind === 'device_type') entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
+      else if (block.kind === 'device_type') {
+        entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
+        // A `shared` driver param is listened to with an `if` (a *_watch slot),
+        // never a `case`, so any number of device types may consume it.
+        if ((block.params?.[refKey] as { shared?: boolean } | undefined)?.shared === true) {
+          (entry.sharedBy ??= []).push(`${inst.block}/${inst.prefix}`)
+        }
+      }
       else {
         entry.emittedBy.push(`${inst.block}/${inst.prefix}`)
         entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
@@ -881,7 +889,7 @@ export function validateProduct(
     // hard compile error the product author only sees at build time. ERROR
     // here so it's caught at validation. (Multiple non-device-type consumers
     // — behaviors, persistence — are fine; they render in separate files.)
-    const deviceConsumers = ref.consumedBy.filter((c) => c.startsWith('device_types/'))
+    const deviceConsumers = ref.consumedBy.filter((c) => c.startsWith('device_types/') && !(ref.sharedBy ?? []).includes(c))
     if (deviceConsumers.length > 1) {
       errors.push({
         level: 'error',

@@ -21,8 +21,19 @@ driver_params:
     type: u8
     required: true
     description: Driver param ID this endpoint mirrors (uint8, soil moisture in whole percent 0-100 — what drivers/soil_moisture_adc publishes)
+  status_param:
+    type: bool
+    required: false
+    shared: true
+    default: ""
+    description: >-
+      (Optional) the reading is valid (true) or not (false) — the driver's
+      status_param (aht21, bh1750, dht22, ds18b20, hcsr04 publish one). When
+      false, Home Assistant shows the sensor as unknown instead of the last
+      value. Empty disables.
 
 facts:
+  unavailable: "With status_param wired to the driver's status, a sensor that stops answering shows as unknown in Home Assistant instead of its last reading, and its value comes back by itself when the sensor does; product code never publishes a placeholder value."
   matter: "On Matter it is a Soil Sensor endpoint whose SoilMeasurement moisture value (0-100 %) follows the probe; the soil sensor is a recent Matter device type, so some controller apps may not show it yet."
   home_assistant: "Over MQTT, Home Assistant discovers it as a Moisture sensor entity in % under the device; the value is retained by the broker once the probe has produced a first reading."
   web_page: "On the web page it is a reading row showing the moisture in whole percent."
