@@ -39,7 +39,7 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `display_driver_cb_cases` | components/app_display (only with display) | 44× device_types |
 | `display_includes` | components/app_display (only with display) | 5× drivers |
 | `display_node_init` | components/app_display (only with display) | 5× drivers |
-| `display_statics` | components/app_display (only with display) | 44× device_types |
+| `display_statics` | components/app_display (only with display) | 44× device_types · 1× drivers |
 | `display_widget_create` | components/app_display (only with display) | 44× device_types |
 | `driver_apply_cases` | components/app_driver | 22× drivers |
 | `driver_includes` | components/app_driver | 35× drivers · 7× peripherals |

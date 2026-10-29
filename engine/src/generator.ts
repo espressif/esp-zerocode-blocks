@@ -4584,6 +4584,8 @@ const BOARD_DEVICES = 'board_devices.yaml'
 export interface BoardDevice {
   name: string
   type: string
+  /** the part on it (`co5300`, `cst9217`, …), as the board declares it */
+  chip?: string
   /** the device's `config:` mapping, as the board declares it */
   config?: Record<string, unknown>
 }
@@ -4668,7 +4670,12 @@ export async function loadBoardFacts(paths: GeneratorPaths, board: string): Prom
       // matched: it is the field bmgr itself dispatches on.
       if (typeof e?.name === 'string' && typeof e?.type === 'string') {
         const config = e.config && typeof e.config === 'object' ? e.config as Record<string, unknown> : undefined
-        devices.push({ name: e.name, type: e.type, ...(config ? { config } : {}) })
+        devices.push({
+          name: e.name,
+          type: e.type,
+          ...(typeof e.chip === 'string' ? { chip: e.chip } : {}),
+          ...(config ? { config } : {}),
+        })
       }
     }
   } catch { /* a board may declare no devices at all */ }
@@ -4796,10 +4803,29 @@ function mib(bytes: number): string {
  *  what the user sees, loudly, rather than a tree that silently has no screen.
  */
 
+/** Panel controllers that only accept a draw window starting on an even
+ *  column/row and ending on an odd one. Handed an odd edge, they snap the
+ *  window to the 2-pixel grid while the host still streams LVGL's unsnapped
+ *  width, so each row lands one pixel further over than the last: text comes
+ *  out slanted, on whichever refresh happens to dirty an odd-edged area. An
+ *  LVGL rounder keeps every flush on the grid. co5300: the ESP-Mosaico panel,
+ *  slant reproduced and cured by the rounder on hardware (2026-10). sh8601:
+ *  the waveshare/esp_lcd_sh8601 README asks for the same rounder. */
+const EVEN_AREA_PANELS = new Set(['co5300', 'sh8601'])
+
+const BOARD_LCD_ROUNDER = `static void board_lcd_round_to_even(lv_area_t *area)
+{
+    area->x1 &= ~1;
+    area->x2 |= 1;
+    area->y1 &= ~1;
+    area->y2 |= 1;
+}`
+
 /** The LVGL binding for a board-provided panel, as `display_node_init` code.
  *  `s_disp`, `TAG` and the LVGL port are all in scope — this renders inside
- *  app_display.cpp's display_setup_task, after `lvgl_port_init()`. */
-function boardDisplayNodeInit(board: string, lcd: BoardDevice, touch: BoardDevice | null): string {
+ *  app_display.cpp's display_setup_task, after `lvgl_port_init()`.
+ *  `evenAreas` wires BOARD_LCD_ROUNDER, which the caller emits as a static. */
+function boardDisplayNodeInit(board: string, lcd: BoardDevice, touch: BoardDevice | null, evenAreas: boolean): string {
   const panel = `{
     /* The '${board}' board defines this panel ('${lcd.name}'), so
      * esp_board_manager_init() has already brought it up — bus, panel IO,
@@ -4834,7 +4860,8 @@ function boardDisplayNodeInit(board: string, lcd: BoardDevice, touch: BoardDevic
                 ? LV_COLOR_FORMAT_RGB888
                 : LV_COLOR_FORMAT_RGB565;
         board_disp_cfg.flags.buff_dma = board_lcd_serial ? 1 : 0;
-        board_disp_cfg.flags.swap_bytes = board_lcd_serial ? 1 : 0;
+        board_disp_cfg.flags.swap_bytes = board_lcd_serial ? 1 : 0;${evenAreas ? `
+        board_disp_cfg.rounder_cb = board_lcd_round_to_even;` : ''}
         s_disp = lvgl_port_add_disp(&board_disp_cfg);
         ESP_LOGI(TAG, "Panel '${lcd.name}' from board '${board}': %s %dx%d",
                  board_lcd_cfg->chip, board_lcd_cfg->lcd_width, board_lcd_cfg->lcd_height);
@@ -4882,7 +4909,9 @@ function boardRendered(board: string, facts: BoardFacts | null): RenderedInstanc
       '#include "dev_display_lcd.h"',
       ...(touch ? ['#include "dev_lcd_touch.h"'] : []),
     ].join('\n')
-    slots.display_node_init = boardDisplayNodeInit(board, lcd, touch)
+    const evenAreas = EVEN_AREA_PANELS.has(lcd.chip ?? '')
+    if (evenAreas) slots.display_statics = BOARD_LCD_ROUNDER
+    slots.display_node_init = boardDisplayNodeInit(board, lcd, touch, evenAreas)
     cmake.app_display = ['espressif__esp_board_manager']
   }
   return {
