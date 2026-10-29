@@ -4518,6 +4518,100 @@ static void zc_entities_dispatch(const char *topic, int tlen, const char *data, 
     free(payload);
 }
 
+/* ── Product topics ───────────────────────────────────────────────────
+ * The product's own topics on THIS connection: a second client beside this
+ * one (same broker, the same default client id from the MAC) made the broker
+ * drop each in turn to accept the other, and the connection flapped forever. */
+#ifndef APP_MQTT_MAX_TOPIC_SUBS
+#define APP_MQTT_MAX_TOPIC_SUBS 8
+#endif
+typedef struct {
+    char *filter;
+    int qos;
+    app_mqtt_topic_cb_t cb;
+    void *ctx;
+} zc_topic_sub_t;
+static zc_topic_sub_t s_topic_subs[APP_MQTT_MAX_TOPIC_SUBS];
+
+/* MQTT filter match: '+' is one level, a trailing '#' the rest. */
+static bool zc_topic_matches(const char *filter, const char *topic, int tlen)
+{
+    int t = 0;
+    for (const char *f = filter; *f; ) {
+        if (*f == '#') return true;
+        if (*f == '+') {
+            while (t < tlen && topic[t] != '/') t++;
+            f++;
+            continue;
+        }
+        if (t >= tlen || topic[t] != *f) return false;
+        t++; f++;
+    }
+    return t == tlen;
+}
+
+esp_err_t app_mqtt_publish(const char *topic, const char *payload, int len, int qos, bool retain)
+{
+    if (topic == NULL || topic[0] == 0 || payload == NULL) return ESP_ERR_INVALID_ARG;
+    if (!s_connected) return ESP_ERR_INVALID_STATE;
+    return zc_mqtt_publish(topic, payload, len, qos, retain) < 0 ? ESP_FAIL : ESP_OK;
+}
+
+esp_err_t app_mqtt_subscribe(const char *filter, int qos, app_mqtt_topic_cb_t cb, void *ctx)
+{
+    if (filter == NULL || filter[0] == 0 || cb == NULL) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+    int slot = -1;
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        if (s_topic_subs[i].filter && strcmp(s_topic_subs[i].filter, filter) == 0) { slot = i; break; }
+        if (slot < 0 && s_topic_subs[i].filter == NULL) slot = i;
+    }
+    if (slot < 0) { xSemaphoreGive(zc_ent_lock()); return ESP_ERR_NO_MEM; }
+    if (s_topic_subs[slot].filter == NULL) {
+        s_topic_subs[slot].filter = strdup(filter);
+        if (s_topic_subs[slot].filter == NULL) { xSemaphoreGive(zc_ent_lock()); return ESP_ERR_NO_MEM; }
+    }
+    s_topic_subs[slot].qos = qos;
+    s_topic_subs[slot].cb = cb;
+    s_topic_subs[slot].ctx = ctx;
+    bool now = s_connected;
+    xSemaphoreGive(zc_ent_lock());
+    /* Connected: subscribe now. Otherwise the next connect does it. */
+    if (now) zc_mqtt_subscribe(filter, qos);
+    return ESP_OK;
+}
+
+/* Every (re)connect: the broker forgot the subscriptions of a clean session. */
+static void zc_topics_on_connected(void)
+{
+    xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        if (s_topic_subs[i].filter) zc_mqtt_subscribe(s_topic_subs[i].filter, s_topic_subs[i].qos);
+    }
+    xSemaphoreGive(zc_ent_lock());
+}
+
+static void zc_topics_dispatch(const char *topic, int tlen, const char *data, int dlen)
+{
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+        const char *filter = s_topic_subs[i].filter;
+        bool hit = filter && zc_topic_matches(filter, topic, tlen);
+        app_mqtt_topic_cb_t cb = hit ? s_topic_subs[i].cb : NULL;
+        void *ctx = s_topic_subs[i].ctx;
+        xSemaphoreGive(zc_ent_lock());
+        if (cb == NULL) continue;
+        char *t = (char *)malloc((size_t)tlen + 1);
+        char *d = (char *)malloc((size_t)dlen + 1);
+        if (t && d) {
+            memcpy(t, topic, tlen); t[tlen] = 0;
+            memcpy(d, data, dlen); d[dlen] = 0;
+            cb(t, d, dlen, ctx);
+        }
+        free(t); free(d);
+    }
+}
+
 /* Weak: a product defines its own to publish more on every (re)connect. */
 __attribute__((weak)) void app_mqtt_on_connected(void)
 {
@@ -4566,6 +4660,7 @@ static void mqtt_handle_data(const char *topic, int tlen, const char *data, int 
     (void)topic; (void)tlen; (void)data; (void)dlen;
 ${collectSlot(rendered, 'mqtt_command_cases', 4)}
     zc_entities_dispatch(topic, tlen, data, dlen);
+    zc_topics_dispatch(topic, tlen, data, dlen);
 }
 
 static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -4580,6 +4675,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t event_i
             zc_mqtt_publish(s_status_topic, "online", 0, 1, true);
 ${devCalls.join('\n')}
             zc_entities_on_connected();
+            zc_topics_on_connected();
             app_mqtt_on_connected();
             mqtt_on_event(1);
             break;

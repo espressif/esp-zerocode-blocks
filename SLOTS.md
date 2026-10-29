@@ -37,10 +37,10 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `ble_mesh_prov_cases` | components/app_ble_mesh (only with ble_mesh) | 2× behaviors |
 | `ble_mesh_statics` | components/app_ble_mesh (only with ble_mesh) | 1× behaviors |
 | `cmake_logic_requires` | see the generator (firmware/services/src/templates/generator.ts) | 1× drivers |
-| `config_defines` | components/app_config (generated header) | 65× drivers · 26× behaviors · 5× peripherals |
+| `config_defines` | components/app_config (generated header) | 66× drivers · 26× behaviors · 5× peripherals |
 | `display_driver_cb_cases` | components/app_display (only with display) | 47× device_types |
-| `display_includes` | components/app_display (only with display) | 5× drivers |
-| `display_node_init` | components/app_display (only with display) | 5× drivers |
+| `display_includes` | components/app_display (only with display) | 6× drivers |
+| `display_node_init` | components/app_display (only with display) | 6× drivers |
 | `display_statics` | components/app_display (only with display) | 47× device_types |
 | `display_widget_create` | components/app_display (only with display) | 47× device_types |
 | `driver_apply_cases` | components/app_driver | 23× drivers |
