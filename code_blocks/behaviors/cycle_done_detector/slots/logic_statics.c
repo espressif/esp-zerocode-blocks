@@ -16,11 +16,30 @@ static int64_t s_{{prefix_lc}}_cyc_start_s = 0;    /* first active second of the
 static int64_t s_{{prefix_lc}}_cyc_busy_s = 0;     /* last active second of the run */
 static int64_t s_{{prefix_lc}}_cyc_last_active_s = 0; /* last active second seen at all */
 
+/* The tick only records the state; the bus's poll task writes it
+ * (app_driver_poll_every). A flash commit (tens of ms when NVS erases a page)
+ * on the shared esp_timer task delays every other timer in the product. */
+static portMUX_TYPE s_{{prefix_lc}}_cyc_mux = portMUX_INITIALIZER_UNLOCKED;
+static int8_t s_{{prefix_lc}}_cyc_pending = -1;   /* -1 nothing to write, else 0/1 */
+
 static void {{prefix_lc}}_cyc_save(bool running)
 {
+    portENTER_CRITICAL(&s_{{prefix_lc}}_cyc_mux);
+    s_{{prefix_lc}}_cyc_pending = running ? 1 : 0;
+    portEXIT_CRITICAL(&s_{{prefix_lc}}_cyc_mux);
+}
+
+static void {{prefix_lc}}_cyc_write(void *arg)
+{
+    (void)arg;
+    portENTER_CRITICAL(&s_{{prefix_lc}}_cyc_mux);
+    int8_t pending = s_{{prefix_lc}}_cyc_pending;
+    s_{{prefix_lc}}_cyc_pending = -1;
+    portEXIT_CRITICAL(&s_{{prefix_lc}}_cyc_mux);
+    if (pending < 0) return;
     nvs_handle_t h;
     if (nvs_open({{prefix}}_CYC_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_u8(h, {{prefix}}_CYC_NVS_KEY, running ? 1 : 0);
+    nvs_set_u8(h, {{prefix}}_CYC_NVS_KEY, (uint8_t)pending);
     nvs_commit(h);
     nvs_close(h);
 }
