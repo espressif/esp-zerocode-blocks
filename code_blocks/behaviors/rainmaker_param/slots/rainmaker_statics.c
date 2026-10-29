@@ -11,6 +11,16 @@ static esp_rmaker_param_val_t {{prefix_lc}}_rmp_val(app_driver_param_val_t v)
     return esp_rmaker_str({{prefix_lc}}_hhmm);
 #elif defined({{prefix}}_RMP_VT_bool)
     return esp_rmaker_bool(v.b);
+#elif defined({{prefix}}_RMP_SCALED)
+#if defined({{prefix}}_RMP_VT_u8)
+    return esp_rmaker_float((float)v.u8 / {{prefix}}_RMP_SCALE);
+#elif defined({{prefix}}_RMP_VT_i16)
+    return esp_rmaker_float((float)v.i16 / {{prefix}}_RMP_SCALE);
+#elif defined({{prefix}}_RMP_VT_u16)
+    return esp_rmaker_float((float)v.u16 / {{prefix}}_RMP_SCALE);
+#else
+    return esp_rmaker_float((float)v.u32 / {{prefix}}_RMP_SCALE);
+#endif
 #elif defined({{prefix}}_RMP_VT_u8)
     return esp_rmaker_int(v.u8);
 #elif defined({{prefix}}_RMP_VT_i16)

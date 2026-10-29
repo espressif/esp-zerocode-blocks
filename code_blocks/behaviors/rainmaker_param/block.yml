@@ -56,9 +56,20 @@ params:
     type: int
     default: 1
     description: A slider's step
+  scale:
+    type: int
+    default: 1
+    description: >-
+      The param holds the value times this (a temperature in hundredths of a
+      degree: 100). Above 1 the app shows and writes the real value as a
+      decimal (a 45.00-80.00 slider, not 4500-8000); min, max and step stay in
+      the param's own units. Numbers only (slider, number, value).
 
 param_refs:
   param: "{{cfg.value_kind}}"
 
 reacts:
   rainmaker_write_cb: "A write from the RainMaker app to the '{{cfg.label}}' tile lands on {{cfg.param}} as state; product code reads the param and never creates its own RainMaker param for it."
+
+facts:
+  scaled: "A param kept in hundredths (temperatures, °C x 100) needs scale: 100 on its rainmaker_param, or the app shows and writes 6000 for 60 °C."

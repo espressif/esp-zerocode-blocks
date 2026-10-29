@@ -19,9 +19,17 @@
         {{prefix_lc}}_rmp_val({{prefix_lc}}_init), {{prefix_lc}}_props);
 #if defined({{prefix}}_RMP_KIND_toggle)
     esp_rmaker_param_add_ui_type(s_{{prefix_lc}}_rmp_param, ESP_RMAKER_UI_TOGGLE);
+#elif defined({{prefix}}_RMP_KIND_slider) && defined({{prefix}}_RMP_SCALED)
+    esp_rmaker_param_add_ui_type(s_{{prefix_lc}}_rmp_param, ESP_RMAKER_UI_SLIDER);
+    esp_rmaker_param_add_bounds(s_{{prefix_lc}}_rmp_param, esp_rmaker_float((float){{cfg.min}} / {{prefix}}_RMP_SCALE),
+        esp_rmaker_float((float){{cfg.max}} / {{prefix}}_RMP_SCALE), esp_rmaker_float((float){{cfg.step}} / {{prefix}}_RMP_SCALE));
 #elif defined({{prefix}}_RMP_KIND_slider)
     esp_rmaker_param_add_ui_type(s_{{prefix_lc}}_rmp_param, ESP_RMAKER_UI_SLIDER);
     esp_rmaker_param_add_bounds(s_{{prefix_lc}}_rmp_param, esp_rmaker_int({{cfg.min}}), esp_rmaker_int({{cfg.max}}), esp_rmaker_int({{cfg.step}}));
+#elif defined({{prefix}}_RMP_KIND_number) && defined({{prefix}}_RMP_SCALED)
+    esp_rmaker_param_add_ui_type(s_{{prefix_lc}}_rmp_param, ESP_RMAKER_UI_TEXT);
+    esp_rmaker_param_add_bounds(s_{{prefix_lc}}_rmp_param, esp_rmaker_float((float){{cfg.min}} / {{prefix}}_RMP_SCALE),
+        esp_rmaker_float((float){{cfg.max}} / {{prefix}}_RMP_SCALE), esp_rmaker_float(1.0f / {{prefix}}_RMP_SCALE));
 #elif defined({{prefix}}_RMP_KIND_number)
     esp_rmaker_param_add_ui_type(s_{{prefix_lc}}_rmp_param, ESP_RMAKER_UI_TEXT);
     esp_rmaker_param_add_bounds(s_{{prefix_lc}}_rmp_param, esp_rmaker_int({{cfg.min}}), esp_rmaker_int({{cfg.max}}), esp_rmaker_int(1));
