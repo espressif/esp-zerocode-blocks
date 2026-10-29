@@ -11,13 +11,13 @@ static bool s_tg_have_chat = false;
 static int64_t s_tg_offset = 0;            /* next update id to read */
 static bool s_tg_backlog_skipped = false;  /* once per boot, before the first poll */
 static QueueHandle_t s_tg_in = NULL;       /* char *: key (TG_KEY_BYTES) then text */
-static SemaphoreHandle_t s_tg_lock = NULL; /* token + chat */
+static SemaphoreHandle_t s_tg_lock = NULL; /* token + chat + s_tg_last */
 static TaskHandle_t s_tg_task = NULL;
 static volatile bool s_tg_net = false;
 static volatile bool s_tg_learn_req = false;
 static telegram_notify_reply_cb_t s_tg_reply_cb = NULL;
 static void *s_tg_reply_ctx = NULL;
-static char s_tg_last[80] = "nothing sent yet";
+static char s_tg_last[80] = "nothing sent yet"; /* under s_tg_lock: the Telegram task and the console both write it */
 
 typedef struct {
     int status;
@@ -437,6 +437,23 @@ static esp_err_t tg_http(const char *method, const char *query, const char *body
     return err;
 }
 
+/* The last outcome, for tg-status. Written by the Telegram task and the
+ * console (tg-learn), read by the console. */
+static void tg_set_last(const char *text)
+{
+    xSemaphoreTake(s_tg_lock, portMAX_DELAY);
+    strlcpy(s_tg_last, text, sizeof(s_tg_last));
+    xSemaphoreGive(s_tg_lock);
+    ESP_LOGW(TAG, "telegram: %s", text);
+}
+
+static void tg_get_last(char *out, size_t cap)
+{
+    xSemaphoreTake(s_tg_lock, portMAX_DELAY);
+    strlcpy(out, s_tg_last, cap);
+    xSemaphoreGive(s_tg_lock);
+}
+
 /* Telegram's {"ok":false,"description":...} into s_tg_last. */
 static void tg_note_error(const char *what, const tg_resp_t *r, const char *buf, int *retry_after)
 {
@@ -450,9 +467,9 @@ static void tg_note_error(const char *what, const tg_resp_t *r, const char *buf,
         }
         json_parse_end(&j);
     }
-    snprintf(s_tg_last, sizeof(s_tg_last), "%s: HTTP %d %s", what, r->status, desc);
-    if (r->status == 401) strlcpy(s_tg_last, "the bot token was rejected - set it again with tg-token", sizeof(s_tg_last));
-    ESP_LOGW(TAG, "telegram: %s", s_tg_last);
+    char last[sizeof(s_tg_last)];
+    snprintf(last, sizeof(last), "%s: HTTP %d %s", what, r->status, desc);
+    tg_set_last(r->status == 401 ? "the bot token was rejected - set it again with tg-token" : last);
 }
 
 /* 0 sent, > 0 retry after that many seconds, -1 failed. */
@@ -476,11 +493,14 @@ static int tg_send_one(const char *text)
     esp_err_t err = tg_http("sendMessage", NULL, body, resp, 1024, &r, 20);
     int rc = -1;
     if (err != ESP_OK) {
-        snprintf(s_tg_last, sizeof(s_tg_last), "could not reach Telegram (%s)", esp_err_to_name(err));
-        ESP_LOGW(TAG, "telegram: %s", s_tg_last);
+        char last[sizeof(s_tg_last)];
+        snprintf(last, sizeof(last), "could not reach Telegram (%s)", esp_err_to_name(err));
+        tg_set_last(last);
     } else if (r.status == 200) {
         rc = 0;
+        xSemaphoreTake(s_tg_lock, portMAX_DELAY);
         strlcpy(s_tg_last, "last message delivered", sizeof(s_tg_last));
+        xSemaphoreGive(s_tg_lock);
     } else {
         int retry_after = 0;
         tg_note_error("send failed", &r, resp, &retry_after);
@@ -567,7 +587,9 @@ static void tg_learn(void)
         printf("tg-learn: could not reach Telegram (%s) - check the network and try again\n", esp_err_to_name(err));
     } else if (r.status != 200) {
         tg_note_error("tg-learn", &r, buf, NULL);
-        printf("tg-learn: %s\n", s_tg_last);
+        char last[sizeof(s_tg_last)];
+        tg_get_last(last, sizeof(last));
+        printf("tg-learn: %s\n", last);
     } else if (r.truncated) {
         printf("tg-learn: the newest message is too long to read here - send the bot a short message (hi) and run tg-learn again\n");
     } else if (!tg_parse_update(buf, r.len, &u)) {
@@ -628,7 +650,7 @@ static bool tg_poll(void)
     tg_resp_t r;
     esp_err_t err = tg_http("getUpdates", q, NULL, buf, TG_RESP_MAX, &r, {{prefix}}_TG_POLL_S + 15);
     if (err != ESP_OK || r.status != 200) {
-        if (r.status == 409) strlcpy(s_tg_last, "a webhook is set for this bot - delete it to read replies", sizeof(s_tg_last));
+        if (r.status == 409) tg_set_last("a webhook is set for this bot - delete it to read replies");
         else if (r.status != 0) tg_note_error("reading replies", &r, buf, NULL);
         free(buf);
         return false;
@@ -893,6 +915,8 @@ static int tg_status_cmd(int argc, char **argv)
     printf("network  : %s\n", tg_net_up() ? "up" : "down");
     printf("waiting  : %u message(s)\n", (unsigned)telegram_notify_pending());
     printf("replies  : %s\n", s_tg_reply_cb ? "listening" : "not listening");
-    printf("last     : %s\n", s_tg_last);
+    char last[sizeof(s_tg_last)];
+    tg_get_last(last, sizeof(last));
+    printf("last     : %s\n", last);
     return 0;
 }
