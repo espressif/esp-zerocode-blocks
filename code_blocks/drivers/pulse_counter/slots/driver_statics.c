@@ -41,6 +41,15 @@ static void {{prefix_lc}}_pc_publish_cb(void *arg)
         t0 = s_{{prefix_lc}}_pc_t[i];
         n0 = s_{{prefix_lc}}_pc_n[i];
     }
+    /* No earlier sample inside the window (a window no longer than the publish
+     * period, or a timer that fired a hair late): measure from the previous
+     * sample instead. Without it the rate read 0 every other publish on a
+     * steady flow. A stopped input still reads 0 — no pulses since then. */
+    if (t0 == now && s_{{prefix_lc}}_pc_fill >= 2) {
+        int i = (s_{{prefix_lc}}_pc_head - 2 + {{prefix}}_PC_SLOTS) % {{prefix}}_PC_SLOTS;
+        t0 = s_{{prefix_lc}}_pc_t[i];
+        n0 = s_{{prefix_lc}}_pc_n[i];
+    }
     uint32_t rate = 0;
     if (now > t0) {
         uint64_t per_min = (uint64_t)(total - n0) * 60000000ULL / (uint64_t)(now - t0);
