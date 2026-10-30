@@ -23,4 +23,5 @@ params:
 facts:
   sends: "It is a gamepad with 16 buttons and two analog sticks (X/Y left, Z/Rz right, -127 to 127, 0 centred); product code sends the whole state with zc_ble_hid_send_gamepad(buttons, x, y, z, rz) whenever a button or stick changed, and the framework drops it while no host is connected."
   name: "It appears in Bluetooth settings under its device_name (default \"ZeroCode Gamepad\")."
+  axes: "HID axes grow right and DOWN: a stick pushed up sends a negative y (and rz), pushed right a positive x (and z); 0 is centred."
   no_rumble: "It only sends: a host's rumble or LED commands do not reach the product."
