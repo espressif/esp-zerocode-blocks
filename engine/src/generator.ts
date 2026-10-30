@@ -1421,7 +1421,11 @@ static esp_err_t app_attribute_update_cb(
 {
     if (type == attribute::PRE_UPDATE) {
         if (s_from_driver) return ESP_OK;
+        app_driver_take_refusal(NULL);
 ${collectSlot(rendered, 'matter_attr_cb_cases', 8)}
+        /* The param's guard refused it: reject the write, so the attribute
+         * keeps the device's real value and the controller is told it failed. */
+        if (app_driver_take_refusal(NULL)) return ESP_ERR_NOT_ALLOWED;
     }
     return ESP_OK;
 }
@@ -1538,9 +1542,11 @@ static app_driver_handle_t s_handle = 0;
 
 ${collectSlot(rendered, 'rainmaker_statics')}
 
+static void rainmaker_driver_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *);
+
 /* Cloud/app write → hardware. Each device-type binding claims its own
  * (device, param) pair and returns; unclaimed writes fall through to OK. */
-static esp_err_t rainmaker_write_cb(
+static esp_err_t rainmaker_write_cases(
     const esp_rmaker_device_t *device,
     const esp_rmaker_param_t *param,
     const esp_rmaker_param_val_t val,
@@ -1554,6 +1560,26 @@ static esp_err_t rainmaker_write_cb(
     }
 ${collectSlot(rendered, 'rainmaker_write_cb_cases', 4)}
     return ESP_OK;
+}
+
+static esp_err_t rainmaker_write_cb(
+    const esp_rmaker_device_t *device,
+    const esp_rmaker_param_t *param,
+    const esp_rmaker_param_val_t val,
+    void *priv_data,
+    esp_rmaker_write_ctx_t *ctx)
+{
+    app_driver_take_refusal(NULL);
+    esp_err_t err = rainmaker_write_cases(device, param, val, priv_data, ctx);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        rainmaker_driver_cb(zc_refused, zc_now, APP_DRIVER_SOURCE_LOCAL, NULL);
+    }
+    return err;
 }
 
 /* Hardware/param bus → cloud. The registry doesn't notify the source
@@ -1741,8 +1767,17 @@ static void schedule_bdb_commissioning_retry(uint8_t mode_mask)
     }
 }
 
+static void zigbee_driver_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *);
+/* The source zigbee_resync_cb hands zigbee_driver_cb. Never a registered
+ * solution handle (those are 1..APP_DRIVER_MAX_SOLUTIONS) nor LOCAL (0). A
+ * resync is "tell the hub the state it missed", which is right for a server
+ * endpoint (an attribute) and wrong for a client one: a remote's case turns the
+ * param into a COMMAND to every bound device, so replaying it after a reboot
+ * would switch the lights off. Controller cases skip this source. */
+#define ZB_SOURCE_RESYNC ((app_driver_handle_t)0xFF)
+
 /* Hub/controller writes → hardware. Runs ON the Zigbee task (no lock needed). */
-static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
+static void zb_attribute_handler_cases(ezb_zcl_set_attr_value_message_t *message)
 {
     if (!message) return;
     if (message->info.status != EZB_ZCL_STATUS_SUCCESS) {
@@ -1754,6 +1789,20 @@ static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
     uint16_t attr_id = message->in.attribute.id;
     (void)endpoint; (void)cluster_id; (void)attr_id;
 ${collectSlot(rendered, 'zigbee_attr_cb_cases', 4)}
+}
+
+static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
+{
+    app_driver_take_refusal(NULL);
+    zb_attribute_handler_cases(message);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        zigbee_driver_cb(zc_refused, zc_now, ZB_SOURCE_RESYNC, NULL);
+    }
 }
 
 static void zb_action_handler(ezb_zcl_core_action_callback_id_t callback_id, void *message)
@@ -1769,13 +1818,6 @@ ${collectSlot(rendered, 'zigbee_action_cases', 4)}
     ESP_LOGI(TAG, "Zigbee action 0x%x", callback_id);
 }
 
-/* The source zigbee_resync_cb hands zigbee_driver_cb. Never a registered
- * solution handle (those are 1..APP_DRIVER_MAX_SOLUTIONS) nor LOCAL (0). A
- * resync is "tell the hub the state it missed", which is right for a server
- * endpoint (an attribute) and wrong for a client one: a remote's case turns the
- * param into a COMMAND to every bound device, so replaying it after a reboot
- * would switch the lights off. Controller cases skip this source. */
-#define ZB_SOURCE_RESYNC ((app_driver_handle_t)0xFF)
 
 /* Hardware/param bus → ZCL attributes. Runs OFF the Zigbee task, so every
  * Zigbee call MUST be wrapped in esp_zigbee_lock_acquire/release (compiles fine
@@ -4701,12 +4743,26 @@ ${devFns.join('\n\n')}
 
 /* Command topics -> hardware. Runs on the MQTT task; payloads are not
  * NUL-terminated, so every case gets (topic, tlen, data, dlen). */
-static void mqtt_handle_data(const char *topic, int tlen, const char *data, int dlen)
+static void mqtt_handle_data_cases(const char *topic, int tlen, const char *data, int dlen)
 {
     (void)topic; (void)tlen; (void)data; (void)dlen;
 ${collectSlot(rendered, 'mqtt_command_cases', 4)}
     zc_entities_dispatch(topic, tlen, data, dlen);
     zc_topics_dispatch(topic, tlen, data, dlen);
+}
+
+static void mqtt_handle_data(const char *topic, int tlen, const char *data, int dlen)
+{
+    app_driver_take_refusal(NULL);
+    mqtt_handle_data_cases(topic, tlen, data, dlen);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        mqtt_driver_cb(zc_refused, zc_now, APP_DRIVER_SOURCE_LOCAL, NULL);
+    }
 }
 
 static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t event_id, void *event_data)

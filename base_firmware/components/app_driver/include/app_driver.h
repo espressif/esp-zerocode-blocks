@@ -183,6 +183,17 @@ typedef bool (*app_driver_guard_fn_t)(app_driver_param_id_t id, app_driver_param
 esp_err_t app_driver_set_guard(app_driver_param_id_t id, app_driver_guard_fn_t fn, void *ctx);
 
 /**
+ * Whether a write made on THIS task was refused by its param's guard since the
+ * last call; *id (may be NULL) gets the param. Clears the record. Framework
+ * handlers call it after their cases: a case that writes a command and then
+ * echoes the commanded value to its controller (a RainMaker tile, an MQTT
+ * state topic) would otherwise show a refused command as done, so the handler
+ * re-reports the param's real value after it (Matter instead rejects the
+ * write). Product code rarely needs it: set_param's return says the same.
+ */
+bool app_driver_take_refusal(app_driver_param_id_t *id);
+
+/**
  * Fire an EVENT on a parameter. Always applies and always notifies, even when
  * the value is identical to the last one.
  *

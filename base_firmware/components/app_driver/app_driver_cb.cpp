@@ -150,6 +150,18 @@ static guard_slot_t s_guards[APP_DRIVER_PARAM_MAX];
  * reads) cannot be overtaken by a write checked before. Recursive: a guard or
  * an apply may itself write a guarded param. */
 static SemaphoreHandle_t s_guard_lock = NULL;
+/* The param of the last write a guard refused on THIS task (MAX = none):
+ * read by the framework whose handler made the write — see
+ * app_driver_take_refusal(). */
+static thread_local app_driver_param_id_t s_refused_id = APP_DRIVER_PARAM_MAX;
+
+bool app_driver_take_refusal(app_driver_param_id_t *id)
+{
+    if (s_refused_id >= APP_DRIVER_PARAM_MAX) return false;
+    if (id) *id = s_refused_id;
+    s_refused_id = APP_DRIVER_PARAM_MAX;
+    return true;
+}
 
 esp_err_t app_driver_set_guard(app_driver_param_id_t id, app_driver_guard_fn_t fn, void *ctx)
 {
@@ -186,6 +198,7 @@ static bool guard_admits(app_driver_param_id_t id, app_driver_param_val_t *val,
         return true;
     }
     xSemaphoreGiveRecursive(s_guard_lock);
+    s_refused_id = id;
     ESP_LOGI(TAG, "set_param(%d) refused by its guard", id);
     /* Only the source is told: its view (a Matter attribute, an app tile)
      * went ahead of the device; nobody else saw anything change. */

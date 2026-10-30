@@ -72,6 +72,16 @@ int main()
     CHECK(app_driver_fire_event(APP_DRIVER_PARAM_POWER, on, APP_DRIVER_SOURCE_LOCAL) == ESP_ERR_NOT_ALLOWED);
     CHECK(s_power_applies_on == 0);
 
+    /* The refusal is recorded for THIS task's framework handler, once. */
+    app_driver_param_id_t rid = APP_DRIVER_PARAM_NONE;
+    CHECK(app_driver_take_refusal(&rid) && rid == APP_DRIVER_PARAM_POWER);
+    CHECK(!app_driver_take_refusal(nullptr));
+    bool other_task_saw = true;
+    std::thread([&] { app_driver_set_param(APP_DRIVER_PARAM_POWER, on, matter); }).join();
+    CHECK(!app_driver_take_refusal(nullptr));   /* another task's refusal is not ours */
+    std::thread([&] { app_driver_set_param(APP_DRIVER_PARAM_POWER, on, matter); other_task_saw = app_driver_take_refusal(nullptr); }).join();
+    CHECK(other_task_saw);
+
     /* Released: the same write goes through. */
     s_estop = false;
     CHECK(app_driver_set_param(APP_DRIVER_PARAM_POWER, on, matter) == ESP_OK);
