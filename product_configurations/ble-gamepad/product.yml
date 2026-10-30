@@ -1,0 +1,22 @@
+id: ble-gamepad
+name: BLE Gamepad
+description: >-
+  A Bluetooth gamepad for a PC or phone — 16 buttons and two analog sticks,
+  paired from the host's Bluetooth settings with no app. Product code reads
+  the inputs and sends the state with zc_ble_hid_send_gamepad().
+keywords: [ble, bluetooth, hid, gamepad, joystick, controller, game]
+
+frameworks: [ble_hid]
+
+instances:
+  - block: device_types/gamepad
+    prefix: PAD
+    cfg:
+      device_name: ZeroCode Gamepad
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode BLE Gamepad

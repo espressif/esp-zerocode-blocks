@@ -3430,6 +3430,52 @@ ${collectSlot(rendered, 'espnow_node_init', 4)}
  * generated file owns the report map, the esp_hidd device, and dispatch.
  */
 function genAppBleHidCpp(rendered: RenderedInstance[]): string {
+  // A composed device_types/gamepad adds one gamepad report (id 3) to the map,
+  // the gamepad appearance and its own name; without it the output is the
+  // media remote's, byte for byte.
+  const pad = rendered.find(r => r.block.id === 'device_types/gamepad')
+  const padName = pad ? String(pad.cfg.device_name ?? 'ZeroCode Gamepad').replace(/[\\"]/g, '') : ''
+  const padMap = pad ? `
+    0x05, 0x01,       /* Usage Page (Generic Desktop) */
+    0x09, 0x05,       /* Usage (Game Pad) */
+    0xA1, 0x01,       /* Collection (Application) */
+    0x85, 0x03,       /*   Report ID (3) */
+    0x05, 0x09,       /*   Usage Page (Button) */
+    0x19, 0x01,       /*   Usage Minimum (Button 1) */
+    0x29, 0x10,       /*   Usage Maximum (Button 16) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x25, 0x01,       /*   Logical Maximum (1) */
+    0x75, 0x01,       /*   Report Size (1) */
+    0x95, 0x10,       /*   Report Count (16) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — buttons */
+    0x05, 0x01,       /*   Usage Page (Generic Desktop) */
+    0x09, 0x30,       /*   Usage (X) */
+    0x09, 0x31,       /*   Usage (Y) */
+    0x09, 0x32,       /*   Usage (Z) */
+    0x09, 0x35,       /*   Usage (Rz) */
+    0x15, 0x81,       /*   Logical Minimum (-127) */
+    0x25, 0x7F,       /*   Logical Maximum (127) */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x04,       /*   Report Count (4) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — two sticks */
+    0xC0,             /* End Collection */` : ''
+  const padSend = pad ? `
+/* The gamepad's whole state, report id 3: button n is bit n-1 of buttons,
+ * and the two sticks' axes -127..127 (0 = centred). A state, not a press:
+ * send it when anything changed; it is dropped while no host is connected. */
+void zc_ble_hid_send_gamepad(uint16_t buttons, int8_t x, int8_t y, int8_t z, int8_t rz)
+{
+    if (!s_host_connected || s_hid_dev == NULL) {
+        ESP_LOGD(TAG, "no host connected — dropping gamepad state");
+        return;
+    }
+    uint8_t report[6] = { (uint8_t)(buttons & 0xff), (uint8_t)(buttons >> 8),
+                          (uint8_t)x, (uint8_t)y, (uint8_t)z, (uint8_t)rz };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 3, report, sizeof(report));
+}
+` : ''
+  const appearance = pad ? '0x03C4 /* gamepad */' : '0x03C0 /* generic HID */'
+  const devName = pad ? padName : 'ZeroCode Remote'
   return `#include "app_ble_hid.h"
 #include "ble_hid_gap.h"
 #include "app_driver.h"
@@ -3487,7 +3533,7 @@ static const uint8_t s_report_map[] = {
     0x19, 0x00,       /*   Usage Minimum (0) */
     0x29, 0xFF,       /*   Usage Maximum (255) */
     0x81, 0x00,       /*   Input (Data, Array) — keys */
-    0xC0,             /* End Collection */
+    0xC0,             /* End Collection */${padMap}
 };
 
 ${collectSlot(rendered, 'ble_hid_statics')}
@@ -3522,7 +3568,7 @@ void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers)
     esp_hidd_dev_input_set(s_hid_dev, 0, 2, release, 8);
 }
 
-/* Hardware/param bus -> HID reports. Device types own the cases. */
+${padSend}/* Hardware/param bus -> HID reports. Device types own the cases. */
 static void ble_hid_driver_cb(
     app_driver_param_id_t param_id,
     app_driver_param_val_t val,
@@ -3570,7 +3616,7 @@ esp_err_t app_ble_hid_init(void)
     s_handle = app_driver_register_solution("ble_hid", ble_hid_driver_cb, NULL);
 
     ESP_ERROR_CHECK(ble_hid_gap_stack_init());
-    ESP_ERROR_CHECK(ble_hid_gap_adv_init(0x03C0 /* generic HID */, "ZeroCode Remote"));
+    ESP_ERROR_CHECK(ble_hid_gap_adv_init(${appearance}, "${devName}"));
 
     static esp_hid_raw_report_map_t report_maps[] = {
         { .data = s_report_map, .len = sizeof(s_report_map) },
@@ -3579,7 +3625,7 @@ esp_err_t app_ble_hid_init(void)
     hid_config.vendor_id = 0x16A8;
     hid_config.product_id = 0x2C0D;
     hid_config.version = 0x0100;
-    hid_config.device_name = "ZeroCode Remote";
+    hid_config.device_name = "${devName}";
     hid_config.manufacturer_name = "ZeroCode AI";
     hid_config.serial_number = "0";
     hid_config.report_maps = report_maps;

@@ -39,6 +39,15 @@ void zc_ble_hid_send_consumer(uint16_t usage);
  */
 void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers);
 
+/**
+ * The gamepad's whole state (report id 3): button n is bit n-1 of `buttons`
+ * (16 buttons), and the two sticks' axes x, y (left) and z, rz (right) are
+ * -127..127, 0 centred. A state, not a press: call it when anything changed,
+ * at the rate the product reads its inputs. Dropped while no host is
+ * connected. Defined only when the product composes device_types/gamepad.
+ */
+void zc_ble_hid_send_gamepad(uint16_t buttons, int8_t x, int8_t y, int8_t z, int8_t rz);
+
 #ifdef __cplusplus
 }
 #endif

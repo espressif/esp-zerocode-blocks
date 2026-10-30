@@ -1,0 +1,26 @@
+description: "Bluetooth gamepad / joystick for a PC or phone (BLE HID framework only): 16 buttons and two analog sticks, sent from product code with zc_ble_hid_send_gamepad()"
+
+# Opt-in by composition: the BLE HID framework adds one gamepad report
+# (Generic Desktop / Game Pad, report id 3: 16 buttons, X Y Z Rz at -127..127)
+# to its report map, advertises the gamepad appearance (0x03C4) and this
+# block's device_name — only when a product composes this block, so a media
+# remote never shows up as a game controller. The framework's pairing,
+# bonding and advertising are unchanged. The product reads its own inputs
+# (buttons, ADC sticks) and calls zc_ble_hid_send_gamepad(buttons, x, y, z, rz)
+# from app_ble_hid.h whenever the state changed.
+
+requires_frameworks: [ble_hid]
+singleton: true
+
+params:
+  device_name:
+    type: string
+    default: "ZeroCode Gamepad"
+    description: >-
+      The name the gamepad shows in the phone's or PC's Bluetooth settings
+      (and in its advertisement; past 29 bytes it is shortened there).
+
+facts:
+  sends: "It is a gamepad with 16 buttons and two analog sticks (X/Y left, Z/Rz right, -127 to 127, 0 centred); product code sends the whole state with zc_ble_hid_send_gamepad(buttons, x, y, z, rz) whenever a button or stick changed, and the framework drops it while no host is connected."
+  name: "It appears in Bluetooth settings under its device_name (default \"ZeroCode Gamepad\")."
+  no_rumble: "It only sends: a host's rumble or LED commands do not reach the product."
