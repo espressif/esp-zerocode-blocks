@@ -33,4 +33,5 @@ driver_params:
     description: u8 LED pattern param (read by behaviors/blink_pattern or drivers/status_led wiring)
 
 facts:
+  owns_pattern_param: "It writes pattern_param on every onboarding and connectivity change (each boot, each Wi-Fi or broker reconnect), so the product must not show its own states (locked, alarm, mode) through that same param: they are overwritten at the next event. Give the product's own indication a second LED or its own param, or do not compose this block."
   matter_paired_state: "On a Matter product the LED takes paired or not from the framework's commissioned state (APP_DRIVER_PARAM_MATTER_COMMISSIONED, read from the fabric table at boot): a paired device shows solid from boot even before the network is up, slow blink only while it is on no fabric, fast blink while pairing, and breathe while a paired device has lost its network."
