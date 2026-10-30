@@ -22,6 +22,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <esp_timer.h>
 #include <string.h>
 
@@ -136,6 +137,70 @@ const char *app_driver_solution_name(app_driver_handle_t handle)
     return name;
 }
 
+/* ──── GUARDS ─────────────────────────────────────────────────────────── */
+
+typedef struct {
+    app_driver_guard_fn_t fn;
+    void *ctx;
+} guard_slot_t;
+
+static guard_slot_t s_guards[APP_DRIVER_PARAM_MAX];
+/* One recursive lock for every guarded param: check + commit + apply run under
+ * it, so an interlock's own write (made after it changed the state the guard
+ * reads) cannot be overtaken by a write checked before. Recursive: a guard or
+ * an apply may itself write a guarded param. */
+static SemaphoreHandle_t s_guard_lock = NULL;
+
+esp_err_t app_driver_set_guard(app_driver_param_id_t id, app_driver_guard_fn_t fn, void *ctx)
+{
+    if (id >= APP_DRIVER_PARAM_MAX || fn == NULL) return ESP_ERR_INVALID_ARG;
+    if (s_guard_lock == NULL) {
+        s_guard_lock = xSemaphoreCreateRecursiveMutex();
+        if (s_guard_lock == NULL) return ESP_ERR_NO_MEM;
+    }
+    portENTER_CRITICAL(&s_lock);
+    if (s_guards[id].fn != NULL) {
+        portEXIT_CRITICAL(&s_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_guards[id].fn = fn;
+    s_guards[id].ctx = ctx;
+    portEXIT_CRITICAL(&s_lock);
+    return ESP_OK;
+}
+
+/* Checks a write against its param's guard. On true the guard lock is HELD
+ * (when *held) and the caller releases it after applying; on false it is
+ * already released and the write's source has been told the current value. */
+static bool guard_admits(app_driver_param_id_t id, app_driver_param_val_t *val,
+                         app_driver_handle_t source, bool *held)
+{
+    *held = false;
+    portENTER_CRITICAL(&s_lock);
+    guard_slot_t g = s_guards[id];
+    portEXIT_CRITICAL(&s_lock);
+    if (g.fn == NULL) return true;
+    xSemaphoreTakeRecursive(s_guard_lock, portMAX_DELAY);
+    if (g.fn(id, val, source, g.ctx)) {
+        *held = true;
+        return true;
+    }
+    xSemaphoreGiveRecursive(s_guard_lock);
+    ESP_LOGI(TAG, "set_param(%d) refused by its guard", id);
+    /* Only the source is told: its view (a Matter attribute, an app tile)
+     * went ahead of the device; nobody else saw anything change. */
+    app_driver_param_val_t current;
+    bool seen;
+    solution_slot_t slot = {};
+    portENTER_CRITICAL(&s_lock);
+    current = s_params[id];
+    seen = s_param_seen[id];
+    if (source >= 1 && source <= s_solution_count) slot = s_solutions[source - 1];
+    portEXIT_CRITICAL(&s_lock);
+    if (seen && slot.active && slot.cb) slot.cb(id, current, source, slot.ctx);
+    return false;
+}
+
 esp_err_t app_driver_set_param(
     app_driver_param_id_t id,
     app_driver_param_val_t val,
@@ -162,6 +227,9 @@ esp_err_t app_driver_set_param(
      * fails to recognize (e.g. indeterminate padding), which merely reverts to
      * the old always-apply behavior — never unsafe. Callers that ever need a
      * forced re-apply of the same value should drive the hardware directly. */
+    bool guarded;
+    if (!guard_admits(id, &val, source, &guarded)) return ESP_ERR_NOT_ALLOWED;
+
     solution_slot_t snapshot[APP_DRIVER_MAX_SOLUTIONS];
     uint8_t count;
 
@@ -178,6 +246,7 @@ esp_err_t app_driver_set_param(
          * no test looking at a device log could see it happen. Anything that must
          * propagate every time is an EVENT — use app_driver_fire_event(). */
         ESP_LOGD(TAG, "set_param(%d) unchanged — not propagated (events must use fire_event)", id);
+        if (guarded) xSemaphoreGiveRecursive(s_guard_lock);
         return ESP_OK;
     }
     s_params[id] = val;
@@ -210,6 +279,7 @@ esp_err_t app_driver_set_param(
         if (memcmp(&current, &applied, sizeof(current)) == 0) break;
         applied = current;
     }
+    if (guarded) xSemaphoreGiveRecursive(s_guard_lock);
 
     /* Notify all OTHER registered solutions — with the value the hardware
      * ended on, not this call's: when the loop above re-applied a later
@@ -249,6 +319,9 @@ esp_err_t app_driver_fire_event(
      * real products — a chime that rang once per boot, a manual override the
      * light ignored, a media button that produced nothing on the second press.
      * Use this for anything whose repeat matters; use set_param for state. */
+    bool guarded;
+    if (!guard_admits(id, &val, source, &guarded)) return ESP_ERR_NOT_ALLOWED;
+
     solution_slot_t snapshot[APP_DRIVER_MAX_SOLUTIONS];
     uint8_t count;
 
@@ -266,6 +339,7 @@ esp_err_t app_driver_fire_event(
     if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
         ESP_LOGW(TAG, "apply_param(%d) failed: %s", id, esp_err_to_name(err));
     }
+    if (guarded) xSemaphoreGiveRecursive(s_guard_lock);
 
     bool outer_event = s_notifying_event;
     s_notifying_event = true;

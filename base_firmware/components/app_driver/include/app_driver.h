@@ -141,12 +141,46 @@ const char *app_driver_solution_name(app_driver_handle_t handle);
  * @param id      Parameter to change
  * @param val     New value
  * @param source  Handle of the calling solution (or APP_DRIVER_SOURCE_LOCAL)
- * @return ESP_OK on success
+ * @return ESP_OK on success; ESP_ERR_NOT_ALLOWED when the param's guard
+ *         refused it (see app_driver_set_guard)
  */
 esp_err_t app_driver_set_param(
     app_driver_param_id_t id,
     app_driver_param_val_t val,
     app_driver_handle_t source);
+
+/**
+ * A guard on one param: called with the value a write is about to commit,
+ * BEFORE it is committed or applied to the hardware. Return false to refuse
+ * the write; change *val to clamp it. It may read other params
+ * (app_driver_get_param) but must not block for long.
+ */
+typedef bool (*app_driver_guard_fn_t)(app_driver_param_id_t id, app_driver_param_val_t *val,
+                                      app_driver_handle_t source, void *ctx);
+
+/**
+ * Put a guard on a param: the one place an interlock belongs (an E-stop that
+ * keeps a pump off, a lock's allowed hours, "never heat mid-cook", a range).
+ *
+ * A listener cannot refuse a write — the hardware has already switched when
+ * it is told, and setting the param back only undoes it afterwards (a relay
+ * energised for a moment, an app tile that flips and flips back). A guard runs
+ * first: a refused write (set_param or fire_event) returns ESP_ERR_NOT_ALLOWED,
+ * the param and the hardware stay as they were, and only the write's SOURCE
+ * solution is told the current value, so a controller's tile goes back while
+ * no other listener sees anything happen.
+ *
+ * The check, the commit and the hardware apply of a guarded param run under
+ * one bus lock, so a write the guard passed can never land after a later
+ * write that the interlock's own state change caused (set the E-stop flag,
+ * then write the pump off: an "on" checked before the flag lands first).
+ * One guard per param; register it from app_logic_init(), before anything
+ * writes the param.
+ *
+ * @return ESP_OK, ESP_ERR_INVALID_ARG (bad id or NULL fn), ESP_ERR_INVALID_STATE
+ *         (the param already has a guard), ESP_ERR_NO_MEM
+ */
+esp_err_t app_driver_set_guard(app_driver_param_id_t id, app_driver_guard_fn_t fn, void *ctx);
 
 /**
  * Fire an EVENT on a parameter. Always applies and always notifies, even when
