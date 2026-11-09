@@ -107,6 +107,10 @@ static button_handle_t app_button_get_or_create(int, int, int long_press_ms)
 /* The registry's record of the reset hold armed on a button. */
 static void app_button_set_reset_hold(button_handle_t b, int hold_ms) { if (b) b->reset_hold_ms = hold_ms; }
 static int app_button_reset_hold_ms(button_handle_t b) { return b ? b->reset_hold_ms : 0; }
+/* drivers/button's wake-press check: a plain power-on, so it delivers nothing. */
+enum { ESP_RST_POWERON = 1, ESP_RST_DEEPSLEEP = 8 };
+static int esp_reset_reason(void) { return ESP_RST_POWERON; }
+static uint32_t esp_sleep_get_wakeup_causes(void) { return 0; }
 static int g_level[64];
 #define GPIO_ACTIVE 0
 /* iot_button 4.x: a press released before the device's long-press time opens

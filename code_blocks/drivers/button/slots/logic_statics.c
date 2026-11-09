@@ -54,3 +54,30 @@ static void {{prefix_lc}}_button_cb(void *arg, void *usr_data)
     if ({{prefix_lc}}_reset_hold_ms() > 0) return;   /* the press end decides */
     {{prefix_lc}}_toggle();
 }
+
+/* WOKEN BY THIS BUTTON. A press that wakes the chip from deep sleep is usually
+ * over before the button is created (the boot takes longer than a click), so
+ * the button never saw it and the press that woke the device did nothing. When
+ * this pin is what woke it (ext1 or the deep-sleep GPIO wakeup report the pin;
+ * the classic ESP32's ext0 does not, so it is not attributed) and the button is
+ * already released, that press is delivered once, as a click. A button still
+ * held at boot is seen by the button itself. */
+static bool {{prefix_lc}}_woke_device(void)
+{
+    if (esp_reset_reason() != ESP_RST_DEEPSLEEP) return false;
+    uint32_t causes = esp_sleep_get_wakeup_causes();
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+    if ((causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) &&
+        (esp_sleep_get_ext1_wakeup_status() & (1ULL << {{prefix}}_BUTTON_GPIO))) return true;
+#endif
+#if SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP
+    if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO)) {
+        uint64_t st = esp_sleep_get_gpio_wakeup_status();
+        for (uint32_t b = 0; b < 64; b++) {
+            if (((st >> b) & 1ULL) && esp_sleep_wakeup_io_bit2num(b) == (gpio_num_t){{prefix}}_BUTTON_GPIO) return true;
+        }
+    }
+#endif
+    (void)causes;
+    return false;
+}

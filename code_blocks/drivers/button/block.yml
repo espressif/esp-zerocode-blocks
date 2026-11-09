@@ -36,5 +36,9 @@ driver_params:
       position_param).
 
 facts:
+  wake_press: "A press that wakes the device from deep sleep counts: when this pin woke it (ext1 or the deep-sleep GPIO wakeup) and the button is already released at boot, that press is delivered once, as a click — product code never re-reads the pin after boot to guess what woke it."
   every_press: "Something that should happen on EVERY press — a ring, a count — is press_param: it fires once per press as the button goes down, so a quick second press or a hold is never lost."
   toggle_until_reset: "With behaviors/factory_reset_long_press on the same pin, any press released before its hold toggles once and a press that reaches the hold resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold N s to reset\" needs no button code of the product's own."
+
+cmake_priv_requires:
+  app_logic: [esp_driver_gpio]
