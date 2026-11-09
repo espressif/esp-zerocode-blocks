@@ -318,6 +318,11 @@ export interface Instance {
   block: string
   prefix: string
   cfg: Record<string, unknown>
+  /** Only these of the product's frameworks get this instance (absent = all).
+   *  A hub that SHOWS a light on its screen composes device_types/light with
+   *  `frameworks: [display]`: it is a card, not a light of its own that MQTT
+   *  should announce to Home Assistant. */
+  frameworks?: string[]
 }
 
 /** A framework's early-build needs. */

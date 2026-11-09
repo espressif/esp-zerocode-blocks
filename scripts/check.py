@@ -350,7 +350,7 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                 # Resolves to an empty port and matches the wrong thing.
                 err(bid, f'{key} names port_param "{pp}", which is not in params')
 
-INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include'}
+INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include', 'frameworks'}
 # Blocks that publish NOTHING on the param bus although their driver_params
 # say otherwise. A ready-made product composing one reports no reading, ever,
 # and no build or gate notices: seven catalog products shipped

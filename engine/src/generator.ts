@@ -975,8 +975,19 @@ async function renderInstances(
       }
     }
     const replaced = new Set(boardOwns ? block.bmgr?.replaces_slots ?? [] : [])
+    // An instance scoped to some frameworks gets no slot of the others: the
+    // product's frameworks it did not name are dropped by slot family.
+    const scoped = inst.frameworks
+    if (scoped) {
+      const unknown = scoped.filter((f) => !product.frameworks.includes(f))
+      if (unknown.length) {
+        throw new Error(`${inst.block} (prefix=${inst.prefix}) names frameworks: [${unknown.join(', ')}], which the product does not select (it selects [${product.frameworks.join(', ')}]).`)
+      }
+    }
+    const outOfScope = scoped ? product.frameworks.filter((f) => !scoped.includes(f)) : []
     for (const [slot, body] of Object.entries(block.slots ?? {})) {
       if (replaced.has(slot)) continue
+      if (outOfScope.some((f) => slot.startsWith(`${f}_`))) continue
       slots[slot] = substitute(body, ctx)
     }
     out.push({ block, prefix: inst.prefix, cfg, slots, replacedSlots: [...replaced], ...(guardMiss ? { bmgrFallback: guardMiss } : {}) })
