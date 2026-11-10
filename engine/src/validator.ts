@@ -658,6 +658,20 @@ export function validateProduct(
     }
   }
 
+  // A web UI time row stores minutes since midnight (0-1439), which a bool or
+  // u8 param cannot hold: 07:30 would be written as 194.
+  for (const inst of product.instances ?? []) {
+    if (inst.block !== 'behaviors/webui_row' || inst.cfg?.kind !== 'time') continue
+    const vk = String(inst.cfg?.value_kind ?? 'u8')
+    if (vk === 'bool' || vk === 'u8') {
+      errors.push({
+        level: 'error',
+        ...ctx,
+        message: `behaviors/webui_row (prefix=${inst.prefix}) is a time row, which stores minutes since midnight (0-1439); value_kind ${vk} cannot hold that — set value_kind: u16`,
+      })
+    }
+  }
+
   // FLASH-BUDGET GATE (lm). The story model is 2.0 MB of weights EMBEDded in
   // the app image, and 2.0 MB + ~255 KB of app needs 2,349,504 B against the
   // default 4mb table's 1,966,080 B OTA slot — 20% short. Unchecked, that is

@@ -19,7 +19,8 @@ description: "One row on the web UI page for any driver param — the product's 
 #   value  — a read-only reading (shows -- until first written)
 #   binary — a read-only ACTIVE / clear state
 #   time   — a time of day the owner sets (HH:MM), stored as minutes since
-#            midnight (0-1439): a schedule's feeding, lights-on or watering time
+#            midnight (0-1439, whatever min and max say; value_kind u16): a
+#            schedule's feeding, lights-on or watering time
 # The value is shown divided by scale (a temperature in centi-degrees: scale 100).
 
 requires_frameworks: [webui]
@@ -46,11 +47,11 @@ params:
   min:
     type: int
     default: 0
-    description: Lowest value a control writes (a toggle's off)
+    description: Lowest value a control writes (a toggle's off); a time row is always 0-1439
   max:
     type: int
     default: 100
-    description: Highest value a control writes (a toggle's on)
+    description: Highest value a control writes (a toggle's on); a time row is always 0-1439
   scale:
     type: int
     default: 1

@@ -81,7 +81,7 @@ const STATE = {
 test('thermostat rows: reading, target as a number in 0.5 °C steps over 5-35 °C, heat-only mode toggle, heating state', () => {
   const cpp = generate(CFG)
   assert.match(cpp, /\{ "Thermostat target \(°C\)", "number", APP_DRIVER_PARAM_HEAT_SETPOINT, "APP_DRIVER_PARAM_HEAT_SETPOINT", 2, 500, 3500, 100, 50 \}/)
-  assert.match(cpp, /\{ "Thermostat heating mode", "toggle", APP_DRIVER_PARAM_SYSTEM_MODE, "APP_DRIVER_PARAM_SYSTEM_MODE", 1, 0, 4, 1, 1 \}/)
+  assert.match(cpp, /\{ "Thermostat heating mode", "toggle", APP_DRIVER_PARAM_SYSTEM_MODE, "APP_DRIVER_PARAM_SYSTEM_MODE", 1, 0, 4, 1 \}/)
   assert.match(cpp, /"binary", APP_DRIVER_PARAM_HEAT_RELAY/)
   assert.match(cpp, /int32_t step;/)
   assert.doesNotMatch(generate({ ...CFG, heating_param: '' }), /heating now/)
@@ -116,7 +116,7 @@ test('a toggle posts its max for on and its min for off (heat-only mode: 4 / 0)'
 test('the server makes any non-min toggle value its max and snaps a stepped value', () => {
   const cpp = generate(CFG)
   assert.match(cpp, /if \(strcmp\(e->kind, "toggle"\) == 0\) raw = \(raw != e->min\) \? e->max : e->min;/)
-  assert.match(cpp, /if \(e->step > 1\) raw = e->min \+ \(\(raw - e->min \+ e->step \/ 2\) \/ e->step\) \* e->step;/)
+  assert.match(cpp, /if \(e->step > 1\) raw = lo \+ \(\(raw - lo \+ e->step \/ 2\) \/ e->step\) \* e->step;/)
   assert.match(cpp, /\\"step\\":%ld/)
 })
 
