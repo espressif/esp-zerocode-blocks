@@ -17,7 +17,7 @@ static void {{prefix_lc}}_camera_until_up(void)
         ESP_LOGW(TAG, "{{prefix_lc}}: camera init failed (%s) — retrying in %lu s",
                  esp_err_to_name(err), (unsigned long)(pause_ms / 1000));
         vTaskDelay(pdMS_TO_TICKS(pause_ms));
-        if (pause_ms < 60000) pause_ms *= 2;
+        pause_ms = pause_ms >= 30000 ? 60000 : pause_ms * 2;
     }
 }
 
