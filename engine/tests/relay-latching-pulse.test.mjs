@@ -27,6 +27,7 @@ const HARNESS = (defines, statics, init, apply) => String.raw`
 #include <string>
 typedef int esp_err_t;
 #define ESP_OK 0
+#define ESP_ERR_INVALID_STATE 0x103
 #define ESP_ERROR_CHECK(x) (void)(x)
 #define ESP_LOGI(tag, ...) ((void)(tag))
 static const char *TAG = "t";
@@ -50,8 +51,12 @@ typedef zc_t *esp_timer_handle_t;
 static zc_t g_t;
 static esp_err_t esp_timer_create(const esp_timer_create_args_t *a, esp_timer_handle_t *h) { g_t.cb = a->callback; *h = &g_t; return ESP_OK; }
 static esp_err_t esp_timer_start_once(esp_timer_handle_t h, uint64_t) { h->armed = true; return ESP_OK; }
-static esp_err_t esp_timer_stop(esp_timer_handle_t h) { h->armed = false; return ESP_OK; }
+static esp_err_t esp_timer_stop(esp_timer_handle_t h) { if (!h->armed) return ESP_ERR_INVALID_STATE; h->armed = false; return ESP_OK; }
 static void fire(void) { if (g_t.armed) { g_t.armed = false; g_t.cb(nullptr); } }
+/* The timer expired and its callback is on its way: too late to stop it. */
+static bool g_inflight = false;
+static void expire(void) { if (g_t.armed) { g_t.armed = false; g_inflight = true; } }
+static void deliver(void) { if (g_inflight) { g_inflight = false; g_t.cb(nullptr); } }
 union app_driver_param_val_t { bool b; };
 enum { P_POWER };
 ${defines}
@@ -67,17 +72,21 @@ int main()
     apply(P_POWER, on);  apply(P_POWER, off);                                                   /* a command mid-pulse */
     out += std::to_string(g_level[4]) + std::to_string(g_level[5]) + " ";
     fire();              out += std::to_string(g_level[4]) + std::to_string(g_level[5]) + " ";
+    apply(P_POWER, on);  expire();                                                              /* its end is on its way... */
+    apply(P_POWER, off); deliver();                                                             /* ...and lands after the next command */
+    out += std::to_string(g_level[4]) + std::to_string(g_level[5]) + " ";                      /* the new pulse is still on */
+    fire();              out += std::to_string(g_level[4]) + std::to_string(g_level[5]) + " ";
     printf("%s%d %d\n", out.c_str(), g_both, g_delays);
     return 0;
 }
 `
 
-test('relay_latching: the pulse never blocks the sender and never drives both coils', { skip: !haveCxx && 'no host C++ compiler' }, () => {
+test('relay_latching: the pulse never blocks the sender, never drives both coils, and a late end of an earlier pulse never cuts the next one short', { skip: !haveCxx && 'no host C++ compiler' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'zc-lr-'))
   try {
     writeFileSync(join(dir, 'main.cpp'), HARNESS(fill('config_defines.h'), fill('driver_statics.c'), fill('driver_init.c'), fill('driver_apply_cases.c')))
     execFileSync(CXX, ['-std=c++17', '-Wno-unused-function', '-o', join(dir, 'a.out'), join(dir, 'main.cpp')], { stdio: 'pipe' })
-    assert.equal(execFileSync(join(dir, 'a.out'), { encoding: 'utf8' }).trim(), '10 00 01 00 0 0')
+    assert.equal(execFileSync(join(dir, 'a.out'), { encoding: 'utf8' }).trim(), '10 00 01 00 01 00 0 0')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

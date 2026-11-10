@@ -4,6 +4,12 @@
  * before it drives the other coil, so both coils are never energised. */
 static esp_timer_handle_t s_{{prefix_lc}}_latch_timer = NULL;
 static portMUX_TYPE s_{{prefix_lc}}_latch_mux = portMUX_INITIALIZER_UNLOCKED;
+/* Pulses started, and pulses whose end has run or was cancelled: only the end
+ * of the LATEST pulse idles the coils. A command can arrive while the previous
+ * pulse's timer callback is already on its way (esp_timer_stop can no longer
+ * cancel it); that stale end must not cut the new pulse short. */
+static uint32_t s_{{prefix_lc}}_latch_started = 0;
+static uint32_t s_{{prefix_lc}}_latch_done = 0;
 
 static void {{prefix_lc}}_latch_coils_idle(void)
 {
@@ -15,14 +21,21 @@ static void {{prefix_lc}}_latch_end_cb(void *arg)
 {
     (void)arg;
     portENTER_CRITICAL(&s_{{prefix_lc}}_latch_mux);
-    {{prefix_lc}}_latch_coils_idle();
+    s_{{prefix_lc}}_latch_done++;
+    if (s_{{prefix_lc}}_latch_done == s_{{prefix_lc}}_latch_started) {{prefix_lc}}_latch_coils_idle();
     portEXIT_CRITICAL(&s_{{prefix_lc}}_latch_mux);
 }
 
 static void {{prefix_lc}}_latch_pulse(bool on)
 {
-    if (s_{{prefix_lc}}_latch_timer) esp_timer_stop(s_{{prefix_lc}}_latch_timer);
+    if (s_{{prefix_lc}}_latch_timer && esp_timer_stop(s_{{prefix_lc}}_latch_timer) == ESP_OK) {
+        /* Cancelled before it ran: that pulse's end will never come. */
+        portENTER_CRITICAL(&s_{{prefix_lc}}_latch_mux);
+        s_{{prefix_lc}}_latch_done++;
+        portEXIT_CRITICAL(&s_{{prefix_lc}}_latch_mux);
+    }
     portENTER_CRITICAL(&s_{{prefix_lc}}_latch_mux);
+    s_{{prefix_lc}}_latch_started++;
     {{prefix_lc}}_latch_coils_idle();
     gpio_set_level((gpio_num_t)(on ? {{prefix}}_LATCH_SET_GPIO : {{prefix}}_LATCH_RESET_GPIO), {{prefix}}_LATCH_LEVEL);
     portEXIT_CRITICAL(&s_{{prefix_lc}}_latch_mux);
