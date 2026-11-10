@@ -34,6 +34,11 @@ esp_err_t zc_behaviors_init(void);
  */
 esp_err_t app_logic_init(void);
 
+/* Generated (zc_behaviors.cpp): the composed behaviors' logic_start slots, run
+ * by app_main right after app_logic_init(), once the product's listeners are
+ * registered and every saved value is restored. */
+esp_err_t zc_behaviors_start(void);
+
 #ifdef __cplusplus
 }
 #endif

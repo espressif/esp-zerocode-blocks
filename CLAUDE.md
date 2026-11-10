@@ -273,6 +273,7 @@ indent.
 | `matter_attr_cb_cases` | `app_attribute_update_cb()` | attribute → param push |
 | `matter_identify_cases` / `matter_event_cases` | identify + chip event handlers | |
 | `logic_includes` / `logic_statics` / `logic_init` | `app_logic/<concern>.cpp` — grouped by concern (persist / indicator / console / diagnostics / factory_reset / control / …); each behavior's `logic_init` becomes a `static <name>_init()`, run by the slim `app_logic.cpp` orchestrator | sensor poll tasks, button handlers, console cmd registration, NVS persist |
+| `logic_start` | the same concern file, as a `static <name>_start()` run by `zc_behaviors_start()`, which `app_main` calls right AFTER `app_logic_init()` | what must happen once the product's listeners are registered and every saved value is restored: the button press that woke the device from deep sleep |
 | `main_includes` / `main_init` | `app_main.cpp` | per-framework `#include` + init call (framework blocks only) |
 
 ## Block top-level fields

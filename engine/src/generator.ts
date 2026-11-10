@@ -5670,7 +5670,7 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
   // Group behaviors that emit app_logic code by category, preserving order.
   const groups = new Map<string, RenderedInstance[]>()
   for (const r of rendered) {
-    if (!(r.slots['logic_statics'] ?? '').trim() && !(r.slots['logic_init'] ?? '').trim()) continue
+    if (!(r.slots['logic_statics'] ?? '').trim() && !(r.slots['logic_init'] ?? '').trim() && !(r.slots['logic_start'] ?? '').trim()) continue
     const cat = logicCategory(r.block)
     if (!groups.has(cat)) groups.set(cat, [])
     groups.get(cat)!.push(r)
@@ -5678,6 +5678,7 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
   const parts: Array<{ name: string; content: string }> = []
   const calls: string[] = []
   const decls: string[] = []
+  const startCalls: string[] = []
   for (const [cat, members] of groups) {
     const lines = [
       `#include "app_logic.h"`,
@@ -5688,13 +5689,15 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
     if (includes) lines.push(includes)
     lines.push('')
     const innerCalls: string[] = []
+    const innerStarts: string[] = []
     const used = new Set<string>()
     let usesTag = false
     const bodyLines: string[] = []
     for (const r of members) {
       const statics = (r.slots['logic_statics'] ?? '').trim()
       const initRaw = (r.slots['logic_init'] ?? '').trim()
-      usesTag = usesTag || /\bTAG\b/.test(`${statics} ${initRaw}`)
+      const startRaw = (r.slots['logic_start'] ?? '').trim()
+      usesTag = usesTag || /\bTAG\b/.test(`${statics} ${initRaw} ${startRaw}`)
       const slug = (r.prefix || r.block.id.split('/').pop() || 'b').toLowerCase().replace(/[^a-z0-9_]/g, '_')
       let name = slug
       for (let n = 2; used.has(name); n++) name = `${slug}_${n}`
@@ -5705,13 +5708,22 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
         bodyLines.push(`static void zc_${name}_init(void)`, '{', indentText(unwrapInitBody(r.slots['logic_init']), 4), '}', '')
         innerCalls.push(`    zc_${name}_init();`)
       }
+      if (startRaw) {
+        bodyLines.push(`static void zc_${name}_start(void)`, '{', indentText(unwrapInitBody(r.slots['logic_start']), 4), '}', '')
+        innerStarts.push(`    zc_${name}_start();`)
+      }
     }
     if (usesTag) lines.push(`static const char *TAG = "${cat}";`, '')
     lines.push(...bodyLines)
     lines.push(`void ${cat}_logic_init(void)`, '{', ...innerCalls, '}', '')
-    parts.push({ name: `${cat}.cpp`, content: lines.join('\n') })
     calls.push(`    ${cat}_logic_init();`)
     decls.push(`void ${cat}_logic_init(void);`)
+    if (innerStarts.length > 0) {
+      lines.push(`void ${cat}_logic_start(void)`, '{', ...innerStarts, '}', '')
+      startCalls.push(`    ${cat}_logic_start();`)
+      decls.push(`void ${cat}_logic_start(void);`)
+    }
+    parts.push({ name: `${cat}.cpp`, content: lines.join('\n') })
   }
   // Shared button registry: when any block creates an iot_button device, emit
   // one extra part (gets the deduped logic includes + auto-added to SRCS like
@@ -5747,6 +5759,13 @@ ${calls.join('\n')}
 
     ESP_LOGI(TAG, "Composed behaviors initialized");
     return ESP_OK;
+}
+
+/* After app_logic_init(): what the composed behaviors do once the product's
+ * own logic is up and every saved value is restored (logic_start slots). */
+esp_err_t zc_behaviors_start(void)
+{
+${startCalls.map(c => `${c}\n`).join('')}    return ESP_OK;
 }
 `,
   })

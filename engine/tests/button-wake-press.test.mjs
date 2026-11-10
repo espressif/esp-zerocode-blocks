@@ -5,7 +5,9 @@
 // drivers/button: the press that wakes the device from deep sleep is over
 // before the button exists, so it was lost — a doorbell, a clicker, a battery
 // sensor's button did nothing on the press that woke them. When this pin woke
-// the chip and the button is already released, that press is delivered once.
+// the chip and the button is already released, that press is delivered once,
+// from logic_start: after app_logic_init(), so a value restored at boot
+// (nvs_persist) cannot undo it and the product's listeners hear it.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -21,7 +23,7 @@ const haveCxx = spawnSync(CXX, ['--version']).status === 0
 const BUS = join(ROOT, 'base_firmware/components/app_driver')
 const SLOTS = join(ROOT, 'code_blocks/drivers/button/slots')
 
-function run(scenario) {
+function run(scenario, restore = '') {
   const cfg = { gpio: 4, active_level: 0, toggle_before_reset: true, target_param: 'APP_DRIVER_PARAM_POWER', press_param: 'APP_DRIVER_PARAM_LED_PATTERN' }
   const fill = (f) => eng.__substituteForTest(readFileSync(join(SLOTS, f), 'utf8'), { prefix: 'B', prefix_lc: 'b', cfg })
   const prog = `#include "app_driver.h"
@@ -56,6 +58,8 @@ int main() {
     app_driver_register_solution("t", count, nullptr);
     ${scenario}
     ${fill('logic_init.c')}
+    ${restore}
+    ${fill('logic_start.c')}
     app_driver_param_val_t v = {}; app_driver_get_param(APP_DRIVER_PARAM_POWER, &v);
     printf("%d %d\\n", (int)v.b, g_events);
     return 0;
@@ -83,4 +87,28 @@ test('button: no extra press from a power-on, another pin, a timer, or a press s
   assert.equal(run('g_reset = ESP_RST_DEEPSLEEP; g_causes = BIT(ESP_SLEEP_WAKEUP_EXT1); g_ext1 = 1ULL << 5;'), '0 0')
   assert.equal(run('g_reset = ESP_RST_DEEPSLEEP; g_causes = BIT(ESP_SLEEP_WAKEUP_TIMER);'), '0 0')
   assert.equal(run('g_reset = ESP_RST_DEEPSLEEP; g_causes = BIT(ESP_SLEEP_WAKEUP_EXT1); g_ext1 = 1ULL << 4; g_level = 0;'), '0 0')
+})
+
+test('button: a value restored at boot does not undo the press that woke the device', { skip: !haveCxx && 'no host C++ compiler' }, () => {
+  // nvs_persist restores POWER=on during the composed behaviors' init; the
+  // wake press then turns it off, as a press would.
+  const restore = 'app_driver_param_val_t r = {}; r.b = true; app_driver_set_param(APP_DRIVER_PARAM_POWER, r, APP_DRIVER_SOURCE_RESTORE);'
+  assert.equal(run('g_reset = ESP_RST_DEEPSLEEP; g_causes = BIT(ESP_SLEEP_WAKEUP_EXT1); g_ext1 = 1ULL << 4;', restore), '0 1')
+  assert.equal(run('', restore), '1 0')
+})
+
+test('logic_start slots run from zc_behaviors_start, which app_main calls after app_logic_init', async () => {
+  const gen = await import(join(ROOT, 'engine/dist/generator.js'))
+  const out = gen.genAppLogic([{ block: { id: 'drivers/button', kind: 'driver', slots: {} }, prefix: 'B', cfg: {},
+    slots: { logic_init: '{ init_it(); }', logic_start: '{ start_it(); }' } }])
+  const control = out.parts.find((p) => p.name === 'control.cpp').content
+  assert.match(control, /static void zc_b_start\(void\)\n\{\n    start_it\(\); *\n\}/)
+  assert.match(control, /void control_logic_start\(void\)\n\{\n    zc_b_start\(\);\n\}/)
+  const entry = out.parts.find((p) => p.name === 'zc_behaviors.cpp').content
+  assert.match(entry, /esp_err_t zc_behaviors_start\(void\)\n\{\n    control_logic_start\(\);/)
+  const main = readFileSync(join(ROOT, 'base_firmware/main/app_main.cpp'), 'utf8')
+  assert.ok(main.indexOf('zc_behaviors_start()') > main.indexOf('app_logic_init()'), 'started after the product logic')
+  // without any logic_start, the entry point is still defined (app_main calls it)
+  const none = gen.genAppLogic([]).parts.find((p) => p.name === 'zc_behaviors.cpp').content
+  assert.match(none, /esp_err_t zc_behaviors_start\(void\)\n\{\n    return ESP_OK;/)
 })
