@@ -214,7 +214,7 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
         fam = reacts_family(n)
         if fam not in REACTS_REQUIRED:
             continue
-        if not re.search(r'\bcase\s+[^:]+:', slot_text[n]):
+        if not re.search(r'\bcase\s+[^:]+:|\b(?:param_id|callback_id)\s*==', slot_text[n]):
             continue
         if fam not in reacts:
             err(bid, f'slots/{n} acts on a param change but the block has no reacts.{fam}: '

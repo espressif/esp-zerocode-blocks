@@ -142,7 +142,8 @@ export function collectReactions(rendered: RenderedInstance[], frameworks: reado
       const key = reactsKeyOf(slot)
       if (!key || !reacts[key] || !text.trim()) continue
       if (key !== 'driver' && !frameworks.some((f) => key === f || key.startsWith(`${f}_`))) continue
-      const params = [...new Set([...text.matchAll(/\bcase\s+(APP_DRIVER_PARAM_\w+)\s*:/g)].map((m) => m[1]!))]
+      // A slot dispatches with `case APP_DRIVER_PARAM_X:` or `param_id == APP_DRIVER_PARAM_X`.
+      const params = [...new Set([...text.matchAll(/\bcase\s+(APP_DRIVER_PARAM_\w+)\s*:|\bparam_id\s*==\s*(APP_DRIVER_PARAM_\w+)/g)].map((m) => (m[1] ?? m[2])!))]
       const ctx = { cfg: r.cfg, prefix: r.prefix, prefix_lc: r.prefix.toLowerCase() }
       // Soft: an optional param the product left unset reads as its key name
       // ("volume_param, when set") rather than failing the whole generate.

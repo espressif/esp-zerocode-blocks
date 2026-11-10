@@ -59,3 +59,14 @@ test('a composed BLE remote reports what it already sends', async () => {
     rmSync(dirname(outDir), { recursive: true, force: true })
   }
 })
+
+test('a slot that dispatches with param_id == names its params too', () => {
+  const r = {
+    block: { id: 'device_types/light', reacts: { ble_mesh: 'Publishes {{cfg.power_param}}.' } },
+    prefix: 'L',
+    cfg: { power_param: 'APP_DRIVER_PARAM_POWER' },
+    slots: { ble_mesh_driver_cb_cases: 'if (param_id == APP_DRIVER_PARAM_POWER) {\n    set(val.b);\n}\nif (param_id==APP_DRIVER_PARAM_BRIGHTNESS) { }' },
+  }
+  const out = eng.collectReactions([r], ['ble_mesh'])
+  assert.deepEqual(out.map((x) => x.params), [['APP_DRIVER_PARAM_POWER', 'APP_DRIVER_PARAM_BRIGHTNESS']])
+})

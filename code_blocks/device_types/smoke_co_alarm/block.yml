@@ -33,3 +33,7 @@ facts:
   fixed_class: "Over MQTT its Home Assistant classes are fixed to smoke and carbon_monoxide (Detected/Clear), so it is only for a real smoke or CO alarm; a product's own alert belongs in device_types/generic_binary_sensor with class problem or safety."
 
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.
+
+# What the block does on its dispatch slots (returned by generate() as reactions).
+reacts:
+  zigbee_action: "The hub's answer to the IAS Zone enrollment is logged (accepted or rejected); there is nothing for product code to wire."

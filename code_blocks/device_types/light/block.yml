@@ -51,3 +51,7 @@ driver_params:
 
 facts:
   is_a_light: "Every app shows this as a LIGHT (Matter On/Off Light, Zigbee On/Off Light, RainMaker light bulb). A switched socket, outlet or power strip is device_types/smart_plug, which every app shows as an outlet/plug."
+
+# What the block does on its dispatch slots (returned by generate() as reactions).
+reacts:
+  ble_mesh: "A change of {{cfg.power_param}} is this node's own state: it goes into the Generic OnOff server and is published as a status; product code writes the param and never publishes to the mesh itself."

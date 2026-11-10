@@ -48,3 +48,7 @@ driver_params:
 
 facts:
   matter_users: "Over Matter it is a lock the app can lock and unlock and see the state of; it has no user, PIN, card or schedule features, so a Matter app cannot add, list or remove users, PINs or cards. Codes and cards the product checks itself are managed on the device (its console, a web page or a button), not from the app."
+
+# What the block does on its dispatch slots (returned by generate() as reactions).
+reacts:
+  zigbee_action: "A hub's Lock Door / Unlock Door command writes {{cfg.locked_param}} and confirms LockState to the hub; product code drives the bolt from {{cfg.locked_param}} and never answers the command itself."
