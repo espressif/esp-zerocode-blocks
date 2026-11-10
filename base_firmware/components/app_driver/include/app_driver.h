@@ -177,6 +177,12 @@ typedef bool (*app_driver_guard_fn_t)(app_driver_param_id_t id, app_driver_param
  * One guard per param; register it from app_logic_init(), before anything
  * writes the param.
  *
+ * That lock is held while the guard runs and while the param is applied to
+ * the hardware. Neither may WAIT for another task that writes a guarded param
+ * (a queue it fills, a mutex it holds across app_driver_set_param): that task
+ * waits for the lock, and both stop. Writing a param directly from the guard
+ * or the apply, on the same task, is fine.
+ *
  * @return ESP_OK, ESP_ERR_INVALID_ARG (bad id or NULL fn), ESP_ERR_INVALID_STATE
  *         (the param already has a guard), ESP_ERR_NO_MEM
  */

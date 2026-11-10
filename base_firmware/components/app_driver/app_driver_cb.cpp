@@ -148,7 +148,8 @@ static guard_slot_t s_guards[APP_DRIVER_PARAM_MAX];
 /* One recursive lock for every guarded param: check + commit + apply run under
  * it, so an interlock's own write (made after it changed the state the guard
  * reads) cannot be overtaken by a write checked before. Recursive: a guard or
- * an apply may itself write a guarded param. */
+ * an apply may itself write a guarded param ON ITS OWN TASK; neither may wait
+ * for another task that writes one (it would wait for this lock forever). */
 static SemaphoreHandle_t s_guard_lock = NULL;
 /* The param of the last write a guard refused on THIS task (MAX = none):
  * read by the framework whose handler made the write — see
@@ -166,9 +167,23 @@ bool app_driver_take_refusal(app_driver_param_id_t *id)
 esp_err_t app_driver_set_guard(app_driver_param_id_t id, app_driver_guard_fn_t fn, void *ctx)
 {
     if (id >= APP_DRIVER_PARAM_MAX || fn == NULL) return ESP_ERR_INVALID_ARG;
-    if (s_guard_lock == NULL) {
-        s_guard_lock = xSemaphoreCreateRecursiveMutex();
-        if (s_guard_lock == NULL) return ESP_ERR_NO_MEM;
+    /* Created once, even when two tasks put their first guards on at the
+     * same moment: the loser deletes its own. A guard is published (fn set,
+     * under s_lock) only after the lock exists, so guard_admits() never sees
+     * a guard without it. */
+    portENTER_CRITICAL(&s_lock);
+    bool have_lock = s_guard_lock != NULL;
+    portEXIT_CRITICAL(&s_lock);
+    if (!have_lock) {
+        SemaphoreHandle_t made = xSemaphoreCreateRecursiveMutex();
+        if (made == NULL) return ESP_ERR_NO_MEM;
+        portENTER_CRITICAL(&s_lock);
+        if (s_guard_lock == NULL) {
+            s_guard_lock = made;
+            made = NULL;
+        }
+        portEXIT_CRITICAL(&s_lock);
+        if (made != NULL) vSemaphoreDelete(made);
     }
     portENTER_CRITICAL(&s_lock);
     if (s_guards[id].fn != NULL) {
