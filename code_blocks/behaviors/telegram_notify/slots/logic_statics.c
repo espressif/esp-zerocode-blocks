@@ -238,6 +238,32 @@ static tg_push_t tg_idx_push(tg_index_t *q, int cap, const char *key)
     q->n++;
     return r;
 }
+/* What a sendMessage answer means for the message at the head of the queue.
+ * A refusal about the token or the chat is the owner's to fix (tg-token,
+ * tg-learn), so the message waits for it; any other 4xx refuses THIS message
+ * (too long, malformed) and sending it again can never succeed, so it is
+ * dropped instead of holding every message behind it. A server error is
+ * retried, at most TG_MAX_SERVER_FAILS times in a row. */
+typedef enum {
+    TG_SENT,       /* delivered */
+    TG_RETRY,      /* try again after the backoff (or retry_after) */
+    TG_WAIT_OWNER, /* token or chat refused: wait, the owner fixes it */
+    TG_DROP,       /* this message can never be delivered */
+} tg_verdict_t;
+
+#define TG_MAX_SERVER_FAILS 8
+
+static tg_verdict_t tg_send_verdict(int status, const char *body, int server_fails)
+{
+    if (status == 200) return TG_SENT;
+    if (status == 429) return TG_RETRY;
+    if (status == 401 || status == 403 || status == 404) return TG_WAIT_OWNER;
+    if (status >= 400 && status < 500) {
+        if (body != NULL && (strstr(body, "chat not found") != NULL || strstr(body, "chat_id") != NULL)) return TG_WAIT_OWNER;
+        return TG_DROP;
+    }
+    return server_fails + 1 >= TG_MAX_SERVER_FAILS ? TG_DROP : TG_RETRY;
+}
 /* tg-queue: end */
 
 #define TG_CAP (tg_idx_cap({{prefix}}_TG_MAX_PENDING))
@@ -265,16 +291,6 @@ static void tg_store_load(void)
     bool changed = false;
     if (nvs_get_blob(h, "idx", &s_tg_q, &len) != ESP_OK || len != sizeof(s_tg_q) || !tg_idx_valid(&s_tg_q)) {
         memset(&s_tg_q, 0, sizeof(s_tg_q));
-        /* An earlier version kept a ring: messages head..next-1 in slot
-         * seq % max_pending, none keyed. */
-        uint32_t head = 0, next = 0;
-        if (nvs_get_u32(h, "head", &head) == ESP_OK && nvs_get_u32(h, "next", &next) == ESP_OK) {
-            if (next - head > (uint32_t)TG_CAP) head = next - (uint32_t)TG_CAP;
-            for (uint32_t s = head; s != next; s++) s_tg_q.slot[s_tg_q.n++] = (uint8_t)(s % (uint32_t)TG_CAP);
-            nvs_erase_key(h, "head");
-            nvs_erase_key(h, "next");
-            changed = true;
-        }
     }
     if (tg_idx_trim(&s_tg_q, TG_CAP) > 0) changed = true;
     if (changed) tg_store_save_index(h);
@@ -324,25 +340,30 @@ static void tg_store_push(const char *key, const char *text)
     else if (p.dropped == 2) ESP_LOGW(TAG, "telegram: %d messages waiting - the oldest was dropped", TG_CAP);
 }
 
-/* The oldest message into buf (TELEGRAM_NOTIFY_MAX_TEXT + 1 bytes). */
-static bool tg_store_peek(char *buf)
+/* The oldest message into buf (TELEGRAM_NOTIFY_MAX_TEXT + 1 bytes): 1 read,
+ * 0 its text is unreadable (skip it), -1 storage cannot be opened (wait). */
+static int tg_store_peek(char *buf)
 {
-    if (s_tg_q.n == 0) return false;
+    if (s_tg_q.n == 0) return 0;
     nvs_handle_t h;
-    if (nvs_open(TG_QUEUE_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    if (nvs_open(TG_QUEUE_NS, NVS_READONLY, &h) != ESP_OK) return -1;
     char key[16];
     tg_slot_key(s_tg_q.slot[0], key, sizeof(key));
     size_t n = TELEGRAM_NOTIFY_MAX_TEXT + 1;
     esp_err_t err = nvs_get_str(h, key, buf, &n);
     nvs_close(h);
-    return err == ESP_OK;
+    return err == ESP_OK ? 1 : 0;
 }
 
 static void tg_store_pop(void)
 {
     if (s_tg_q.n == 0) return;
     nvs_handle_t h;
-    if (nvs_open(TG_QUEUE_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_open(TG_QUEUE_NS, NVS_READWRITE, &h) != ESP_OK) {
+        /* Gone from this run's queue; flash catches up on the next write. */
+        tg_idx_remove(&s_tg_q, 0);
+        return;
+    }
     char key[16];
     tg_slot_key(s_tg_q.slot[0], key, sizeof(key));
     tg_idx_remove(&s_tg_q, 0);
@@ -472,8 +493,10 @@ static void tg_note_error(const char *what, const tg_resp_t *r, const char *buf,
     tg_set_last(r->status == 401 ? "the bot token was rejected - set it again with tg-token" : last);
 }
 
-/* 0 sent, > 0 retry after that many seconds, -1 failed. */
-static int tg_send_one(const char *text)
+/* 0 sent, > 0 retry after that many seconds, -1 failed (retry with the
+ * backoff), -2 refused for good (drop it). server_fails: answered failures of
+ * this same message so far. */
+static int tg_send_one(const char *text, int server_fails)
 {
     int64_t chat = 0;
     if (!tg_get_chat(&chat)) return -1;
@@ -496,15 +519,19 @@ static int tg_send_one(const char *text)
         char last[sizeof(s_tg_last)];
         snprintf(last, sizeof(last), "could not reach Telegram (%s)", esp_err_to_name(err));
         tg_set_last(last);
-    } else if (r.status == 200) {
-        rc = 0;
-        xSemaphoreTake(s_tg_lock, portMAX_DELAY);
-        strlcpy(s_tg_last, "last message delivered", sizeof(s_tg_last));
-        xSemaphoreGive(s_tg_lock);
     } else {
-        int retry_after = 0;
-        tg_note_error("send failed", &r, resp, &retry_after);
-        if (r.status == 429 && retry_after > 0) rc = retry_after;
+        tg_verdict_t v = tg_send_verdict(r.status, resp, server_fails);
+        if (v == TG_SENT) {
+            rc = 0;
+            xSemaphoreTake(s_tg_lock, portMAX_DELAY);
+            strlcpy(s_tg_last, "last message delivered", sizeof(s_tg_last));
+            xSemaphoreGive(s_tg_lock);
+        } else {
+            int retry_after = 0;
+            tg_note_error(v == TG_DROP ? "message refused and dropped" : "send failed", &r, resp, &retry_after);
+            if (v == TG_DROP) rc = -2;
+            else if (r.status == 429 && retry_after > 0) rc = retry_after;
+        }
     }
     free(body);
     free(resp);
@@ -709,6 +736,8 @@ static void tg_task(void *arg)
     (void)arg;
     char *text = (char *)malloc(TELEGRAM_NOTIFY_MAX_TEXT + 1);
     uint32_t send_backoff = 0, poll_backoff = 0;
+    int head_fails = 0;  /* failed sends of the message at the head */
+    int head_slot = -1;  /* which message that is */
     int64_t next_send_us = 0, next_poll_us = 0;
     for (;;) {
         char *m = NULL;
@@ -738,16 +767,30 @@ static void tg_task(void *arg)
         bool have_chat = tg_get_chat(&chat);
         int64_t now = esp_timer_get_time();
         if (have_chat && tg_store_count() > 0 && now >= next_send_us && text != NULL) {
-            if (!tg_store_peek(text)) {
-                tg_store_pop();  /* unreadable slot: skip it */
+            int got = tg_store_peek(text);
+            if (got < 0) {
+                /* Storage will not open: wait, rather than spin on it. */
+                ESP_LOGW(TAG, "telegram: message storage unavailable, next try in 5 s");
+                next_send_us = esp_timer_get_time() + 5000000LL;
                 continue;
             }
-            int rc = tg_send_one(text);
-            if (rc == 0) {
+            if (got == 0) {
+                tg_store_pop();  /* unreadable slot: skip it */
+                head_fails = 0;
+                continue;
+            }
+            if (s_tg_q.slot[0] != head_slot) {
+                head_slot = s_tg_q.slot[0];
+                head_fails = 0;
+            }
+            int rc = tg_send_one(text, head_fails);
+            if (rc == 0 || rc == -2) {
                 tg_store_pop();
+                head_fails = 0;
                 send_backoff = 0;
                 next_send_us = 0;
             } else {
+                head_fails++;
                 send_backoff = rc > 0 ? (uint32_t)rc : tg_next_backoff(send_backoff);
                 next_send_us = esp_timer_get_time() + (int64_t)send_backoff * 1000000LL;
                 ESP_LOGW(TAG, "telegram: %u message(s) waiting, next try in %u s",
