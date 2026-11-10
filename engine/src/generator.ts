@@ -245,6 +245,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
 
   await fs.rm(outDir, { recursive: true, force: true })
   await copyTree(paths.baseFirmwareDir, outDir)
+  const features = await detectCatalogFeatures(paths.baseFirmwareDir)
 
   for (const r of frameworkRendered) {
     const blockComponentsDir = path.join(paths.templatesDir, 'code_blocks', r.block.id, 'components')
@@ -280,7 +281,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasMatter) {
     await writeFileMk(
       path.join(outDir, 'components/app_matter/app_matter.cpp'),
-      genAppMatterCpp(rendered),
+      genAppMatterCpp(rendered, features),
     )
     // Written with or without device types: the generated app_matter.cpp
     // needs app_utils, which an older catalog's own CMakeLists lacks.
@@ -299,7 +300,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasRainmaker) {
     await writeFileMk(
       path.join(outDir, 'components/app_rainmaker/app_rainmaker.cpp'),
-      genAppRainmakerCpp(rendered),
+      genAppRainmakerCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -317,7 +318,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasZigbee) {
     await writeFileMk(
       path.join(outDir, 'components/app_zigbee/app_zigbee.cpp'),
-      genAppZigbeeCpp(rendered),
+      genAppZigbeeCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -463,7 +464,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasMqtt) {
     await writeFileMk(
       path.join(outDir, 'components/app_mqtt/app_mqtt.cpp'),
-      genAppMqttCpp(rendered),
+      genAppMqttCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -543,9 +544,18 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   }
   // app_logic's CMakeLists globs every .c/.cpp in its directory, so the
   // per-behavior files (and any file the product adds) need no SRCS edit.
+  // An older base lists its sources instead (SRCS "app_logic.cpp"): the
+  // per-behavior files are added to that list, or they are never compiled.
   // A base without one (minimal test fixtures) gets the same glob.
   const logicCmakePath = path.join(outDir, 'components/app_logic/CMakeLists.txt')
-  if (!(await fileExists(logicCmakePath))) {
+  if (await fileExists(logicCmakePath)) {
+    const listed = /SRCS\s+"app_logic\.cpp"/
+    const logicCmake = await fs.readFile(logicCmakePath, 'utf-8')
+    if (listed.test(logicCmake)) {
+      const srcs = ['app_logic.cpp', ...appLogic.parts.map(p => p.name)].map(s => `"${s}"`).join(' ')
+      await writeFileMk(logicCmakePath, logicCmake.replace(listed, `SRCS ${srcs}`))
+    }
+  } else {
     await writeFileMk(logicCmakePath, `${componentSrcGlob('app_logic_srcs')}${PRODUCT_CMAKE_HOOK}idf_component_register(\n    SRCS \${app_logic_srcs}\n    INCLUDE_DIRS "include"\n    PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer \${PRODUCT_PRIV_REQUIRES}\n)\n`)
   }
 
@@ -1102,6 +1112,45 @@ function spliceLine(text: string, marker: string, replacement: string): string {
   return text.replace(re, () => (replacement === '' ? '' : `${replacement}\n`))
 }
 
+/** What the catalog's base_firmware offers that generated code may call.
+ *  The engine is released before the catalog that goes with it, so a newer
+ *  engine meets an older catalog for a while; each flag is read from the
+ *  catalog's own headers and the generated code falls back without it. */
+export interface CatalogFeatures {
+  /** app_driver.h declares app_driver_take_refusal (param guards). */
+  takeRefusal: boolean
+  /** app_utils.h declares app_utils_factory_reset (hook + whole-NVS erase). */
+  utilsFactoryReset: boolean
+}
+
+export const CURRENT_CATALOG: CatalogFeatures = { takeRefusal: true, utilsFactoryReset: true }
+
+export async function detectCatalogFeatures(baseFirmwareDir: string): Promise<CatalogFeatures> {
+  const read = async (rel: string) => {
+    try { return await fs.readFile(path.join(baseFirmwareDir, rel), 'utf8') } catch { return null }
+  }
+  const driverH = await read('components/app_driver/include/app_driver.h')
+  const utilsH = await read('components/app_utils/include/app_utils.h')
+  return {
+    // A base without the header (a minimal fixture) is taken as current.
+    takeRefusal: driverH === null || /\bapp_driver_take_refusal\s*\(/.test(driverH),
+    utilsFactoryReset: utilsH === null || /\bapp_utils_factory_reset\s*\(/.test(utilsH),
+  }
+}
+
+/** Without param guards nothing is ever refused: a stand-in that says so. */
+function refusalShim(features: CatalogFeatures): string {
+  if (features.takeRefusal) return ''
+  return `
+/* This catalog's app_driver has no param guards, so no write is ever refused. */
+static inline bool app_driver_take_refusal(app_driver_param_id_t *id)
+{
+    (void)id;
+    return false;
+}
+`
+}
+
 // ── generated-file emitters ───────────────────────────────────────────
 
 function collectParamIds(rendered: RenderedInstance[], productParams: Record<string, string> = {}): Array<{ name: string; type: ValueType }> {
@@ -1363,7 +1412,7 @@ ${cases.join('\n')}
   return { statics, eventCases, afterStart }
 }
 
-export function genAppMatterCpp(rendered: RenderedInstance[]): string {
+export function genAppMatterCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // Each endpoint's create block becomes its own static function — isolating
   // its `cfg`/`ep` locals (which would collide across endpoints in one scope)
   // and removing the bare `{ }` block. The body's `return ESP_FAIL` now returns
@@ -1392,15 +1441,13 @@ export function genAppMatterCpp(rendered: RenderedInstance[]): string {
 `    if (event->Type == chip::DeviceLayer::DeviceEventType::kFabricRemoved &&
         chip::Server::GetInstance().GetFabricTable().FabricCount() == 0) {
         ESP_LOGW(TAG, "Last fabric removed — factory reset to out-of-box state");
-        app_utils_factory_reset();
+        ${features.utilsFactoryReset ? 'app_utils_factory_reset();' : 'esp_matter::factory_reset();'}
     }`
   const state = matterStateCode(rendered)
   return `#include "app_matter.h"
 #include "app_driver.h"
 #include "app_config.h"
-
-#include "app_utils.h"
-
+${features.utilsFactoryReset ? '\n#include "app_utils.h"\n' : ''}
 #include <esp_log.h>
 #include <esp_matter.h>
 #include <app/server/Server.h>
@@ -1413,7 +1460,7 @@ using namespace esp_matter;
 using namespace chip::app::Clusters;
 
 static const char *TAG = "app_matter";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 /* "This attribute update is the driver's own echo — do not apply it back."
  * THREAD-LOCAL, because the echo and a controller write run on different
@@ -1531,7 +1578,7 @@ ${state.afterStart}    ESP_LOGI(TAG, "Matter initialized");
 `
 }
 
-function genAppRainmakerCpp(rendered: RenderedInstance[]): string {
+function genAppRainmakerCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // Mirror of genAppMatterCpp: each device-type instance's
   // rainmaker_device_create slot becomes its own static init function
   // (isolating locals), called in sequence from app_rainmaker_init().
@@ -1563,7 +1610,7 @@ function genAppRainmakerCpp(rendered: RenderedInstance[]): string {
 ${collectSlot(rendered, 'rainmaker_includes')}
 
 static const char *TAG = "app_rainmaker";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 
 ${collectSlot(rendered, 'rainmaker_statics')}
@@ -1685,7 +1732,7 @@ ${collectSlot(rendered, 'rainmaker_node_init', 4)}
  *  for one. Emitted only when the framework block declares it (owned_params). */
 const ZIGBEE_JOINED_PARAM = 'APP_DRIVER_PARAM_ZIGBEE_JOINED'
 
-function genAppZigbeeCpp(rendered: RenderedInstance[]): string {
+function genAppZigbeeCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   const joined = rendered.some(r => isFramework(r, 'zigbee') && ZIGBEE_JOINED_PARAM in (r.block.owned_params ?? {}))
   const pub = (v: boolean, pad: string) => joined ? `\n${pad}zc_zigbee_publish_joined(${v});` : ''
   // Mirror of genAppMatterCpp/genAppRainmakerCpp: each device-type instance's
@@ -1721,7 +1768,7 @@ function genAppZigbeeCpp(rendered: RenderedInstance[]): string {
 ${collectSlot(rendered, 'zigbee_includes')}
 
 static const char *TAG = "app_zigbee";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 static volatile bool s_zb_started = false;${joined ? `
 
@@ -3939,7 +3986,7 @@ esp_err_t app_display_init(void)
  * console (mqtt-wifi / mqtt-broker) and persist in NVS. An unconfigured
  * boot idles and logs — it must never block app_main.
  */
-export function genAppMqttCpp(rendered: RenderedInstance[]): string {
+export function genAppMqttCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // SHARED-NETWORK MODE: when a Wi-Fi-owning transport (Matter / RainMaker)
   // is co-selected, app_mqtt must NOT own Wi-Fi — no esp_wifi init, no
   // credentials, no mqtt-wifi console command. It waits for the transport's
@@ -3983,8 +4030,24 @@ export function genAppMqttCpp(rendered: RenderedInstance[]): string {
 #include <mqtt_client.h>
 ${collectSlot(rendered, 'mqtt_includes')}
 
-static const char *TAG = "app_mqtt";
+/* The product API this file defines, declared as app_mqtt.h declares it: an
+ * older app_mqtt.h has none of it, and C linkage must not depend on which. */
+extern "C" {
+typedef void (*app_mqtt_command_cb_t)(const char *object_id, const char *payload, void *ctx);
+typedef void (*app_mqtt_topic_cb_t)(const char *topic, const char *payload, int len, void *ctx);
+esp_err_t app_mqtt_entity_add(const char *component, const char *object_id, const char *name,
+                              const char *extra_json);
+esp_err_t app_mqtt_entity_set_state(const char *object_id, const char *state);
+esp_err_t app_mqtt_entity_on_command(const char *object_id, app_mqtt_command_cb_t cb, void *ctx);
+esp_err_t app_mqtt_set_republish_s(uint32_t seconds);
+void app_mqtt_set_republish_only_on_schedule(bool only);
+esp_err_t app_mqtt_publish(const char *topic, const char *payload, int len, int qos, bool retain);
+esp_err_t app_mqtt_subscribe(const char *filter, int qos, app_mqtt_topic_cb_t cb, void *ctx);
+void app_mqtt_on_connected(void);
+}
 
+static const char *TAG = "app_mqtt";
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 static esp_mqtt_client_handle_t s_client = NULL;
 static volatile bool s_connected = false;
