@@ -69,3 +69,19 @@ int main() {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('the I2C and SPI readers both define rfid_on_card: composing both is refused before the link', async () => {
+  const tpl = join(mkdtempSync(join(tmpdir(), 'zc-gen-')), 'templates')
+  try {
+    execFileSync('python3', [join(ROOT, 'scripts/assemble_blocks.py'),
+      '--out', join(tpl, 'code_blocks'), '--products-out', join(tpl, 'product_configurations')], { stdio: 'ignore' })
+    const blocks = new Map((await eng.listAllBlocks({ templatesDir: tpl, baseFirmwareDir: join(ROOT, 'base_firmware') })).map((b) => [b.id, b.block]))
+    const both = [{ block: 'drivers/rfid_rc522', prefix: 'A' }, { block: 'drivers/rfid_rc522_spi', prefix: 'B' }]
+    assert.deepEqual(eng.duplicateCSymbols(both, blocks), [
+      'drivers/rfid_rc522 (prefix=A) and drivers/rfid_rc522_spi (prefix=B) each define rfid_on_card(), so the product cannot link — compose only one of them',
+    ])
+    assert.deepEqual(eng.duplicateCSymbols([both[0]], blocks), [])
+  } finally {
+    rmSync(dirname(tpl), { recursive: true, force: true })
+  }
+})

@@ -579,6 +579,31 @@ export function missingFrameworks(
   return out
 }
 
+/** Two instances that each define the same C-linkage function (two RFID
+ *  readers both defining rfid_on_card): the product fails to link with a
+ *  duplicate symbol. Read from the slots, so any block's public function is
+ *  covered; one message per function. */
+export function duplicateCSymbols(
+  instances: ReadonlyArray<{ block?: string; prefix?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+): string[] {
+  const owners = new Map<string, string[]>()
+  for (const inst of instances) {
+    const block = inst.block ? blocks.get(inst.block) : undefined
+    if (!block) continue
+    const names = new Set<string>()
+    for (const body of Object.values(block.slots ?? {})) {
+      const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      for (const m of code.matchAll(/extern\s+"C"\s+[A-Za-z_][\w\s*]*?\b([A-Za-z_]\w*)\s*\([^;{)]*\)\s*\{/g)) {
+        if (!m[1]!.includes('{{')) names.add(m[1]!)
+      }
+    }
+    for (const n of names) owners.set(n, [...(owners.get(n) ?? []), `${inst.block}${inst.prefix ? ` (prefix=${inst.prefix})` : ''}`])
+  }
+  return [...owners].filter(([, who]) => who.length > 1)
+    .map(([n, who]) => `${who.join(' and ')} each define ${n}(), so the product cannot link — compose only one of them`)
+}
+
 /** Frameworks that bring up a Wi-Fi station in their own init, before any
  *  behavior's logic_init: a station behavior beside one stands aside. */
 const SYNC_STATION_FRAMEWORKS = ['matter', 'rainmaker', 'mqtt', 'agents']
@@ -953,6 +978,9 @@ export function validateProduct(
     errors.push({ level: 'error', ...ctx, message })
   }
   for (const message of missingFrameworks(product.instances, blocks, product.frameworks ?? [])) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of duplicateCSymbols(product.instances, blocks)) {
     errors.push({ level: 'error', ...ctx, message })
   }
   for (const message of stationConflicts(product.instances, blocks, product.frameworks ?? [])) {
