@@ -36,8 +36,8 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `ble_mesh_onoff_status` | components/app_ble_mesh (only with ble_mesh) | 1× device_types |
 | `ble_mesh_prov_cases` | components/app_ble_mesh (only with ble_mesh) | 2× behaviors |
 | `ble_mesh_statics` | components/app_ble_mesh (only with ble_mesh) | 1× behaviors |
-| `cmake_logic_requires` | see the generator (firmware/services/src/templates/generator.ts) | 1× drivers |
-| `config_defines` | components/app_config (generated header) | 66× drivers · 26× behaviors · 5× peripherals |
+| `cmake_logic_requires` | see the generator (engine/src/generator.ts) | 1× drivers |
+| `config_defines` | components/app_config (generated header) | 69× drivers · 27× behaviors · 5× peripherals |
 | `display_driver_cb_cases` | components/app_display (only with display) | 47× device_types |
 | `display_includes` | components/app_display (only with display) | 6× drivers |
 | `display_node_init` | components/app_display (only with display) | 6× drivers |
@@ -45,14 +45,15 @@ board manager replaces. See CLAUDE.md → Boards (`board.yaml` + `bmgr:`).
 | `display_widget_create` | components/app_display (only with display) | 47× device_types |
 | `driver_apply_cases` | components/app_driver | 23× drivers |
 | `driver_boot_state` | components/app_driver | 8× drivers |
-| `driver_includes` | components/app_driver | 41× drivers · 7× peripherals |
-| `driver_init` | components/app_driver | 41× drivers · 7× peripherals |
-| `driver_statics` | components/app_driver | 32× drivers · 3× peripherals |
+| `driver_includes` | components/app_driver | 42× drivers · 7× peripherals |
+| `driver_init` | components/app_driver | 42× drivers · 7× peripherals |
+| `driver_statics` | components/app_driver | 33× drivers · 3× peripherals |
 | `espnow_driver_cb_cases` | components/app_espnow (only with espnow) | 2× device_types |
 | `espnow_recv_cases` | components/app_espnow (only with espnow) | 3× device_types |
-| `logic_includes` | components/app_logic | 32× behaviors · 31× drivers |
-| `logic_init` | components/app_logic | 37× behaviors · 31× drivers |
-| `logic_statics` | components/app_logic | 32× behaviors · 31× drivers |
+| `logic_includes` | components/app_logic | 33× behaviors · 33× drivers |
+| `logic_init` | components/app_logic | 38× behaviors · 33× drivers |
+| `logic_start` | components/app_logic | 1× drivers |
+| `logic_statics` | components/app_logic | 33× behaviors · 33× drivers |
 | `main_includes` | main/app_main.cpp | 16× frameworks |
 | `main_init` | main/app_main.cpp | 16× frameworks |
 | `matter_attr_cb_cases` | components/app_matter (rendered only when frameworks includes matter) | 29× device_types |
