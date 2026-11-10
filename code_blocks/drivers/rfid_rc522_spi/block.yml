@@ -2,8 +2,8 @@ description: "MFRC522 / RC522 13.56 MHz RFID card reader (MIFARE, NTAG, key fobs
 
 # The protocol — the anticollision cascade for 7- and 10-byte UIDs, I2C vs
 # SPI register framing, the reader's RX/TX framing bits — is the library's,
-# not the product's: hand-written, it was wrong in three runs out of four (a
-# 7-byte card read as 3 bytes, SPI framing sent over I2C, no card ever seen).
+# not the product's: each is easy to get wrong by hand (a 7-byte card read as
+# 3 bytes, SPI framing sent over I2C, no card ever seen).
 #
 # Attaches to the bus a peripherals/spi_bus already initialised on spi_host,
 # with its own chip select. The library polls the reader on its
