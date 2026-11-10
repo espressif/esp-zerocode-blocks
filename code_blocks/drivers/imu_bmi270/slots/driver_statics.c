@@ -39,6 +39,7 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
  * shape every other sensor block here uses, so they all share one bus. */
 
 static bool s_{{prefix_lc}}_present = false;
+static bool s_{{prefix_lc}}_range_warned = false;
 static bool s_{{prefix_lc}}_motion = false;
 static int64_t s_{{prefix_lc}}_last_move_ms = 0;
 
@@ -99,9 +100,14 @@ static bool {{prefix_lc}}_bring_up(void)
        did not land would read as motion forever. */
     uint8_t range = 0xFF;
     if ({{prefix_lc}}_rd({{prefix}}_IMU_REG_ACC_RANGE, &range, 1) != ESP_OK || (range & 0x03) != 0x00) {
-        ESP_LOGW(TAG, "{{prefix_lc}}: BMI270 ACC_RANGE reads 0x%02x, not +/-2 g — will retry", range);
+        /* Once until it succeeds: the poll retries this every period. */
+        if (!s_{{prefix_lc}}_range_warned) {
+            ESP_LOGW(TAG, "{{prefix_lc}}: BMI270 ACC_RANGE reads 0x%02x, not +/-2 g — will retry", range);
+            s_{{prefix_lc}}_range_warned = true;
+        }
         return false;
     }
+    s_{{prefix_lc}}_range_warned = false;
     return true;
 }
 

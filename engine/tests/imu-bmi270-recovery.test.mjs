@@ -31,7 +31,8 @@ typedef int esp_err_t;
 #define ESP_OK 0
 #define ESP_FAIL -1
 #define ESP_LOGE(tag, ...) ((void)(tag))
-#define ESP_LOGW(tag, ...) ((void)(tag))
+static int g_warns = 0;
+#define ESP_LOGW(tag, ...) ((void)(tag), g_warns++)
 #define ESP_LOGI(tag, ...) ((void)(tag))
 static const char *TAG = "t";
 static const char *esp_err_to_name(esp_err_t) { return "e"; }
@@ -50,7 +51,8 @@ static esp_err_t i2c_master_bus_add_device(i2c_master_bus_handle_t, const i2c_de
 static bool g_powered = false;
 static uint8_t g_reg[256];
 static void power_cycle(bool on) { g_powered = on; for (int i = 0; i < 256; i++) g_reg[i] = 0; g_reg[0x41] = 0x02; /* reset: +/-8 g */ }
-static esp_err_t i2c_master_transmit(i2c_master_dev_handle_t, const uint8_t *b, size_t n, int) { if (!g_powered) return ESP_FAIL; if (n == 2) g_reg[b[0]] = b[1]; return ESP_OK; }
+static bool g_range_stuck = false;
+static esp_err_t i2c_master_transmit(i2c_master_dev_handle_t, const uint8_t *b, size_t n, int) { if (!g_powered) return ESP_FAIL; if (n == 2 && !(g_range_stuck && b[0] == 0x41)) g_reg[b[0]] = b[1]; return ESP_OK; }
 static esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t, const uint8_t *w, size_t, uint8_t *r, size_t n, int)
 {
     if (!g_powered) return ESP_FAIL;
@@ -80,6 +82,9 @@ int main()
     polls(2);                        /* steady */
     power_cycle(false); polls(3);    /* gone: back to probing */
     power_cycle(true); polls(1);     /* back, unconfigured: configured again */
+    /* A part whose range write never lands: retried every poll, warned once. */
+    g_warns = 0; g_range_stuck = true; power_cycle(false); polls(3); power_cycle(true); polls(5);
+    out += "w" + std::to_string(g_warns);
     printf("%s\n", out.c_str());
     return 0;
 }
@@ -90,7 +95,7 @@ test('imu_bmi270: absent at boot is picked up later; a power-cycled part is conf
   try {
     writeFileSync(join(dir, 'main.cpp'), HARNESS(fill('config_defines.h'), fill('driver_statics.c'), fill('driver_init.c')))
     execFileSync(CXX, ['-std=c++20', '-Wno-unused-function', '-o', join(dir, 'a.out'), join(dir, 'main.cpp')], { stdio: 'pipe' })
-    assert.equal(execFileSync(join(dir, 'a.out'), { encoding: 'utf8' }).trim(), '0- 1c 1c 0- 1c')
+    assert.equal(execFileSync(join(dir, 'a.out'), { encoding: 'utf8' }).trim(), '0- 1c 1c 0- 1c 0- 0- w3')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
