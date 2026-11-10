@@ -265,7 +265,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
 
   await writeFileMk(
     path.join(outDir, 'components/app_driver/include/app_driver_types.h'),
-    genAppDriverTypesH(rendered),
+    genAppDriverTypesH(rendered, input.product.params ?? {}),
   )
   await writeFileMk(
     path.join(outDir, 'components/app_config/include/app_config.h'),
@@ -372,7 +372,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasEspnow) {
     await writeFileMk(
       path.join(outDir, 'components/app_espnow/app_espnow.cpp'),
-      genAppEspnowCpp(rendered),
+      genAppEspnowCpp(rendered, input.product.params ?? {}),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -1104,7 +1104,7 @@ function spliceLine(text: string, marker: string, replacement: string): string {
 
 // ── generated-file emitters ───────────────────────────────────────────
 
-function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; type: ValueType }> {
+function collectParamIds(rendered: RenderedInstance[], productParams: Record<string, string> = {}): Array<{ name: string; type: ValueType }> {
   const map = new Map<string, ValueType>()
   for (const r of rendered) {
     for (const [paramName, valType] of Object.entries(r.block.owned_params ?? {})) {
@@ -1141,6 +1141,21 @@ function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; ty
       map.set(paramName, valType)
     }
   }
+  // The product's own params (template.yaml `params:`): checked like a block's.
+  for (const [paramName, declared] of Object.entries(productParams)) {
+    if (!/^APP_DRIVER_PARAM_[A-Z0-9_]+$/.test(paramName)) {
+      throw new Error(`product params: '${paramName}' is not a param name (APP_DRIVER_PARAM_<NAME>, upper case)`)
+    }
+    const valType = String(declared) as ValueType
+    if (!(valType in VALUE_TYPE_TO_UNION_MEMBER)) {
+      throw new Error(`product params: ${paramName} has type '${declared}' (expected one of ${Object.keys(VALUE_TYPE_TO_UNION_MEMBER).join(', ')})`)
+    }
+    const prev = map.get(paramName)
+    if (prev && prev !== valType) {
+      throw new Error(`param ${paramName}: the product declares ${valType}, a block declares it ${prev}`)
+    }
+    map.set(paramName, valType)
+  }
   return [...map.entries()].map(([name, type]) => ({ name, type }))
 }
 
@@ -1161,8 +1176,8 @@ export function solutionRegistrySize(rendered: RenderedInstance[]): number {
   return Math.max(8, registrants + 4)
 }
 
-function genAppDriverTypesH(rendered: RenderedInstance[]): string {
-  const params = collectParamIds(rendered)
+function genAppDriverTypesH(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
+  const params = collectParamIds(rendered, productParams)
   const enumLines = [
     '    APP_DRIVER_PARAM_NONE = 0,  /* sentinel */',
     ...params.map(p =>
@@ -3037,9 +3052,9 @@ const ESPNOW_WIRE_TYPE: Record<ValueType, number> = { bool: 0, u8: 1, i16: 2, u1
  * sent by one board and dropped by the other. Framework-owned params
  * (owned_params: Matter's commissioned state) never come from a peer.
  */
-function espnowRecvFallback(rendered: RenderedInstance[]): string {
+function espnowRecvFallback(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
   const owned = new Set(rendered.flatMap(r => Object.keys(r.block.owned_params ?? {})))
-  const params = collectParamIds(rendered).filter(p => !owned.has(p.name))
+  const params = collectParamIds(rendered, productParams).filter(p => !owned.has(p.name))
   if (params.length === 0) return ''
   const rows = params.map(p => `        { "${p.name}", ${p.name}, ${ESPNOW_WIRE_TYPE[p.type]} },`).join('\n')
   const member = (t: number) => ({ 0: 'v.b = (msg.value != 0)', 1: 'v.u8 = (uint8_t)msg.value', 2: 'v.i16 = (int16_t)msg.value', 3: 'v.u16 = (uint16_t)msg.value', 4: 'v.u32 = msg.value' } as Record<number, string>)[t]
@@ -3062,7 +3077,7 @@ ${rows}
     }`
 }
 
-function genAppEspnowCpp(rendered: RenderedInstance[]): string {
+function genAppEspnowCpp(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
   return `#include "app_espnow.h"
 #include "app_driver.h"
 #include "app_config.h"
@@ -3361,7 +3376,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     uint32_t hash = msg.name_hash;
     (void)hash;
 ${collectSlot(rendered, 'espnow_recv_cases', 4)}
-${espnowRecvFallback(rendered)}
+${espnowRecvFallback(rendered, productParams)}
 }
 
 /* Hardware/param bus -> broadcasts. Broadcaster device types own the cases. */

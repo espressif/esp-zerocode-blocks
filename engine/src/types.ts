@@ -358,6 +358,10 @@ export interface Product {
   sdkconfig_fragments?: string[]
   extra_sdkconfig?: Record<string, string>
   product_metadata?: { vendor_name?: string; product_name?: string }
+  /** The product's own params, name → value type (`APP_DRIVER_PARAM_SETPOINT_F: i16`):
+   *  state the product's code keeps on the bus with no block declaring it. They
+   *  join the param enum like any block's, so nobody redefines it by hand. */
+  params?: Record<string, string>
 }
 
 /* ── the board: a property of an INSTANCE, never of the catalog ───────────
