@@ -33,6 +33,7 @@ test('cycle_done_detector: the tick never writes flash; the poll task writes the
 #include <cstdio>
 #include <cstring>
 #define ESP_LOGI(tag, ...) ((void)(tag))
+#define ESP_LOGE(tag, ...) ((void)(tag))
 #define ESP_LOGW(tag, ...) ((void)(tag))
 #define ESP_ERROR_CHECK(x) ((void)(x))
 esp_err_t app_driver_apply_param(app_driver_param_id_t, app_driver_param_val_t) { return ESP_OK; }

@@ -29,6 +29,7 @@ test('nvs_persist_u16: a burst of changes is one write of the last value, off th
 #include "freertos/portmacro.h"
 #include <cstdio>
 #define ESP_LOGI(tag, ...) ((void)(tag))
+#define ESP_LOGE(tag, ...) ((void)(tag))
 esp_err_t app_driver_apply_param(app_driver_param_id_t, app_driver_param_val_t) { return ESP_OK; }
 static const char *TAG = "t";
 typedef uint32_t nvs_handle_t;

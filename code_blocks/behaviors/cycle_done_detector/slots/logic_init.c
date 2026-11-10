@@ -1,5 +1,7 @@
 {
-    (void)app_driver_poll_every(&{{prefix_lc}}_cyc_write, NULL, 1000);
+    if (app_driver_poll_every(&{{prefix_lc}}_cyc_write, NULL, 1000) != ESP_OK) {
+        ESP_LOGE(TAG, "{{prefix_lc}}: no room for its poll - a running cycle is not saved across a restart");
+    }
     bool {{prefix_lc}}_was_running = false;
     nvs_handle_t {{prefix_lc}}_h;
     if (nvs_open({{prefix}}_CYC_NVS_NS, NVS_READONLY, &{{prefix_lc}}_h) == ESP_OK) {
