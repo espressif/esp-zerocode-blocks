@@ -39,6 +39,7 @@ owned_params:
 # What the framework gives the owner and cannot do, in words a spec can
 # promise. Copied into every product's seed.
 facts:
+  level_with_on_off: "On a dimmable or colour light, every On and Off from a Matter app also moves the brightness: an On sets it to the minimum and fades to the stored level, an Off fades to the minimum and then puts the stored level back. Product code listening to brightness sees those writes, so it must not read a brightness change as the owner dimming while the light is turning on or off."
   repeat_on_off: "A Matter On sent to a device that is already on, or Off to one already off, is answered by the On/Off cluster itself and never reaches the product, so nothing the product does can react to it (restarting a timer, entering a mode); a spec cannot promise \"press On again to …\" over Matter — a toggle, a different command or a local button can carry that instead."
   pairing: "The device is added over Bluetooth from any Matter app, and the app gives it the home's Wi-Fi (or Thread) network during setup, so nothing about the network is set on the device itself."
   setup_code: "Every device uses the same development setup code (passcode 20202021, discriminator 3840): the device never prints it, the studio's flash page shows it, and Matter apps warn that it is an uncertified test device."

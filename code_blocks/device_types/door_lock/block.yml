@@ -45,3 +45,6 @@ driver_params:
 # window or from a TV, and MultiNet has no notion of who is speaking. Locking
 # on a false positive is a nuisance; unlocking on one is a break-in. Unlock
 # stays on the authenticated paths (Matter/RainMaker client, physical keypad).
+
+facts:
+  matter_users: "Over Matter it is a lock the app can lock and unlock and see the state of; it has no user, PIN, card or schedule features, so a Matter app cannot add, list or remove users, PINs or cards. Codes and cards the product checks itself are managed on the device (its console, a web page or a button), not from the app."
