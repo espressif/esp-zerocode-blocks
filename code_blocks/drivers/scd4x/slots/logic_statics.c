@@ -88,7 +88,7 @@ static void {{prefix_lc}}_scd_poll_cb(void *arg)
     /* read_measurement needs 1 ms before the data can be read. Not
        vTaskDelay(pdMS_TO_TICKS(2)): that rounds DOWN to 0 ticks at the default
        100 Hz, so it never waited. A 1 ms busy-wait rather than a whole tick,
-       because this runs on the shared esp_timer task. */
+       because the bus poll task this runs on serves every other poll too. */
     esp_rom_delay_us(1000);
     uint8_t buf[9] = {0};
     if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) { {{prefix_lc}}_scd_failed("read"); return; }
