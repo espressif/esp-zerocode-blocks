@@ -50,8 +50,10 @@ static volatile uint8_t s_{{prefix_lc}}_state = 0;
 static int s_{{prefix_lc}}_rem = 0;
 static portMUX_TYPE s_{{prefix_lc}}_mux = portMUX_INITIALIZER_UNLOCKED;
 
-/* Index: (previous AB << 2) | current AB. +1 = A leads B, -1 = B leads A. */
-static const int8_t s_{{prefix_lc}}_qdec[16] = {
+/* Index: (previous AB << 2) | current AB. +1 = A leads B, -1 = B leads A.
+ * DRAM_ATTR: read by the IRAM ISR, which may run while the flash cache is
+ * off, where a const table left in flash cannot be read. */
+static const DRAM_ATTR int8_t s_{{prefix_lc}}_qdec[16] = {
      0, -1,  1,  0,
      1,  0,  0, -1,
     -1,  0,  0,  1,

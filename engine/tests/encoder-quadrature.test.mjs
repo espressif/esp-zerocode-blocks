@@ -30,6 +30,7 @@ const HARNESS = (seq) => `
 #include <stdio.h>
 #include <stdbool.h>
 #define IRAM_ATTR
+#define DRAM_ATTR
 typedef int portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portENTER_CRITICAL_ISR(m) (void)(m)
@@ -91,4 +92,8 @@ test('contact bounce on one channel cancels out', () => {
 
 test('a detent split across two polls is carried, not dropped', () => {
   assert.equal(run('0100|1011'), 1)
+})
+
+test('the decode table the IRAM ISR reads is in DRAM', () => {
+  assert.match(readFileSync(SLOT, 'utf8'), /static const DRAM_ATTR int8_t s_\{\{prefix_lc\}\}_qdec\[16\]/)
 })
