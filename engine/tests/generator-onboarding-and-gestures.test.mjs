@@ -121,8 +121,8 @@ test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its ident
   assert.match(read('components/app_aws_iot/CMakeLists.txt'), /"zc_aws_config\.cpp"/)
   // The last will: a {thing} template substituted at EACH connect and passed
   // to MQTT_Connect; plus the
-  // retained publish its "online" counterpart needs. Three of three writers
-  // that reached it hand-added a will to this component before it existed.
+  // retained publish its "online" counterpart needs (before it existed, a
+  // product hand-added a will to this component).
   assert.match(header, /esp_err_t app_aws_iot_set_will\(const char \*topic, const char \*payload, uint8_t qos, bool retain\);/)
   assert.match(header, /esp_err_t app_aws_iot_publish_retained\(/)
   const agent = read('components/app_aws_iot/zc_aws_agent.cpp')

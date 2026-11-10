@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // A command a param guard refuses must not be shown as done: a RainMaker case
-// writes the param and then echoes the commanded value to the app (the pool
-// pump's tile said ON while the E-stop held it off), MQTT publishes the
+// writes the param and then echoes the commanded value to the app (a pump's
+// tile would say ON while its E-stop holds it off), MQTT publishes the
 // commanded state. Each framework handler therefore re-reports the real value
 // AFTER its cases; Zigbee does it with its resync source, so a remote's
 // command is never replayed; Matter rejects the write in PRE_UPDATE.

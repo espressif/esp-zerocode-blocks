@@ -140,15 +140,15 @@ in a device log.
 
 Because `set_param` dedups, a sensor reading the same value every poll is
 indistinguishable, by notifications, from one that stopped. Product code must
-never infer staleness from value changes (a steady 12.0 °C read as "stale" after
-15 s stopped a heater answering its target). Two signals exist: the driver's
+never infer staleness from value changes (a steady 12.0 °C read as "stale"
+after 15 s would stop a heater from answering its target). Two signals exist: the driver's
 `status_param` (ds18b20, aht21, dht22, bh1750, hcsr04 — true after a good read,
 false after a failed one), and `app_driver_param_written_us(id)` — the
 `esp_timer` time of the param's last write, unchanged writes and events
 included, 0 if never written. Each sensor driver says so in its `facts:`, and
 `base_firmware/facts.yml` carries the rule for every product.
 
-### Listeners run on the writer's task — decisions go through one task
+### Listeners run on the writing task — decisions go through one task
 
 `set_param` calls listeners outside the bus lock, on whichever task wrote: a
 sensor poll, the esp_timer task, MQTT, the web server, the console, Matter,
@@ -170,7 +170,7 @@ before it); one made while it runs — from inside it, or from its own write's
 listeners — runs again after it, never nested. Nothing is held while a decision
 runs, so it may write params whose listeners take any stack lock. More than
 `APP_DRIVER_SERIAL_SLOTS` (16) distinct waiting requests return
-`ESP_ERR_NO_MEM`. Tested with two writer threads, re-entry and merging in
+`ESP_ERR_NO_MEM`. Tested with two writing threads, re-entry and merging in
 `base_firmware/components/app_driver/test/test_run_serialized.cpp`.
 
 ### A late listener is handed the current values
@@ -290,7 +290,7 @@ Beyond slots, a block can also contribute:
 | `owned_params` | Params the block itself writes under a fixed name, no cfg behind them: `APP_DRIVER_PARAM_<NAME>: <type>`. Every product composing the block gets them in its param enum. `frameworks/matter` publishes `APP_DRIVER_PARAM_MATTER_COMMISSIONED` (on any fabric, from the fabric table at boot and on each fabric event) and `APP_DRIVER_PARAM_MATTER_PAIRING_OPEN` (advertising for pairing); the generator emits each write only for a name the block declares. |
 | `provides_bus` / `requires_bus` | Which shared bus this block configures, or only talks on — see **Shared buses** |
 | `bmgr` | esp-board-manager mapping, read only when a board file is supplied — see **Boards** |
-| `onboarding` | A framework, or a behavior that brings up the network (`behaviors/wifi_station`): what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. The platform copies a framework's verbatim into every product's details seed, so the spec names it instead of inventing a flow (before it existed, specs asked for "the device asks for…" and writers built 430-500 line wizards the framework already had). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is DATA the platform reads, so a framework's onboarding changes here, with no platform release. |
+| `onboarding` | A framework, or a behavior that brings up the network (`behaviors/wifi_station`): what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. A consumer of the catalog can show it beside a product's description, so a spec names the flow the framework already has instead of asking for a new one (a setup wizard the framework already ships). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is data in the catalog, so a framework's onboarding changes here, with no engine release. |
 | `facts` | Any block: what it gives the owner and cannot do, as `key: "one sentence"` (snake_case keys, 400 characters at most — `check.py`). A framework's are copied into every product's seed; any block's ride its `get_template` answer, so a spec states them instead of guessing (a sleeping sensor's battery life, a framework's offline behaviour). |
 | `device_data` | Any block: the per-device values its firmware reads from the `fctry` NVS partition — `{ namespace, keys: [{ key, type: data\|file, encoding, default?, label?, required? }] }` (`engine/src/device-data.ts`). A declaration, never a value: `default` is only a non-secret pre-fill and a `file` key has none. The generator merges every block's keys, then the product's own (`generate()`'s `deviceData` input — the platform passes the keys its spec declares, under the namespace `zc_app`, which no block may use), into `device_data.csv` at the tree root: an `nvs_partition_gen` CSV with blank values, written only when there are keys. The platform builds its flash form from it and writes the entered values to `fctry` in the browser. Two blocks may share a key only by declaring it identically — anything else fails validation. |
 | `needs_internet` / `provides_internet` | A block that talks to an internet service and brings no network (`behaviors/telegram_notify`) says `needs_internet: true`; a block or framework that brings up a station says `provides_internet: true` (`behaviors/wifi_station`, matter, rainmaker, mqtt, agents, aws_iot). The validator refuses a product with a needer and no provider, and warns on a provider behavior beside a framework that brings up its station in its own init (matter, rainmaker, mqtt, agents: it stands aside at run time). It refuses a provider behavior beside aws_iot alone (aws_iot defers to a station already up, so its own network setup would configure nothing), beside espnow, and beside webui alone (its own access point). `generate()` refuses a needer on a chip with Thread and no Wi-Fi (esp32h2). |

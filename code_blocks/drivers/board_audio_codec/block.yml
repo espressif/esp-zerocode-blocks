@@ -12,9 +12,8 @@ description: >-
 # pins, the codec over I2C, the amplifier GPIO. On a board product every one of
 # those resources already belongs to the board (its `i2s_audio_out`,
 # `i2c_master` and `gpio_pa_control` peripherals), so composing it there is an
-# IO conflict — so writers hand-wrote esp_codec_dev code instead (one product
-# spent ~100 turns on SDK lookups; another ran silent after a board revision
-# moved a pin).
+# IO conflict — and hand-written esp_codec_dev code instead is long to get
+# right and goes silent when a board revision moves a pin.
 #
 # esp_board_manager_init() already creates the codec device — data interface,
 # control interface, the amplifier — and hands the opened esp_codec_dev handle

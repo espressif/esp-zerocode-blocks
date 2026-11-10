@@ -3,12 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Internal types for the template/block system. Mirrors the YAML shapes
- * under firmware/templates/{code_blocks,product_configurations}.
- *
- * The agent-facing types live in `@esp-zerocode-ai/ai` (TemplateSummary,
- * ProductConfigurationDetail, CodeBlockDetail). These are the structural
- * counterparts used during loading + generation.
+ * Types for the template/block system: the YAML shapes under
+ * code_blocks/ and product_configurations/, as used during loading and
+ * generation.
  */
 
 export type ValueType = 'bool' | 'u8' | 'i16' | 'u16' | 'u32'
@@ -56,8 +53,7 @@ export const DIR_TO_BLOCK_KIND: Record<string, BlockKind> = Object.fromEntries(
  *  outside them is NOT handed to the board manager — it keeps the block's own
  *  init, exactly as on a board-less product, and `reason` is reported
  *  verbatim in `GenerateResult.warnings`. (It used to fail the whole
- *  generation; writers answered that by resending the same yaml and then
- *  hand-wiring the part.) The mapping hands a physical line to code the block
+ *  generation, which pushed products toward hand-wiring the part.) The mapping hands a physical line to code the block
  *  author did not write, and the failure mode of getting it wrong is hardware
  *  doing something at boot (see the active-low note on drivers/relay) — so the
  *  block's own init is the safe side to fall to, but never silently: a mapping
@@ -466,6 +462,6 @@ export interface RenderedInstance {
   /** Set when the instance has a bmgr mapping but one of its `bmgr.requires`
    *  guards failed: the board manager does NOT take it over — it keeps its own
    *  init (the shape the guard exists to protect) and the generator reports
-   *  this in `warnings`. The text is the guard's reason, for the writer. */
+   *  this in `warnings`. The text is the guard's reason, for the product's author. */
   bmgrFallback?: string
 }

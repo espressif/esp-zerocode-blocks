@@ -33,7 +33,7 @@ errors: list[str] = []
 
 
 # Slot families whose dispatch SENDS something off the device or DRIVES an
-# output — the ones a writer would otherwise wire a second time. Reporting
+# output — the ones product code would otherwise wire a second time. Reporting
 # families (mqtt/matter/zigbee state, display widgets) are not listed.
 REACTS_REQUIRED = {'driver', 'ble_hid', 'espnow', 'ble_mesh', 'zigbee_action'}
 
@@ -203,7 +203,7 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
 
     # ── A SLOT THAT SENDS OR DRIVES ON A PARAM CHANGE SAYS WHAT IT DOES. ──
     # `reacts.<family>` is one sentence (cfg placeholders allowed) that
-    # apply_template hands the writer with the params the slot dispatches on.
+    # generate() returns with the params the slot dispatches on.
     # Without it, product code wires the same input a second time and the
     # action happens twice.
     reacts = d.get('reacts') or {}
@@ -219,7 +219,7 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
         if fam not in reacts:
             err(bid, f'slots/{n} acts on a param change but the block has no reacts.{fam}: '
                      f'say in one sentence what it sends or drives (cfg placeholders allowed) — '
-                     f'apply_template hands it to the writer so the input is not wired twice.')
+                     f'generate() returns it with the params, so product code does not wire the input twice.')
     for fam in reacts:
         if not any(reacts_family(n) == fam for n in slot_names):
             err(bid, f'reacts.{fam} names no slot of this block')
@@ -356,8 +356,8 @@ INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include', 'frameworks'}
 # and no build or gate notices: seven catalog products shipped
 # drivers/i2c_temp_humidity as their only temperature/humidity source. A
 # real-sensor block (sht4x, sht3x, aht21, ds18b20) behind peripherals/i2c_bus
-# is the replacement. The block itself stays — a writer may still use it as a
-# scaffold — but a catalog product may not.
+# is the replacement. The block itself stays — product code may still use it
+# as a scaffold — but a catalog product may not.
 NOT_IN_PRODUCTS = {
     'drivers/i2c_temp_humidity': 'peripherals/i2c_bus + drivers/sht4x (or sht3x / aht21)',
 }
@@ -449,13 +449,12 @@ if not build_chips:
 for bid, tgt in sorted(block_targets.items()):
     if tgt not in build_chips:
         err(bid, f'target "{tgt}" is not a supported chip (chips.txt)')
-# FETCH SOURCES: a block may only fetch from the origins the platform's clone
-# allowlist names (esp-zerocode-ai shared/src/security/idf-manifest.ts). The
-# host enforces that on idf_component.yml `git:` entries and on the agent's
-# git_clone tool; a `git ...` inside a block's CMakeLists.txt is the one path
-# neither sees, so it is checked here. Prefer a baked checkout over a fetch at
-# all (esp-zerocode-ai infra/preload-repos.json) — a cloud build should open no
-# socket — but a fallback fetch for local builds must still stay on the list.
+# FETCH SOURCES: a block may only fetch from the origins listed below, the
+# same allowlist a hosted build enforces on idf_component.yml `git:` entries;
+# a `git ...` inside a block's CMakeLists.txt is the one path that check does
+# not see, so it is checked here. Prefer a checkout baked into the build image
+# over a fetch at all — a hosted build should open no socket — but a fallback
+# fetch for local builds must still stay on the list.
 FETCH_ALLOWLIST = (
     'https://github.com/espressif/',
     'https://github.com/espressif-components/',
@@ -512,8 +511,7 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
 
 # ONBOARDING: what a block (a framework, or a behavior that brings up the
 # network) says its firmware already ships for first-run onboarding is read by
-# the platform as fact (a framework's is copied into every product's seed), so
-# the spec and the writer take it as fact. A command listed there that nothing registers
+# consumers of the catalog as fact (a spec names it). A command listed there that nothing registers
 # is a spec the firmware cannot meet — so each listed command name must appear
 # as a registered string literal in the block's own sources or in the engine
 # (frameworks like mqtt and agents are generated there).

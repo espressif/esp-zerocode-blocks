@@ -37,9 +37,8 @@ radio: true
 #
 # esp_now ships with ESP-IDF: no managed components. Every Wi-Fi chip.
 
-# What the firmware already ships for pairing. The platform copies this into
-# every espnow product's seed, so the spec names these commands instead of
-# describing a pairing flow the writer would then build again.
+# What the firmware already ships for pairing, so a spec names these commands
+# instead of describing a pairing flow that would then be built again.
 onboarding:
   console:
     commands:

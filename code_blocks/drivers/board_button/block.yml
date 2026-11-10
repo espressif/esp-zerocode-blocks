@@ -162,9 +162,8 @@ driver_params:
 # block (multi_event_button, factory_reset_long_press) is — correctly — an IO
 # conflict on a board's own pin. So a product wanting "double press cycles the
 # pattern, hold to reset" on a devkit's BOOT button had no block at all, and
-# its writer learned iot_button from source instead (108 lookups across six
-# runs of one product). What a gesture DOES is the product's; how to detect it
-# on the board's device is this block's.
+# had to drive iot_button by hand. What a gesture DOES is the product's; how to
+# detect it on the board's device is this block's.
 
 facts:
   every_press: "Something that should happen on EVERY press — a ring, a count — is press_param: it fires once per press as the button goes down, so a quick second press or a hold is never lost; the single-click hook alone misses both, because a second quick press is reported as a double click and a hold as a long press."

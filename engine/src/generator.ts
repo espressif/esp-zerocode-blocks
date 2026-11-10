@@ -103,8 +103,8 @@ export interface GenerateResult {
   deviceData: DeviceDataRow[]
   /** Non-fatal, and meant to be read: an instance a `bmgr.requires` guard kept
    *  out of the board manager (it generated with its own init instead).
-   *  Present only when there is one — this object is the apply_template
-   *  result the writer reads, and an empty list on every product is noise. */
+   *  Present only when there is one — whoever composed the product reads
+   *  this result, and an empty list on every product is noise. */
   warnings?: string[]
   /** What composed blocks already DO when a param changes — each declared
    *  `reacts:` sentence with the params its slot dispatches on. Present only
@@ -171,9 +171,9 @@ function targetMatches(block: { target?: string }, chip: string): boolean {
 export async function generate(paths: GeneratorPaths, input: GenerateInput): Promise<GenerateResult> {
   const { outDir } = input
   // A table named by its path (`partition-tables/2mb`, `.../2mb/partitions.csv`)
-  // means the bundled table of that name: writers reach for the path they see
-  // in the tree, and resolving it a second time under partition-tables/ made
-  // every such product fail on a table that exists.
+  // means the bundled table of that name: the path is what a product's author
+  // sees in the tree, and resolving it a second time under partition-tables/
+  // made every such product fail on a table that exists.
   const asGiven = input.product.partition_table
     ? { ...input.product, partition_table: normalizePartitionTableName(input.product.partition_table) }
     : { ...input.product }
@@ -943,9 +943,8 @@ async function renderInstances(
     // A `bmgr.requires` guard that fails keeps the instance OUT of the board
     // manager: it generates exactly as it does on a board-less product, with
     // its own init, and the miss is reported in GenerateResult.warnings. It
-    // used to refuse the whole composition; writers answered the refusal by
-    // resending the same yaml (ten times, one run) and then hand-wiring the
-    // relays, which is the one outcome worse than either path (2026-10-13).
+    // used to refuse the whole composition, which pushed products toward
+    // hand-wiring the part — the one outcome worse than either path.
     const guardMiss = bmgrBoard && block.bmgr?.init === 'board_manager'
       ? bmgrGuardMiss(block, cfg, `${block.id}${inst.prefix ? ` (prefix=${inst.prefix})` : ''}`, bmgrBoard)
       : null
@@ -1225,7 +1224,7 @@ function collectParamIds(rendered: RenderedInstance[], productParams: Record<str
  *  ran out on a busy product: the 9th registration logged an error and got
  *  handle 0 (= LOCAL), so its callback never ran — a persistence behavior
  *  silently stopped saving. Sized from the composition, with headroom for
- *  writer code that registers its own; never below the old 8, so a product
+ *  product code that registers its own; never below the old 8, so a product
  *  that fit keeps the same set_param stack footprint (one slot per entry is
  *  copied onto the caller's stack on every write). */
 export function solutionRegistrySize(rendered: RenderedInstance[]): number {
@@ -3965,10 +3964,9 @@ ${cardCalls.length ? `    /* One scrollable column of device cards, built under 
          * never on the screen. Without bubbling, a screen-level input handler
          * (the obvious place to hook backlight wake, screensaver dismiss, an
          * activity timer) is registered successfully and then never fires.
-         * That is silent and survives review: on touch-room-panel-msmrkexj the
-         * panel dimmed to 10% after 2 minutes and never woke, while both gates
-         * asserted wake-on-touch worked. Bubble input events up so the screen
-         * really does see them. */
+         * That is silent and survives review: a panel that dims after a few
+         * minutes then never wakes on a touch. Bubble input events up so the
+         * screen really does see them. */
         lv_obj_add_flag(col, LV_OBJ_FLAG_EVENT_BUBBLE);
 ${cardCalls.join('\n')}
         lvgl_port_unlock();
@@ -6312,7 +6310,7 @@ function substituteValue(node: unknown, ctx: Record<string, unknown>): unknown {
  *  build, not quietly produce a tree that looks like the block never had a
  *  mapping. */
 /** The first failed `bmgr.requires` guard of `block` for this instance's
- *  `cfg`, as the message the writer sees — or null when every guard holds.
+ *  `cfg`, as the message the product's author sees — or null when every guard holds.
  *  A malformed guard (no cfg/equals/reason, or a cfg the block does not
  *  declare) is a block-author error and throws, as it always did. */
 export function bmgrGuardMiss(block: Block, cfg: Record<string, unknown>, where: string, bmgrBoard: string): string | null {

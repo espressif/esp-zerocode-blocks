@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // An instance's `frameworks:` keeps it to those of the product's frameworks.
-// A hub that shows a light on its own page composed device_types/light, and
-// the MQTT framework then announced the hub as a light Home Assistant could
-// command (a fake state on the card, three runs out of three).
+// A hub that shows a light on its own page composes device_types/light, and
+// without the scope the MQTT framework would also announce the hub as a light
+// Home Assistant could command, with a state that is not real.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'

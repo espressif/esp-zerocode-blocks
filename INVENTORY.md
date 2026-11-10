@@ -444,8 +444,8 @@ build against a pre-cloned tree. The block carries **no third-party source**.
 
 Like `ml` and `lm` it is a **pure copy-in framework**: not one line in
 `engine/src/generator.ts`. The AWS identity (endpoint, port, thing name,
-certificate, key, optional root CA) is `device_data:` — the flash page asks for
-it and writes it to `fctry`, and the device has no command or setter for it.
+certificate, key, optional root CA) is `device_data:`, written with the
+firmware to `fctry`, and the device has no command or setter for it.
 Wi-Fi is the serial console: a guided `aws-setup`, or `aws-wifi`, both thin
 wrappers over the PUBLIC `app_aws_iot_set_wifi` (plus `_configured`,
 `_owns_wifi`) and the base console's `app_console_read_line`, so a product with
@@ -728,8 +728,8 @@ cat firmware/templates/product_configurations/smart-plug/product.yml
 ```
 
 Agents browse the same catalog through the `list_templates`,
-`search_templates`, and `get_template` tools (backed by
-`firmware/services/src/templates/`).
+`search_templates`, and `get_template` tools of a host that consumes this
+catalog.
 
 The validator catches missing producer/consumer relationships across
 blocks (param-type conflicts, dangling refs):
@@ -779,5 +779,4 @@ pnpm exec tsx scripts/validate-templates.ts --strict
   (backend/CLI) pre-binds the output directory; the agent doesn't pass
   a path.
 
-Both paths go through the same `TemplateService` in
-`firmware/services/src/templates/`.
+Both paths go through the same engine (`engine/`).

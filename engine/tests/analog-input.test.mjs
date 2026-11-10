@@ -4,8 +4,8 @@
 
 // drivers/analog_input: calibrated mV, the divider, the straight-line map (not
 // clamped, so a fault shows), the average, and the status — sampled on the
-// bus's poll step. Writers converted raw counts with a fixed 3100/4095 and
-// judged a battery cut-off and a pressure alarm on readings 100-200 mV off.
+// bus's poll step. Raw counts converted with a fixed 3100/4095 put a battery
+// cut-off or a pressure alarm on readings 100-200 mV off.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
