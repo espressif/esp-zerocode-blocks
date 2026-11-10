@@ -1,0 +1,54 @@
+description: "MFRC522 / RC522 13.56 MHz RFID card reader (MIFARE, NTAG, key fobs) on SPI — the common blue RC522 board (an I2C module is drivers/rfid_rc522): card present / removed with the card's full UID (4, 7 or 10 bytes), through the maintained abobija/rc522 driver"
+
+# The protocol — the anticollision cascade for 7- and 10-byte UIDs, I2C vs
+# SPI register framing, the reader's RX/TX framing bits — is the library's,
+# not the product's: hand-written, it was wrong in three runs out of four (a
+# 7-byte card read as 3 bytes, SPI framing sent over I2C, no card ever seen).
+#
+# Attaches to the bus a peripherals/spi_bus already initialised on spi_host,
+# with its own chip select. The library polls the reader on its
+# own task and reports a card arriving and leaving; this block publishes that
+# on the param bus and to product code (rfid_on_card), with the full UID.
+
+singleton: true
+
+cmake_priv_requires:
+  app_logic: [abobija__rc522, esp_driver_spi]
+
+requires_bus:
+  type: spi
+  port_param: spi_host
+
+params:
+  spi_host:
+    type: int
+    default: 1
+    description: the SPI host the bus is on, as peripherals/spi_bus numbers it (1 = SPI2_HOST)
+  spi_cs:
+    type: int
+    required: true
+    description: The reader's chip-select (SDA/SS on the blue board) GPIO
+  rst_gpio:
+    type: int
+    default: -1
+    description: The reader's RST pin, or -1 when not wired (a soft reset is used)
+  poll_ms:
+    type: int
+    default: 125
+    description: How often the reader is asked for a card, in ms
+
+driver_params:
+  present_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) true while a card is on the reader, false once it is taken away. Empty disables.
+  card_param:
+    type: u8
+    required: false
+    default: ""
+    description: (Optional) FIRED with 1 each time a card arrives — an event, so the same card twice is two notifications. Empty disables.
+
+facts:
+  full_uid: "Product code gets each card's whole UID (4, 7 or 10 bytes) with rfid_on_card(cb, ctx): the callback runs when a card arrives (present true) and when it is taken away (present false, with that card's UID); the reader protocol, anticollision and I2C/SPI framing are the driver's, never the product's."
+  bus: "It joins the SPI bus peripherals/spi_bus set up on spi_host, with its own chip select (the board's SDA/SS pin)."
