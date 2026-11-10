@@ -81,7 +81,7 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "target") == 0) {
         /* Targets from Home Assistant: out of range, off the 0.5 step, fine. */
         create();
-        const char *targets[] = { "40", "21.3", "2", "22.75", "21.5" };
+        const char *targets[] = { "40", "21.3", "2", "22.75", "21.5", "nan", "inf", "-inf" };
         for (const char *tg : targets) { cmd("temp/cmd", tg); printf("applied|%d\n", (int)g_param[P_SET].i16); }
         return 0;
     }
@@ -185,5 +185,8 @@ test('thermostat mqtt: a target command is clamped and snapped to the 0.5 step, 
     ['5.00', '500'],
     ['23.00', '2300'],
     ['21.50', '2150'],
+    ['5.00', '500'],    // "nan" is not a temperature: the lowest target, never undefined behaviour
+    ['35.00', '3500'],
+    ['5.00', '500'],
   ])
 })

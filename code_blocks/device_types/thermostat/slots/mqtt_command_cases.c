@@ -7,9 +7,10 @@ if (tlen == (int)strlen(s_{{prefix_lc}}_temp_cmd_topic) &&
     /* The discovery's min_temp / max_temp / temp_step: clamp, then snap to
      * the nearest 0.5 °C. The state topic echoes the value APPLIED, never the
      * payload — HA keeps the retained state, and a raw "40" or "21.3" there
-     * would be a target the device is not holding. */
-    if (t < 5) t = 5;
-    if (t > 35) t = 35;
+     * would be a target the device is not holding. Written so that a "nan"
+     * payload fails both tests and lands on the minimum. */
+    if (!(t >= 5)) t = 5;
+    if (!(t <= 35)) t = 35;
     long halves = (long)(t * 2.0 + 0.5);
     app_driver_param_val_t v = { .i16 = (int16_t)(halves * 50) };
     app_driver_set_param({{cfg.heat_setpoint_param}}, v, s_handle);
