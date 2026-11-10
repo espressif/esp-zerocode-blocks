@@ -3092,16 +3092,26 @@ export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
 const ESPNOW_WIRE_TYPE: Record<ValueType, number> = { bool: 0, u8: 1, i16: 2, u16: 3, u32: 4 }
 
 /**
- * After the listener device types' own cases: any OTHER param of this product
+ * After the listener device types' own cases: a param this product itself
+ * sends over ESP-NOW (a composed block's zc_espnow_send("<param>", …)), or one
+ * the product declares (template.yaml params:, which product code sends),
  * that arrives by name lands on the bus as an EVENT (so a second identical
  * ring still rings), with espnow's own handle as the source so it is never
  * sent back out. Without it a product's own param, such as a ring, would be
- * sent by one board and dropped by the other. Framework-owned params
- * (owned_params: Matter's commissioned state) never come from a peer.
+ * sent by one board and dropped by the other. Every other param — a relay's
+ * power, a driver's reading — is never taken from the air: frames are open
+ * broadcast, so any nearby board could otherwise drive the outputs.
+ * Framework-owned params (owned_params) never come from a peer.
  */
 function espnowRecvFallback(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
   const owned = new Set(rendered.flatMap(r => Object.keys(r.block.owned_params ?? {})))
-  const params = collectParamIds(rendered, productParams).filter(p => !owned.has(p.name))
+  const sent = new Set<string>(Object.keys(productParams))
+  for (const r of rendered) {
+    for (const body of Object.values(r.slots)) {
+      for (const m of body.matchAll(/\bzc_espnow_send\s*\(\s*"(APP_DRIVER_PARAM_\w+)"/g)) sent.add(m[1]!)
+    }
+  }
+  const params = collectParamIds(rendered, productParams).filter(p => sent.has(p.name) && !owned.has(p.name))
   if (params.length === 0) return ''
   const rows = params.map(p => `        { "${p.name}", ${p.name}, ${ESPNOW_WIRE_TYPE[p.type]} },`).join('\n')
   const member = (t: number) => ({ 0: 'v.b = (msg.value != 0)', 1: 'v.u8 = (uint8_t)msg.value', 2: 'v.i16 = (int16_t)msg.value', 3: 'v.u16 = (uint16_t)msg.value', 4: 'v.u32 = msg.value' } as Record<number, string>)[t]
