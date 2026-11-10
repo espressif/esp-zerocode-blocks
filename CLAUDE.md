@@ -923,8 +923,10 @@ Product code there that needs a component the generated list lacks
 `components/app_logic/product.cmake`; the generated CMakeLists clears the
 variable, `include()`s the file `OPTIONAL`ly and appends it to `PRIV_REQUIRES` —
 outside the script-mode guard, so IDF's requirement scan sees it too. The
-engine never writes `product.cmake`, so a re-generate keeps it, while an edit
-to the generated CMakeLists is lost. `applyCmakePrivRequires` merges block
+engine never writes `product.cmake`, while it rewrites the CMakeLists on every
+generate, so an edit there is lost. `generate()` starts from an empty output
+directory, so keeping `product.cmake` (like any file the product added) across
+a re-generate is up to the caller that holds the product's tree. `applyCmakePrivRequires` merges block
 requirements only into a line that STARTS with `PRIV_REQUIRES` (it used to take
 the first occurrence anywhere, comments included). Tested by
 `engine/tests/product-cmake.test.mjs` (a `cmake -P` stand-in for the scan).

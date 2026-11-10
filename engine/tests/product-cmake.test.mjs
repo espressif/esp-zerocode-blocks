@@ -5,9 +5,9 @@
 // Product code in components/app_logic that needs another component lists it
 // in components/app_logic/product.cmake (PRODUCT_PRIV_REQUIRES), which the
 // generated CMakeLists includes when present. The engine never writes that
-// file, so a re-apply leaves it to the product. It must hold in IDF's
-// requirement scan too, which runs every CMakeLists in script mode (cmake -P)
-// with idf_component_register redefined to record the requirements.
+// file. It must hold in IDF's requirement scan too, which runs every
+// CMakeLists in script mode (cmake -P) with idf_component_register redefined
+// to record the requirements.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -96,5 +96,19 @@ test('a base without an app_logic CMakeLists gets the same product.cmake hook', 
   if (haveCmake) {
     writeFileSync(join(outDir, 'components/app_logic/product.cmake'), 'set(PRODUCT_PRIV_REQUIRES esp_http_client)\n')
     assert.ok(scanPrivRequires(join(outDir, 'components/app_logic')).includes('esp_http_client'))
+  }
+})
+
+test('an older engine merging block requirements into the first requirement line it finds lands on the real one', () => {
+  // The older engine's merge: the first `PRIV_REQUIRES <list>` anywhere, comments included.
+  const unanchored = /(PRIV_REQUIRES\s+)([^\n)]*)/
+  for (const component of ['app_logic', 'app_driver', 'app_utils', 'app_console', 'app_config']) {
+    const file = join(ROOT, 'base_firmware/components', component, 'CMakeLists.txt')
+    if (!existsSync(file)) continue
+    const text = readFileSync(file, 'utf8')
+    const m = unanchored.exec(text)
+    if (!m) continue
+    const line = text.slice(text.lastIndexOf('\n', m.index) + 1, text.indexOf('\n', m.index))
+    assert.doesNotMatch(line, /^\s*#/, `${component}: the first match is a comment: ${line}`)
   }
 })
