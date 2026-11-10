@@ -4909,7 +4909,7 @@ function boardRendered(board: string, facts: BoardFacts | null): RenderedInstanc
       '#include "dev_display_lcd.h"',
       ...(touch ? ['#include "dev_lcd_touch.h"'] : []),
     ].join('\n')
-    const evenAreas = EVEN_AREA_PANELS.has(lcd.chip ?? '')
+    const evenAreas = EVEN_AREA_PANELS.has((lcd.chip ?? '').toLowerCase())
     if (evenAreas) slots.display_statics = BOARD_LCD_ROUNDER
     slots.display_node_init = boardDisplayNodeInit(board, lcd, touch, evenAreas)
     cmake.app_display = ['espressif__esp_board_manager']

@@ -269,6 +269,14 @@ test('a co5300 panel gets the even-area rounder, or its text renders slanted', a
   assert.ok(cpp.indexOf('rounder_cb') < cpp.indexOf('lvgl_port_add_disp'))
 })
 
+test('the panel name is matched without regard to case', async (t) => {
+  const { paths, outDir } = scaffold(t, {
+    boardDevices: ['devices:', '  - name: display_lcd', '    type: display_lcd', '    chip: CO5300', ''].join('\n'),
+  })
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  assert.match(appDisplay(outDir), /board_disp_cfg\.rounder_cb = board_lcd_round_to_even;/)
+})
+
 test('a panel that takes any window gets no rounder', async (t) => {
   const { paths, outDir } = scaffold(t, {
     boardDevices: [
