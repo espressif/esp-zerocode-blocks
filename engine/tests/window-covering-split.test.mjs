@@ -61,3 +61,13 @@ test('plain covering keeps one param: no delegate, no current param', async () =
     assert.doesNotMatch(src, /LIFT_CURRENT/)
   } finally { g.cleanup() }
 })
+
+test('split covering: a measured position never written starts unknown, not closed (Matter and MQTT)', async () => {
+  const g = await generate(['matter', 'mqtt'], true)
+  try {
+    for (const f of ['components/app_matter/app_matter.cpp', 'components/app_mqtt/app_mqtt.cpp']) {
+      const src = g.read(f)
+      assert.match(src, /if \(app_driver_param_seen\(APP_DRIVER_PARAM_LIFT_CURRENT\)\) \{\s*app_driver_get_param\(APP_DRIVER_PARAM_LIFT_CURRENT, &init\);\s*\} else \{\s*init\.u16 = 0xFFFF;/, f)
+    }
+  } finally { g.cleanup() }
+})

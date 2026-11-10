@@ -14,7 +14,12 @@
     {
         app_driver_param_val_t init = {};
 #if {{prefix}}_WC_SPLIT
-        app_driver_get_param({{#if cfg.current_param}}{{cfg.current_param}}{{/if}}, &init);
+        /* A measured position never written yet is unknown, not 0 (closed). */
+        if (app_driver_param_seen({{#if cfg.current_param}}{{cfg.current_param}}{{/if}})) {
+            app_driver_get_param({{#if cfg.current_param}}{{cfg.current_param}}{{/if}}, &init);
+        } else {
+            init.u16 = 0xFFFF;
+        }
 #else
         app_driver_get_param({{cfg.position_param}}, &init);
 #endif
