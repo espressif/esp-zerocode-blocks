@@ -579,14 +579,48 @@ export function missingFrameworks(
   return out
 }
 
-/** A behavior that brings up Wi-Fi beside a framework that already does: it
- *  defers at run time, so its setup commands configure nothing. */
+/** Frameworks that bring up a Wi-Fi station in their own init, before any
+ *  behavior's logic_init: a station behavior beside one stands aside. */
+const SYNC_STATION_FRAMEWORKS = ['matter', 'rainmaker', 'mqtt', 'agents']
+
+/** A behavior that brings up a Wi-Fi station where it cannot work: beside
+ *  aws_iot alone (aws_iot decides two seconds after boot and defers to a
+ *  station already up, so the behavior would take the radio and aws_iot's own
+ *  network setup would configure nothing), beside espnow (the radio stays on
+ *  ESP-NOW's fixed channel, so it stands aside and nothing reaches the
+ *  internet), or beside a web UI that is its own access point (webui with no
+ *  framework that joins a network). Errors: each builds and then does not do
+ *  what the product asked. */
+export function stationConflicts(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworks: readonly string[],
+): string[] {
+  const stations = [...new Set(instances.map((i) => i.block).filter((id): id is string => !!id && blocks.get(id)?.kind !== 'framework' && !!blocks.get(id)?.provides_internet))]
+  if (stations.length === 0) return []
+  const syncOwner = frameworks.some((f) => SYNC_STATION_FRAMEWORKS.includes(f))
+  const out: string[] = []
+  for (const id of stations) {
+    if (frameworks.includes('espnow')) {
+      out.push(`${id} cannot join a network beside espnow: ESP-NOW keeps the radio on its own fixed channel and ${id} stands aside, so nothing reaches the internet — drop ${id}, or espnow`)
+    } else if (frameworks.includes('aws_iot') && !syncOwner) {
+      out.push(`${id} is not needed beside aws_iot, which joins the owner's network itself (aws-setup); with both, ${id} takes the radio first and aws_iot's own network setup configures nothing — drop ${id}`)
+    } else if (frameworks.includes('webui') && !syncOwner && !frameworks.includes('aws_iot')) {
+      out.push(`${id} cannot join a network beside webui alone: the web UI makes the device its own access point and ${id} stands aside — drop ${id}, or add a framework that joins the network (${SYNC_STATION_FRAMEWORKS.join(', ')})`)
+    }
+  }
+  return out
+}
+
+/** A behavior that brings up Wi-Fi beside a framework that already does it in
+ *  its own init: it defers at run time, so its setup commands configure
+ *  nothing. (aws_iot alone is a stationConflicts error instead.) */
 export function redundantNetwork(
   instances: ReadonlyArray<{ block?: string }>,
   blocks: ReadonlyMap<string, Block>,
   frameworkBlocks: ReadonlyMap<string, Block>,
 ): string[] {
-  const fws = [...frameworkBlocks].filter(([, b]) => b.provides_internet).map(([n]) => n)
+  const fws = [...frameworkBlocks].filter(([n, b]) => b.provides_internet && SYNC_STATION_FRAMEWORKS.includes(n)).map(([n]) => n)
   if (fws.length === 0) return []
   return [...new Set(instances.map((i) => i.block).filter((id): id is string => !!id && blocks.get(id)?.kind !== 'framework' && !!blocks.get(id)?.provides_internet))]
     .map((id) => `${id} is redundant beside ${fws.join(', ')}, which already brings up Wi-Fi; it stands aside at run time — drop it`)
@@ -919,6 +953,9 @@ export function validateProduct(
     errors.push({ level: 'error', ...ctx, message })
   }
   for (const message of missingFrameworks(product.instances, blocks, product.frameworks ?? [])) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of stationConflicts(product.instances, blocks, product.frameworks ?? [])) {
     errors.push({ level: 'error', ...ctx, message })
   }
   for (const message of redundantNetwork(product.instances, blocks, frameworkBlocks)) {

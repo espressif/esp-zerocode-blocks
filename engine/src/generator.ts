@@ -231,6 +231,16 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   const instanceRendered = await renderInstances(paths, product, bmgrBoard, boardFacts, chip)
   const frameworkRendered = await renderFrameworkBlocks(paths, product, chip)
   const rendered = [...instanceRendered, ...frameworkRendered]
+  // provides_internet is a Wi-Fi station. On a chip with Thread and no Wi-Fi
+  // (esp32h2) Matter runs over Thread and wifi_station compiles out, so
+  // nothing reaches an internet service from this product.
+  const chipFeatures = CHIP_MODULES[chip]?.features ?? []
+  if (chipFeatures.includes('thread') && !chipFeatures.includes('wifi')) {
+    const needers = [...new Set(rendered.filter(r => r.block.needs_internet).map(r => r.block.id))]
+    if (needers.length > 0) {
+      throw new Error(`product '${product.id}': ${needers.join(', ')} needs internet over Wi-Fi, and ${chip} has no Wi-Fi (Matter on it runs over Thread) — pick a chip with Wi-Fi`)
+    }
+  }
   // A board product carries one extra, synthetic contributor — see
   // boardRendered(). It is deliberately NOT spliced into `rendered`: it must
   // reach main's slots, main's PRIV_REQUIRES, the merged idf_component.yml and
