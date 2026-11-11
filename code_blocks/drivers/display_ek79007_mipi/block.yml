@@ -43,7 +43,8 @@ cmake_priv_requires:
   # The DSI host driver is INSIDE esp_lcd (components/esp_lcd/dsi) in IDF 5.5 —
   # there is no separate esp_lcd_mipi_dsi component, and naming one fails
   # configure with a "could not be found" hint that reads like a typo.
-  app_display: [espressif__esp_lcd_ek79007, esp_lcd, esp_driver_gpio]
+  # esp_hw_support carries esp_ldo_regulator.h (the D-PHY supply, below).
+  app_display: [espressif__esp_lcd_ek79007, esp_lcd, esp_driver_gpio, esp_hw_support]
 
 # PSRAM is a hard requirement, not a preference — see the framebuffer note.
 # Hex mode + 200 MHz is what the P4 modules carry; a board with quad PSRAM can
@@ -55,6 +56,19 @@ sdkconfig:
   CONFIG_SPIRAM_USE_MALLOC: 'y'
 
 params:
+  phy_ldo_chan:
+    type: int
+    default: 3
+    description: >-
+      On-chip LDO channel that feeds VDD_MIPI_DPHY, or -1 when the board
+      supplies the D-PHY from an external regulator. The PHY has NO power until
+      this is acquired, so the bus comes up but the panel stays dark. 3 is
+      LDO_VO3, which the ESP32-P4 Function EV Board (and ESP-IDF's mipi_dsi
+      example) wire to the PHY.
+  phy_ldo_mv:
+    type: int
+    default: 2500
+    description: D-PHY supply voltage in mV. VDD_MIPI_DPHY wants 2.5 V.
   hres: { type: int, default: 1024 }
   vres: { type: int, default: 600 }
   dpi_clock_mhz:

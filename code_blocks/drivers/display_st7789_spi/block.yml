@@ -1,0 +1,59 @@
+description: >-
+  ST7789 SPI LCD panel (the common 1.3"-2" TFTs: 240x240, 240x320, 135x240,
+  170x320) for the display framework, on ESP-IDF's own ST7789 driver. Owns the
+  SPI bus + panel init and creates the LVGL display; contributes nothing
+  without frameworks: [display].
+
+# Same split and buffer strategy as drivers/display_ili9341_spi: exactly one
+# panel block per product (it assigns the shared `s_disp`), a partial buffer of
+# hres x 40 px, double-buffered, DMA capable, in internal RAM.
+#
+# What ST7789 modules differ by, as parameters rather than code:
+#  - invert: most modules need colour inversion ON, or white shows as black.
+#  - bgr: the subpixel order (RGB on most ST7789 modules).
+#  - x_gap / y_gap: a panel smaller than the controller's 240x320 RAM shows a
+#    window of it — 135x240 modules start at 52,40; 240x240 at 0,0 (0,80 when
+#    mounted rotated). A wrong gap shows a stripe of noise on one edge.
+#
+# An ST7735 is a different controller (frame-rate and power registers this
+# driver does not set) and is not driven by this block.
+
+cmake_priv_requires:
+  app_display: [esp_lcd, esp_driver_spi, esp_driver_gpio]
+
+params:
+  spi_host:
+    type: int
+    default: 1
+    description: SPI host (1 = SPI2_HOST). Must not collide with another SPI block on the product.
+  sclk_gpio: { type: int, required: true }
+  mosi_gpio: { type: int, required: true }
+  dc_gpio:   { type: int, required: true, description: Data/command select }
+  cs_gpio:   { type: int, required: true }
+  rst_gpio:
+    type: int
+    default: -1
+    description: Panel reset GPIO (-1 if tied to system reset)
+  backlight_gpio:
+    type: int
+    default: -1
+    description: Backlight enable GPIO, active high (-1 if always on)
+  hres: { type: int, default: 240 }
+  vres: { type: int, default: 320 }
+  x_gap: { type: int, default: 0, description: "First visible column of the controller's RAM (52 on 135x240 modules)" }
+  y_gap: { type: int, default: 0, description: "First visible row of the controller's RAM (40 on 135x240 modules)" }
+  invert:
+    type: int
+    default: 1
+    description: Colour inversion, 1 on most ST7789 modules (white reads as black otherwise)
+  bgr:
+    type: int
+    default: 0
+    description: Subpixel order, 0 = RGB (most ST7789 modules), 1 = BGR (red and blue swapped otherwise)
+  pclk_hz:
+    type: int
+    default: 40000000
+    description: SPI pixel clock. 40 MHz works on short wires; drop to 20 MHz for jumper-wire rigs.
+
+facts:
+  module_settings: "An ST7789 module that shows inverted colours needs invert flipped, red and blue swapped needs bgr flipped, and a stripe of noise along one edge needs x_gap / y_gap (135x240 modules: 52 and 40) — settings in template.yaml, never panel code of the product's own."

@@ -1,7 +1,13 @@
 description: Audible identify response — clicks a boolean relay/load 3 times when Matter Identify is received. For products without a buzzer or LED, the relay click is the user signal.
 
-# Toggles target_param ON-OFF-ON-OFF-ON-OFF on identify start. Restores the
-# original value at the end so the user's outlet/load isn't left in a different state.
+# Pulses target_param's HARDWARE ON-OFF-ON-OFF-ON-OFF on identify start, then
+# puts it back to the bus's value, so the user's outlet/load isn't left in a
+# different state. The bus is never written: controllers, NVS persistence and
+# other behaviors see no change.
+#
+# UNSAFE FOR NON-LIGHTING LOADS: the load itself is switched click_count times
+# at click_ms. A heater, pump, motor or compressor must not be cycled like
+# that — pick identify_buzzer or identify_blink for those products.
 
 params:
   click_count: { type: int, default: 3 }

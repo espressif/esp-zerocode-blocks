@@ -63,3 +63,6 @@ driver_params:
     required: false
     default: ""
     description: (Optional) param ID for mute (bool, true = silent regardless of tone/volume). Empty disables.
+
+reacts:
+  driver: "A change of {{cfg.tone_param}} sets the square-wave tone the block plays (0 = silent), and {{cfg.volume_param}} / {{cfg.mute_param}}, when set, scale or silence it in the block's own I2S task; product code writes the params and never writes I2S samples itself."

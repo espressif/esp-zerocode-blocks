@@ -1,3 +1,4 @@
+{{#if cfg.mode_param}}
 if (device == s_{{prefix_lc}}_device && param == s_{{prefix_lc}}_mode_param) {
     int mode = val.val.i < 0 ? 0 : (val.val.i > 3 ? 3 : val.val.i);
     app_driver_param_val_t pv = { .u8 = (uint8_t)mode };
@@ -5,3 +6,4 @@ if (device == s_{{prefix_lc}}_device && param == s_{{prefix_lc}}_mode_param) {
     esp_rmaker_param_update(param, val);
     return ESP_OK;
 }
+{{/if}}

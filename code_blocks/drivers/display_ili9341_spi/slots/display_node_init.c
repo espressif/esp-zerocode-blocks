@@ -7,8 +7,17 @@
     {{prefix_lc}}_bus.quadwp_io_num = -1;
     {{prefix_lc}}_bus.quadhd_io_num = -1;
     {{prefix_lc}}_bus.max_transfer_sz = {{prefix}}_LCD_HRES * 40 * sizeof(uint16_t);
-    ESP_ERROR_CHECK(spi_bus_initialize((spi_host_device_t){{prefix}}_LCD_SPI_HOST,
-                                       &{{prefix_lc}}_bus, SPI_DMA_CH_AUTO));
+    esp_err_t {{prefix_lc}}_bus_err = spi_bus_initialize((spi_host_device_t){{prefix}}_LCD_SPI_HOST,
+                                                         &{{prefix_lc}}_bus, SPI_DMA_CH_AUTO);
+    if ({{prefix_lc}}_bus_err == ESP_ERR_INVALID_STATE) {
+        /* peripherals/spi_bus (another device on the same lines) brought the
+         * host up first. Share it as configured there instead of aborting the
+         * boot; the panel IO splits larger color transfers to the bus limit. */
+        ESP_LOGW(TAG, "ILI9341 {{prefix_lc}}: SPI host %d already initialized — sharing it as configured there",
+                 {{prefix}}_LCD_SPI_HOST);
+    } else {
+        ESP_ERROR_CHECK({{prefix_lc}}_bus_err);
+    }
 
     esp_lcd_panel_io_handle_t {{prefix_lc}}_io = NULL;
     esp_lcd_panel_io_spi_config_t {{prefix_lc}}_io_cfg = {};

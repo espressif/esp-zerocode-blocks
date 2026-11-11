@@ -1,0 +1,67 @@
+description: >-
+  Counts pulses on one GPIO (a fan tachometer, a single-channel motor encoder,
+  a flow meter, a rain gauge, an energy meter's pulse LED) and publishes the
+  running total and the rate. Works on every chip (a GPIO interrupt, no PCNT).
+
+# The input is configured with the internal pull-up by default, because the
+# usual source is OPEN-COLLECTOR (fan tach, hall flow sensor, reed rain gauge,
+# most encoders): without a pull-up the line floats and counts nothing, or
+# noise. A push-pull source can turn it off (pull: none).
+#
+# Edges closer together than min_interval_us are ignored — a debounce for
+# contacts (reed rain gauges bounce for milliseconds) and a glitch filter for
+# electrical noise. Counting is in the ISR; the total and the rate are
+# published from a periodic timer, so listeners see changes at most every
+# publish_ms. The rate is pulses per minute divided by pulses_per_unit — RPM
+# for a tachometer (pulses_per_unit = pulses per revolution, 2 for PC fans),
+# litres per minute for a flow meter (pulses per litre), and so on.
+# A rate of 0 after rate_window_ms with no pulse means stopped.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO the pulse signal is wired to
+  edge:
+    type: string
+    default: falling
+    description: falling | rising | any — which edge is one pulse
+  pull:
+    type: string
+    default: up
+    description: up (open-collector / switch to GND) | down | none (push-pull source)
+  min_interval_us:
+    type: int
+    default: 100
+    description: Edges closer than this are ignored (glitch filter; use 20000+ for a mechanical contact)
+  pulses_per_unit:
+    type: int
+    default: 1
+    description: Pulses per unit of the rate (pulses per revolution for RPM, per litre for L/min)
+  rate_window_ms:
+    type: int
+    default: 2000
+    description: The rate is measured over this window; a stopped input reads 0 after it
+  publish_ms:
+    type: int
+    default: 1000
+    description: How often the total and the rate are published
+
+driver_params:
+  count_param:
+    type: u32
+    required: false
+    default: ""
+    description: (Optional) running total of pulses since boot. Empty disables.
+  rate_param:
+    type: u32
+    required: false
+    default: ""
+    description: (Optional) units per minute (pulses per minute / pulses_per_unit) over rate_window_ms — RPM for a tachometer. Empty disables.
+
+cmake_priv_requires:
+  app_driver: [esp_timer, esp_driver_gpio]
+
+facts:
+  pull_up: "The pulse input gets the internal pull-up unless pull says otherwise, so an open-collector tachometer, encoder, flow or rain sensor needs no external resistor; product code never configures that pin or counts its pulses itself."
+  rate: "The rate is published as units per minute (RPM for a fan with pulses_per_unit = pulses per revolution); it reads 0 once rate_window_ms passes with no pulse, which is how a stalled fan or stopped flow shows."

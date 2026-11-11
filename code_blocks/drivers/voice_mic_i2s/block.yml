@@ -31,10 +31,18 @@ cmake_priv_requires:
   app_audio: [esp_driver_i2s]
 
 params:
+  # -1 (I2S_NUM_AUTO), as drivers/mic_i2s: a board whose own audio codec holds
+  # I2S port 0 (both directions) leaves port 0 unusable, and a fixed port 0
+  # then fails i2s_new_channel at boot. Auto takes the first controller with a
+  # free RX direction — the second controller beside such a board, controller 0
+  # on a board with no I2S of its own and on a one-controller chip.
   port:
     type: int
-    default: 0
-    description: I2S peripheral number. Must differ from any other I2S block on the same product.
+    default: -1
+    description: >-
+      I2S peripheral number, or -1 to let the driver pick a controller with a
+      free RX direction (beside a board's own codec, and on one-controller
+      chips). A fixed port must exist on the target and be free.
   bclk_gpio:
     type: int
     required: true

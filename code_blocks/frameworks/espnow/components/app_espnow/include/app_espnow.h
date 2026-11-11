@@ -16,6 +16,10 @@
 #include <esp_err.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 esp_err_t app_espnow_init(void);
 
 #include <stdbool.h>
@@ -33,3 +37,7 @@ bool zc_espnow_pairing(void);
 uint8_t zc_espnow_peer_count(void);
 /** Drop every stored peer — back to the open broadcast kit. */
 void zc_espnow_forget_peers(void);
+
+#ifdef __cplusplus
+}
+#endif

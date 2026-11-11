@@ -23,3 +23,13 @@ radio: false
 # Phase 2 (same framework): file/music playback (esp_audio_simple_player +
 # sdcard driver + media_player device type). Mic capture is NOT here — that
 # is Voice's side of the split.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  sounds: "The device plays beeps and tone melodies, one note at a time; it cannot play music files, recorded sounds or speech."
+  built_in: "From the catalog, a doorbell button plays a two-tone chime on each press and a light clicks when toggled; any other sound is one the spec must describe."
+  speaker: "Sound needs an I2S amplifier speaker, an ES8311 codec or the board's own audio codec; a plain buzzer does not play these sounds, and with no speaker the product is silent."
+  interrupt: "A new sound cuts off the one playing; sounds do not queue."
+  length: "One sound is at most 24 notes or rests."
+  offline: "Sound needs no network."

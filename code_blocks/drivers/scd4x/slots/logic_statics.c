@@ -40,6 +40,18 @@ static esp_err_t {{prefix_lc}}_scd_send_cmd(uint16_t cmd)
     return i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
 }
 
+/* Sensirion CRC-8: polynomial 0x31, init 0xFF, over each 2-byte word. */
+static uint8_t {{prefix_lc}}_scd_crc(const uint8_t *word)
+{
+    uint8_t crc = 0xFF;
+    for (int i = 0; i < 2; i++) {
+        crc ^= word[i];
+        for (int b = 0; b < 8; b++) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
 static uint8_t {{prefix_lc}}_aqi_from_co2(uint16_t ppm)
 {
     if (ppm < 600)  return 1; /* Good */
@@ -49,20 +61,65 @@ static uint8_t {{prefix_lc}}_aqi_from_co2(uint16_t ppm)
     return 5;                 /* VeryPoor */
 }
 
+/* Consecutive failed polls. A sensor that was absent at boot, or lost power,
+ * is idle and stays idle until it is told to measure again: started only at
+ * boot, it read nothing forever. After a few failures in a row the start is
+ * sent again — harmless to a sensor that is already measuring (it refuses it). */
+static uint32_t s_{{prefix_lc}}_scd_failures = 0;
+#define {{prefix}}_SCD_RESTART_AFTER 3
+
+static void {{prefix_lc}}_scd_failed(const char *what)
+{
+    s_{{prefix_lc}}_scd_failures++;
+    uint32_t per_minute = 60000UL / (uint32_t){{prefix}}_SCD_POLL_MS;
+    if (per_minute == 0) per_minute = 1;
+    if (s_{{prefix_lc}}_scd_failures == 1 || (s_{{prefix_lc}}_scd_failures % per_minute) == 0) {
+        ESP_LOGW(TAG, "SCD4x {{prefix_lc}}: %s failed, %lu consecutive", what, (unsigned long)s_{{prefix_lc}}_scd_failures);
+    }
+    if ((s_{{prefix_lc}}_scd_failures % {{prefix}}_SCD_RESTART_AFTER) == 0) {
+        (void){{prefix_lc}}_scd_send_cmd(0x21B1);   /* start periodic measurement again */
+    }
+}
+
 static void {{prefix_lc}}_scd_poll_cb(void *arg)
 {
-    if ({{prefix_lc}}_scd_send_cmd(0xEC05) != ESP_OK) return;
+    if (s_{{prefix_lc}}_i2c_dev == NULL) return;
+    if ({{prefix_lc}}_scd_send_cmd(0xEC05) != ESP_OK) { {{prefix_lc}}_scd_failed("read command"); return; }
     /* read_measurement needs 1 ms before the data can be read. Not
        vTaskDelay(pdMS_TO_TICKS(2)): that rounds DOWN to 0 ticks at the default
        100 Hz, so it never waited. A 1 ms busy-wait rather than a whole tick,
-       because this runs on the shared esp_timer task. */
+       because the bus poll task this runs on serves every other poll too. */
     esp_rom_delay_us(1000);
     uint8_t buf[9] = {0};
-    if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) return;
+    if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) { {{prefix_lc}}_scd_failed("read"); return; }
+    /* Three words (CO2, T, RH), each followed by its CRC: a reading with a bad
+       word is dropped whole rather than published half-right. */
+    for (int i = 0; i < 9; i += 3) {
+        if ({{prefix_lc}}_scd_crc(&buf[i]) != buf[i + 2]) {
+            ESP_LOGW(TAG, "SCD4x {{prefix_lc}}: CRC mismatch, reading dropped");
+            return;
+        }
+    }
+    if (s_{{prefix_lc}}_scd_failures) {
+        ESP_LOGI(TAG, "SCD4x {{prefix_lc}}: reading again after %lu failed poll(s)", (unsigned long)s_{{prefix_lc}}_scd_failures);
+        s_{{prefix_lc}}_scd_failures = 0;
+    }
     uint16_t co2 = ((uint16_t)buf[0] << 8) | buf[1];
     if (co2 == 0) return; /* sensor still warming up */
     app_driver_param_val_t cv = { .u16 = co2 };
     app_driver_set_param({{cfg.co2_param}}, cv, APP_DRIVER_SOURCE_LOCAL);
     app_driver_param_val_t av = { .u8 = {{prefix_lc}}_aqi_from_co2(co2) };
     app_driver_set_param({{cfg.air_quality_param}}, av, APP_DRIVER_SOURCE_LOCAL);
+{{#if cfg.temp_param}}
+    /* Datasheet: T = -45 + 175 * raw / 65535 °C, here in hundredths. */
+    uint16_t {{prefix_lc}}_t_raw = ((uint16_t)buf[3] << 8) | buf[4];
+    app_driver_param_val_t tv = { .i16 = (int16_t)(-4500 + (int32_t)((17500UL * {{prefix_lc}}_t_raw) / 65535UL)) };
+    app_driver_set_param({{cfg.temp_param}}, tv, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+{{#if cfg.humidity_param}}
+    /* Datasheet: RH = 100 * raw / 65535 %, here in hundredths. */
+    uint16_t {{prefix_lc}}_h_raw = ((uint16_t)buf[6] << 8) | buf[7];
+    app_driver_param_val_t hv = { .i16 = (int16_t)((10000UL * {{prefix_lc}}_h_raw) / 65535UL) };
+    app_driver_set_param({{cfg.humidity_param}}, hv, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
 }

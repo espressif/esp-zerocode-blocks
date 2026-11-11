@@ -36,7 +36,16 @@ static void {{prefix_lc}}_task(void *arg)
 
         /* POST-PROCESS — argmax, dequantize, clamp to a percentage. */
         size_t top = zc_tflite_output_argmax(s_{{prefix_lc}}_session);
-        float score = zc_tflite_output_value(s_{{prefix_lc}}_session, top);
+#if {{prefix}}_TFL_TARGET_CLASS >= 0
+        /* Only the target class is a detection: "background" winning at 90%
+           is the opposite of a detection, not one. */
+        const size_t judged = (size_t){{prefix}}_TFL_TARGET_CLASS;
+        const bool is_target = (top == judged);
+#else
+        const size_t judged = top;
+        const bool is_target = true;
+#endif
+        float score = zc_tflite_output_value(s_{{prefix_lc}}_session, judged);
         int pct = (int)(score * 100.0f + 0.5f);
         if (pct < 0) {
             pct = 0;
@@ -50,11 +59,15 @@ static void {{prefix_lc}}_task(void *arg)
 
         /* STATE, not events — a repeated identical verdict is deliberately
          * not re-propagated. See this block's block.yml. */
-        app_driver_param_val_t {{prefix_lc}}_det = { .b = (pct >= {{prefix}}_TFL_THRESHOLD_PCT) };
+        app_driver_param_val_t {{prefix_lc}}_det = { .b = is_target && (pct >= {{prefix}}_TFL_THRESHOLD_PCT) };
         app_driver_set_param({{cfg.detect_param}}, {{prefix_lc}}_det, APP_DRIVER_SOURCE_LOCAL);
 {{#if cfg.score_param}}
         app_driver_param_val_t {{prefix_lc}}_sc = { .u8 = (uint8_t)pct };
         app_driver_set_param({{cfg.score_param}}, {{prefix_lc}}_sc, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}
+{{#if cfg.class_param}}
+        app_driver_param_val_t {{prefix_lc}}_cl = { .u8 = (uint8_t)(top > 255 ? 255 : top) };
+        app_driver_set_param({{cfg.class_param}}, {{prefix_lc}}_cl, APP_DRIVER_SOURCE_LOCAL);
 {{/if}}
     }
 }

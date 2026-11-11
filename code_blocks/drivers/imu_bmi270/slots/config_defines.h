@@ -6,6 +6,7 @@
 /* BMI270 registers used here. Accelerometer path only — see block.yml on why
    the firmware blob is not loaded. */
 #define {{prefix}}_IMU_REG_CHIP_ID 0x00
+#define {{prefix}}_IMU_REG_PWR_CONF 0x7C
 #define {{prefix}}_IMU_REG_PWR_CTRL 0x7D
 #define {{prefix}}_IMU_REG_ACC_CONF 0x40
 #define {{prefix}}_IMU_REG_ACC_RANGE 0x41

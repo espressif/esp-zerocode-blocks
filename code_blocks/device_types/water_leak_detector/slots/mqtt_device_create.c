@@ -13,12 +13,12 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_leak_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.leak_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_leak_topic,
-                                (init.b) ? "ON" : "OFF", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_leak_topic,
+                        (init.b) ? "ON" : "OFF", 0, 1, true);
     }
 }

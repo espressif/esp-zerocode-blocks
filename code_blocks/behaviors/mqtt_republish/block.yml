@@ -1,0 +1,52 @@
+description: >-
+  MQTT periodic report: re-sends every Home Assistant entity's current state
+  (device types and product entities) every republish_s seconds, changed or
+  not. Compose this for "report every N minutes" (with only_on_schedule: true
+  so a change waits for the schedule too); product code never needs to re-send
+  a value itself.
+
+# WHY IT EXISTS. frameworks/mqtt publishes a state when it CHANGES (a device
+# type's param on the bus, app_mqtt_entity_set_state with a new value), so a
+# steady reading reaches the broker once and is then silent. A broker or a
+# dashboard that wants a reading on a schedule gets it here.
+#
+# HOW. The framework keeps the last retained message on every state topic
+# (discovery and the availability topic excluded) and its own task re-queues
+# them on the schedule, while connected. Nothing runs on the esp_timer task.
+# The interval is app_mqtt_set_republish_s() (app_mqtt.h): this block calls it
+# at init, before the broker connects, which is what lets it see every value.
+#
+# INDEPENDENT of a sensor's own poll interval: poll_interval_ms is how often
+# the sensor is READ, and a new value is published as soon as it changes;
+# republish_s is how often the unchanged value is sent again.
+#
+# ONLY ON SCHEDULE (only_on_schedule: true) holds every state topic's changes
+# for the schedule instead of sending them at once, for a product whose agreed
+# cadence IS the schedule (a sensor polled every 10 s that reports every 10
+# minutes). The first value since boot and every (re)connect still send at
+# once, so Home Assistant never waits a whole interval for a value; a change a
+# command causes (the MQTT client's own task) is also sent at once. A change
+# made locally — a button toggling a relay — waits too, so it is for readings.
+
+singleton: true
+requires_frameworks: [mqtt]
+
+params:
+  republish_s:
+    type: int
+    default: 300
+    description: >-
+      Seconds between re-sends of every entity's current state (300 = every
+      5 minutes; a requirement of "every N minutes" is N x 60). 0 turns it off.
+  only_on_schedule:
+    type: bool
+    default: false
+    description: >-
+      false (default): a state is sent at once when it changes AND again on
+      the schedule. true: a change is not sent at once — each state's latest
+      value goes out only every republish_s, plus its first value after boot
+      and on every (re)connect. Use true for "report every N minutes".
+
+facts:
+  schedule: "Every entity's current value is sent to the broker again every republish_s seconds even when it has not changed, so Home Assistant and anything else listening sees a fresh reading on that schedule; a change is still sent at once, not held for the next one, unless only_on_schedule is true."
+  only_on_schedule: "With only_on_schedule: true a changed value is not sent when it changes but at the next scheduled report, so readings reach the broker once every republish_s; the first value after boot and the current values on every reconnect are still sent at once, so Home Assistant is never left without a value. A local change to a switch or light waits for the schedule too, so it suits readings, not controls."

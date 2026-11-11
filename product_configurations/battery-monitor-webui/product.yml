@@ -1,0 +1,46 @@
+id: battery-monitor-webui
+name: Battery Monitor (Web UI)
+description: >-
+  A Li-ion cell's voltage, read through a 100 k / 100 k divider and shown on
+  the device's own web page with a reading-OK flag — the catalog example of
+  drivers/analog_input.
+keywords: [battery, voltage, adc, divider, analog, monitor, web ui]
+
+frameworks: [webui]
+
+instances:
+  - block: drivers/analog_input
+    prefix: BATT
+    cfg:
+      gpio: 1
+      divider_num: 2
+      divider_den: 1
+      samples: 16
+      poll_ms: 5000
+      value_param: APP_DRIVER_PARAM_BATTERY_MV
+      value_kind: u32
+      status_param: APP_DRIVER_PARAM_BATTERY_OK
+
+  - block: behaviors/webui_row
+    prefix: ROW_BATT
+    cfg:
+      label: Battery (V)
+      kind: value
+      param: APP_DRIVER_PARAM_BATTERY_MV
+      value_kind: u32
+      scale: 1000
+
+  - block: behaviors/webui_row
+    prefix: ROW_OK
+    cfg:
+      label: Reading OK
+      kind: binary
+      param: APP_DRIVER_PARAM_BATTERY_OK
+      value_kind: bool
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Battery Monitor

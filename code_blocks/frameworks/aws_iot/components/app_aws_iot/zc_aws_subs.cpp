@@ -133,9 +133,9 @@ bool zc_aws_subs_get(size_t i, const char **filter, uint16_t *len, uint8_t *qos)
     return ok;
 }
 
-void zc_aws_subs_dispatch(MQTTPublishInfo_t *pub)
+size_t zc_aws_subs_dispatch(MQTTPublishInfo_t *pub)
 {
-    if (pub == NULL) return;
+    if (pub == NULL) return 0;
 
     /* Matching happens UNDER the lock, but callbacks run outside it — a
      * callback that publishes would otherwise re-enter this mutex from the
@@ -145,7 +145,7 @@ void zc_aws_subs_dispatch(MQTTPublishInfo_t *pub)
     struct { zc_aws_msg_cb_t cb; void *ctx; } hits[ZC_AWS_MAX_SUBS];
     size_t nhits = 0;
 
-    if (!subs_lock()) return;
+    if (!subs_lock()) return 0;
     for (size_t i = 0; i < s_count; i++) {
         bool match = false;
         if (MQTT_MatchTopic(pub->pTopicName, pub->topicNameLength,
@@ -172,4 +172,5 @@ void zc_aws_subs_dispatch(MQTTPublishInfo_t *pub)
         ESP_LOGD(ZC_AWS_TAG, "no subscriber for \"%.*s\"",
                  (int)pub->topicNameLength, pub->pTopicName);
     }
+    return nhits;
 }

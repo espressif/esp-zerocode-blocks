@@ -4,9 +4,24 @@ params:
   gpio: { type: int, required: true }
   active_level: { type: int, default: 0 }
   long_press_ms: { type: int, default: 2000 }
+  toggle_before_reset:
+    type: bool
+    default: true
+    description: >-
+      With a factory-reset hold on the same pin (behaviors/factory_reset_long_press,
+      e.g. 10 s): any press released before the hold toggles the param exactly
+      once, at its release (a short click at the end of the click), and a press
+      that reaches the reset does not. Without it a press held past the
+      button's long-press time (1.5-2 s) toggled nothing. A double press is
+      never a toggle, and neither is a long press the product's
+      <prefix>_on_long_press override handles (an unhandled one still is). No effect without a reset hold on the pin (the click
+      toggles, as before); false keeps the click-only toggle beside a hold.
 
 driver_params:
   target_param:
     type: bool
     required: true
     description: Boolean driver param toggled on single-click
+
+facts:
+  toggle_until_reset: "With target_param bound and behaviors/factory_reset_long_press on the same pin, any press released before its hold toggles once and a press that reaches the hold resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold N s to reset\" needs no button code of the product's own; a long press the product's on_long_press handles is that gesture, not a toggle."

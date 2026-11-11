@@ -22,5 +22,5 @@ static void s_{{prefix_lc}}_publish_state(void)
     snprintf(payload, sizeof(payload),
              "{\"state\":\"%s\",\"brightness\":%u,\"color_mode\":\"hs\",\"color\":{\"h\":%u,\"s\":%u}}",
              on ? "ON" : "OFF", bri, h > 360u ? 360u : h, s > 100u ? 100u : s);
-    esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_state_topic, payload, 0, 1, true);
+    zc_mqtt_publish(s_{{prefix_lc}}_state_topic, payload, 0, 1, true);
 }

@@ -16,13 +16,13 @@
                  s_node_id,
                  s_{{prefix_lc}}_state_topic,
                  s_{{prefix_lc}}_cmd_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_cmd_topic, 1);
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.locked_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_state_topic,
-                                init.b ? "LOCKED" : "UNLOCKED", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_state_topic,
+                        init.b ? "LOCKED" : "UNLOCKED", 0, 1, true);
     }
 }

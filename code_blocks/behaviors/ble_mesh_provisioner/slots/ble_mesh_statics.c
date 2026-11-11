@@ -2,6 +2,10 @@
 #define ZC_PROV_OWN_ADDR    0x0001
 #define ZC_PROV_GROUP_ADDR  {{cfg.group_addr}}
 #define ZC_PROV_MAX_NODES   {{cfg.max_nodes}}
+#include "sdkconfig.h"
+#if ZC_PROV_MAX_NODES < 1 || ZC_PROV_MAX_NODES > CONFIG_BLE_MESH_MAX_PROV_NODES
+#error "ble_mesh_provisioner: max_nodes must be 1..CONFIG_BLE_MESH_MAX_PROV_NODES (the stack cannot hold more provisioned nodes)"
+#endif
 #define ZC_PROV_APP_KEY_HEX "{{cfg.app_key}}"
 #define ZC_PROV_MSG_TTL     7
 #define ZC_PROV_MAX_RETRIES 3
@@ -39,6 +43,11 @@ static const zc_prov_step_t s_prov_steps[] = {
     { ESP_BLE_MESH_MODEL_OP_MODEL_SUB_ADD,  ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_SRV },
     { ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET,  ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_CLI },
     { ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET,  ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_CLI },
+    /* Servers publish their STATUS to the group too, so a switch's client
+     * (subscribed there by the framework) hears what the lights actually did
+     * — zc_ble_mesh_publish_toggle inverts that, not a guess. */
+    { ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET,  ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_SRV },
+    { ESP_BLE_MESH_MODEL_OP_MODEL_PUB_SET,  ESP_BLE_MESH_MODEL_ID_GEN_LEVEL_SRV },
 };
 
 static void zc_prov_parse_app_key(void)
@@ -111,7 +120,7 @@ static void zc_prov_run_step(zc_prov_node_t *node)
     }
     if (node->step >= ZC_MESH_COUNT(s_prov_steps)) {
         ESP_LOGI(TAG, "provisioner: node 0x%04x configured — key bound to its servers "
-                      "and its clients, servers subscribed to 0x%04x, clients publishing to it",
+                      "and its clients, servers subscribed to 0x%04x, clients and server status publishing to it",
                  node->unicast, (unsigned)ZC_PROV_GROUP_ADDR);
         return;
     }

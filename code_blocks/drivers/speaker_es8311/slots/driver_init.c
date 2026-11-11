@@ -35,10 +35,23 @@
           board's other devices (on a Mosaico: touch, IMU, magnetometers, fuel
           gauge), so it is pre-installed elsewhere and only referenced here —
           this block must never install or tear down that bus. */
-    audio_codec_i2c_cfg_t {{prefix_lc}}_i2c_cfg = {};
-    {{prefix_lc}}_i2c_cfg.port = {{prefix}}_SPK_I2C_PORT;
-    {{prefix_lc}}_i2c_cfg.addr = {{prefix}}_SPK_I2C_ADDR;
-    const audio_codec_ctrl_if_t *{{prefix_lc}}_ctrl = audio_codec_new_i2c_ctrl(&{{prefix_lc}}_i2c_cfg);
+    /* esp_codec_dev on IDF >= 5.3 (CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE off,
+       the default) talks through the i2c_master driver: it REFUSES a config
+       with no bus_handle, and it takes the address in 8-bit form (it shifts
+       it right by one — ES8311_CODEC_DEFAULT_ADDR is 0x30). Port + a 7-bit
+       address alone opened nothing, so the codec was never found. */
+    i2c_master_bus_handle_t {{prefix_lc}}_bus = NULL;
+    const audio_codec_ctrl_if_t *{{prefix_lc}}_ctrl = NULL;
+    if (i2c_master_get_bus_handle((i2c_port_num_t){{prefix}}_SPK_I2C_PORT, &{{prefix_lc}}_bus) != ESP_OK) {
+        ESP_LOGE(TAG, "{{prefix_lc}}: no I2C bus on port %d — audio disabled",
+                 {{prefix}}_SPK_I2C_PORT);
+    } else {
+        audio_codec_i2c_cfg_t {{prefix_lc}}_i2c_cfg = {};
+        {{prefix_lc}}_i2c_cfg.port = {{prefix}}_SPK_I2C_PORT;
+        {{prefix_lc}}_i2c_cfg.addr = (uint8_t)({{prefix}}_SPK_I2C_ADDR << 1);
+        {{prefix_lc}}_i2c_cfg.bus_handle = {{prefix_lc}}_bus;
+        {{prefix_lc}}_ctrl = audio_codec_new_i2c_ctrl(&{{prefix_lc}}_i2c_cfg);
+    }
 
     audio_codec_i2s_cfg_t {{prefix_lc}}_i2s_cfg = {};
     {{prefix_lc}}_i2s_cfg.port = {{prefix}}_SPK_PORT;

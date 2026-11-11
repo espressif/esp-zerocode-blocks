@@ -65,3 +65,14 @@ radio: false
 # CREDIT: esp_tinylm is by Vikram Dattu (Espressif). It builds on Karpathy's
 # llama2.c for the runtime shape and Google's Gemma 3n for the PLE idea,
 # re-implemented clean-room. Apache-2.0.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  input: "Commands are typed on the device's serial console (an lm command followed by the sentence); there is no microphone, phone app or other way to give one."
+  understands: "It understands commands for a light, fan, air conditioner, TV or speaker in the living room, bedroom, kitchen, bathroom or office; no other device or room can be acted on."
+  actions: "A command switches a device on or off or sets a number (brightness or volume 10–100 in tens, temperature 16–30); colours, fan speeds, open/close and lock/unlock do nothing."
+  no_refusal: "Every sentence is turned into the closest command it knows and it never answers that it did not understand, so an off-topic sentence can still switch something."
+  feedback: "What it understood is shown only in the device's log; nothing is spoken or displayed back."
+  one_at_a_time: "It handles one command at a time; one typed while another is being worked out is refused as busy."
+  no_psram: "On a board without PSRAM the device still boots and works, but language commands are off."

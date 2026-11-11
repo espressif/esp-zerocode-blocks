@@ -1,0 +1,2 @@
+dependencies:
+  espressif/json_parser: "^2.0.0"

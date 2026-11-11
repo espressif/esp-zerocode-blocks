@@ -56,6 +56,20 @@ esp_err_t zc_ble_mesh_publish_level(uint16_t addr, int16_t level)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t zc_ble_mesh_publish_toggle(uint16_t addr)
+{
+    (void)addr;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t zc_ble_mesh_publish_delta(uint16_t addr, int32_t delta, bool continue_hold)
+{
+    (void)addr;
+    (void)delta;
+    (void)continue_hold;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t zc_ble_mesh_set_onoff_state(bool on)
 {
     (void)on;
@@ -70,10 +84,34 @@ esp_err_t zc_ble_mesh_set_level_state(int16_t level)
 
 int16_t zc_ble_mesh_level_from_u8(uint8_t value)
 {
-    return (int16_t)((int32_t)value * 65535 / 254 - 32768);
+    /* Rounded both ways: truncating in each direction took most values down a
+     * step per round trip (1 -> 0, 100 -> 99), so an echoed brightness crept
+     * down. The driver range is 0-254; 255 would overflow int16 (33025 wraps
+     * to -32511, nearly off), so it is clamped. */
+    if (value > 254) value = 254;
+    return (int16_t)(((int32_t)value * 65535 + 127) / 254 - 32768);
 }
 
 uint8_t zc_ble_mesh_level_to_u8(int16_t level)
 {
-    return (uint8_t)(((int32_t)level + 32768) * 254 / 65535);
+    return (uint8_t)((((int32_t)level + 32768) * 254 + 32767) / 65535);
+}
+
+/* The hooks' weak defaults, as in the real implementation: the stub never
+ * calls them, but a product that defines one still links either way. */
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_onoff_status(uint16_t src, bool on)
+{
+    (void)src;
+    (void)on;
+}
+
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_level_status(uint16_t src, int16_t level)
+{
+    (void)src;
+    (void)level;
+}
+
+extern "C" __attribute__((weak)) void zc_ble_mesh_on_provisioned(bool provisioned)
+{
+    (void)provisioned;
 }

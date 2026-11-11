@@ -1,0 +1,40 @@
+id: rfid-reader-spi-webui
+name: RFID Reader (SPI, Web UI)
+description: >-
+  An RC522 RFID reader on SPI whose card-present state shows on the device's
+  own web page — the catalog example of the RC522 reader blocks.
+keywords: [rfid, rc522, mfrc522, nfc, card, mifare, spi, web ui]
+
+frameworks: [webui]
+
+instances:
+  - block: peripherals/spi_bus
+    prefix: SPI
+    cfg:
+      host: 1
+      mosi_gpio: 6
+      miso_gpio: 2
+      sclk_gpio: 7
+
+  - block: drivers/rfid_rc522_spi
+    prefix: RFID
+    cfg:
+      spi_host: 1
+      spi_cs: 10
+      present_param: APP_DRIVER_PARAM_CARD_PRESENT
+      card_param: APP_DRIVER_PARAM_CARD_EVENT
+
+  - block: behaviors/webui_row
+    prefix: ROW_CARD
+    cfg:
+      label: Card on reader
+      kind: binary
+      param: APP_DRIVER_PARAM_CARD_PRESENT
+      value_kind: bool
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode RFID Reader SPI

@@ -16,6 +16,7 @@
 #define {{prefix}}_CAM_PCLK   {{cfg.pin_pclk}}
 #define {{prefix}}_CAM_XCLK_HZ {{cfg.xclk_hz}}
 #define {{prefix}}_CAM_SCCB_HZ {{cfg.sccb_hz}}
+#define {{prefix}}_CAM_SCCB_PORT {{cfg.sccb_i2c_port}}
 #define {{prefix}}_CAM_PX_THRESH {{cfg.pixel_threshold}}
 #define {{prefix}}_CAM_AREA_PCT  {{cfg.area_threshold_pct}}
 #define {{prefix}}_CAM_HOLD_MS   {{cfg.hold_ms}}

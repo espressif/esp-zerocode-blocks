@@ -18,3 +18,6 @@ driver_params:
   brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
   hue_param:        { type: u8, default: APP_DRIVER_PARAM_HUE }
   saturation_param: { type: u8, default: APP_DRIVER_PARAM_SATURATION }
+
+reacts:
+  driver: "A change of {{cfg.power_param}}, {{cfg.brightness_param}}, {{cfg.hue_param}} or {{cfg.saturation_param}} converts hue/saturation/brightness to red, green and blue PWM duties (all 0 when off); product code writes the params and never drives the LED pins or LEDC channels itself."

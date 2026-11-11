@@ -2,6 +2,7 @@
     /* Nothing runs until the device is on the bus. Driving a panel through a
        handle that was never created would log a transfer error per byte of
        the init sequence; one line at boot is the report a person can act on. */
+    s_{{prefix_lc}}_oled_lock = xSemaphoreCreateRecursiveMutex();
     if ({{prefix_lc}}_i2c_attach() != ESP_OK) {
         ESP_LOGE(TAG, "SSD1306 {{prefix_lc}}: not started — no I2C bus");
     } else {

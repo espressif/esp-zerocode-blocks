@@ -123,6 +123,18 @@ instances:
       bus_voltage_mv_param: APP_DRIVER_PARAM_SUPPLY_MV
       current_ma_param: APP_DRIVER_PARAM_SUPPLY_MA
 
+  # ── Motion: an MPU6050-family accelerometer on the same bus (0x68). A
+  #     tent fan running, a door knocked, a closet shelf moved. All three
+  #     outputs are set so every branch of the block is compiled. ──
+  - block: drivers/mpu6050
+    prefix: MOTION
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x68
+      motion_param: APP_DRIVER_PARAM_MOTION
+      vibration_param: APP_DRIVER_PARAM_VIBRATION_MG
+      orientation_param: APP_DRIVER_PARAM_ORIENTATION
+
   # ── Local readout. The block gives app code a clear/print API on a
   #     128x64 panel; it does not render the readings by itself, so this
   #     is a screen a generated product can write to, not a dashboard. ──

@@ -1,9 +1,22 @@
-description: Smoothly transitions a u8 brightness/level param toward a target instead of jumping. Removes harshness from manual setpoint changes.
+description: >-
+  Smoothly ramps a light's level toward a requested level instead of jumping.
+  Controllers write the REQUESTED level (target_param); this block is the only
+  writer of the level the driver applies (output_param) and walks it there at
+  step_per_tick units per tick_ms.
 
-# Intercepts changes to target_param. Instead of letting the new value reach the
-# driver immediately, a small task ramps the actual value at `step_per_tick`
-# units per `tick_ms` until it reaches the target. The driver only sees the
-# intermediate values, which keeps brightness changes visually pleasant.
+# Two params, because the bus applies a write to hardware BEFORE any solution
+# hears of it: a block that only watched the driver's own param would learn the
+# new value after the light had already jumped to it, and its ramp would then
+# snap back and walk up. So:
+#   - target_param  — what Matter / buttons / the console / NVS restore write.
+#                      Bind controllers and persistence HERE.
+#   - output_param  — what the PWM driver applies (e.g. pwm_led's
+#                      brightness_param). Nothing else may write it. Every
+#                      step is a write, so bind nothing that reports or
+#                      persists to it either, or each step goes on the wire.
+# The ramp starts from the level the driver last applied, never from 0. The
+# very first request after boot (the driver has applied nothing yet) is
+# written straight through: there is no known level to ramp from.
 
 params:
   tick_ms:
@@ -19,4 +32,12 @@ driver_params:
   target_param:
     type: u8
     required: true
-    description: u8 param to smooth (typically APP_DRIVER_PARAM_BRIGHTNESS)
+    description: >-
+      u8 param holding the REQUESTED level — the one controllers, buttons, the
+      console and persistence write (e.g. APP_DRIVER_PARAM_BRIGHTNESS_TARGET)
+  output_param:
+    type: u8
+    required: true
+    description: >-
+      u8 param the driver applies (e.g. APP_DRIVER_PARAM_BRIGHTNESS, bound as
+      the PWM driver's brightness param). This block is its only writer.

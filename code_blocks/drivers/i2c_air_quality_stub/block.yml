@@ -1,4 +1,4 @@
-description: I2C air-quality sensor stub. Publishes an AirQuality enum value periodically. Replace with real sensor (SCD4x, BME688, etc.).
+description: "Placeholder for an I2C air-quality sensor: brings up the I2C bus and a poll timer, and PUBLISHES NOTHING (it logs that no sensor protocol is implemented). Not a working sensor — for real readings use a real driver (drivers/scd4x for CO2, drivers/sgp40 for VOC) or write the protocol in."
 
 # CONFIGURES its own I2C bus (it takes its own sda_gpio/scl_gpio/freq_hz), so
 # it is a provider: a sensor block declaring `requires_bus:` on the same port
@@ -18,16 +18,20 @@ params:
   scl_gpio: { type: int, required: true }
   freq_hz:  { type: int, default: 100000 }
   poll_interval_ms: { type: int, default: 30000 }
-  initial_quality:  { type: int, default: 1 }   # 1 = Good
-  initial_co2_ppm:  { type: int, default: 800 } # plausible indoor baseline
+  # Unused since the block stopped publishing a fake reading. Kept so products
+  # that still set them validate; they change nothing.
+  initial_quality:  { type: int, default: 1, description: Unused — nothing is published }
+  initial_co2_ppm:  { type: int, default: 800, description: Unused — nothing is published }
 
 driver_params:
   air_quality_param:
     type: u8
-    required: true
+    required: false
+    default: ""
+    description: (Optional, unused) param a real driver would publish the AirQuality enum on. This placeholder never writes it.
   co2_ppm_param:
     type: u16
     required: false
     default: ""
-    description: (Optional) param ID to publish CO2 concentration in ppm (uint16). Empty disables.
+    description: (Optional, unused) param a real driver would publish CO2 ppm on. This placeholder never writes it.
 maturity: stub

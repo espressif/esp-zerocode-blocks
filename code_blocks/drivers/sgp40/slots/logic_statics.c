@@ -34,6 +34,17 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
     return {{prefix_lc}}_err;
 }
 
+/* Sensirion CRC-8 over one 2-byte word: polynomial 0x31, init 0xFF (datasheet). */
+static uint8_t {{prefix_lc}}_sgp_crc8(const uint8_t *w)
+{
+    uint8_t crc = 0xFF;
+    for (int i = 0; i < 2; i++) {
+        crc ^= w[i];
+        for (int b = 0; b < 8; b++) crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static void {{prefix_lc}}_sgp_poll_cb(void *arg)
 {
     /* Default RH=50%, T=25C compensation (0x8000 / 0x6666 each, with CRC bytes). */
@@ -42,6 +53,7 @@ static void {{prefix_lc}}_sgp_poll_cb(void *arg)
     vTaskDelay(pdMS_TO_TICKS(30));
     uint8_t buf[3] = {0};
     if (i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50) != ESP_OK) return;
+    if ({{prefix_lc}}_sgp_crc8(&buf[0]) != buf[2]) return;  /* corrupted frame: keep the last reading */
     uint16_t raw = ((uint16_t)buf[0] << 8) | buf[1];
     app_driver_param_val_t v = { .u16 = raw };
     app_driver_set_param({{cfg.raw_param}}, v, APP_DRIVER_SOURCE_LOCAL);

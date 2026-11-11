@@ -1,3 +1,4 @@
+{{#if cfg.mode_param}}
 static lv_obj_t *s_{{prefix_lc}}_mode_dd = NULL;
 
 /* LVGL task — no lock. */
@@ -7,3 +8,4 @@ static void {{prefix_lc}}_mode_dd_cb(lv_event_t *e)
     app_driver_param_val_t v = { .u8 = (uint8_t)lv_dropdown_get_selected(dd) };
     app_driver_set_param({{cfg.mode_param}}, v, s_handle);
 }
+{{/if}}

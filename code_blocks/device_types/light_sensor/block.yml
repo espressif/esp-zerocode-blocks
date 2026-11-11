@@ -1,4 +1,4 @@
-description: "Light Sensor device type (IlluminanceMeasurement, log10 lux × 10000) (Matter: light_sensor; RainMaker: esp.device.other)"
+description: "Light Sensor device type (IlluminanceMeasurement; value_param in lux, log-encoded for Matter/Zigbee) (Matter: light_sensor; RainMaker: esp.device.other)"
 device_types:
   matter: light_sensor
   rainmaker: esp.device.other
@@ -21,6 +21,6 @@ driver_params:
   value_param:
     type: u16
     required: true
-    description: Driver param ID for measured illuminance (uint16_t, MeasuredValue spec encoding)
+    description: Driver param ID for measured illuminance in plain lux (uint16_t). The Matter and Zigbee bindings encode it as MeasuredValue = 10000*log10(lux)+1; RainMaker and the display show lux as is.
 
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

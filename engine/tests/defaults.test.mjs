@@ -49,6 +49,7 @@ test('a product with no framework gets the base defaults', async () => {
   for (const id of BASE) assert.equal(count(blocks, id), 1, id)
   for (const id of MATTER) assert.equal(count(blocks, id), 0, id)
   assert.ok(!existsSync(join(outDir, 'defaults.yml')), 'the list itself is not copied into the tree')
+  assert.ok(!existsSync(join(outDir, 'deprecated_components.yml')), 'nor is the deprecated-components table')
 })
 
 test('a Matter product also gets the Matter defaults', async () => {

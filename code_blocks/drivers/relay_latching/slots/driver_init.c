@@ -13,5 +13,13 @@
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_latch_cfg));
     gpio_set_level((gpio_num_t){{prefix}}_LATCH_SET_GPIO, !{{prefix}}_LATCH_LEVEL);
     gpio_set_level((gpio_num_t){{prefix}}_LATCH_RESET_GPIO, !{{prefix}}_LATCH_LEVEL);
+    const esp_timer_create_args_t {{prefix_lc}}_latch_args = {
+        .callback = &{{prefix_lc}}_latch_end_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "{{prefix_lc}}_latch",
+        .skip_unhandled_events = false,
+    };
+    if (esp_timer_create(&{{prefix_lc}}_latch_args, &s_{{prefix_lc}}_latch_timer) != ESP_OK) s_{{prefix_lc}}_latch_timer = NULL;
     ESP_LOGI(TAG, "Latching relay {{prefix_lc}}: set=%d reset=%d", {{prefix}}_LATCH_SET_GPIO, {{prefix}}_LATCH_RESET_GPIO);
 }

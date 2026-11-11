@@ -1,0 +1,38 @@
+id: rfid-reader-i2c-webui
+name: RFID Reader (I2C, Web UI)
+description: >-
+  An RC522 RFID reader on I2C whose card-present state shows on the device's
+  own web page — the catalog example of the RC522 reader blocks.
+keywords: [rfid, rc522, mfrc522, nfc, card, mifare, i2c, web ui]
+
+frameworks: [webui]
+
+instances:
+  - block: peripherals/i2c_bus
+    prefix: I2C
+    cfg:
+      port: 0
+      sda_gpio: 6
+      scl_gpio: 7
+
+  - block: drivers/rfid_rc522
+    prefix: RFID
+    cfg:
+      i2c_port: 0
+      present_param: APP_DRIVER_PARAM_CARD_PRESENT
+      card_param: APP_DRIVER_PARAM_CARD_EVENT
+
+  - block: behaviors/webui_row
+    prefix: ROW_CARD
+    cfg:
+      label: Card on reader
+      kind: binary
+      param: APP_DRIVER_PARAM_CARD_PRESENT
+      value_kind: bool
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode RFID Reader I2C

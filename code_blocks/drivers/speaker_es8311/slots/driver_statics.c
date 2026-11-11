@@ -51,6 +51,10 @@ static void {{prefix_lc}}_spk_task(void *arg)
 static void {{prefix_lc}}_ctrl_pin(int gpio, int level)
 {
     if (gpio < 0) return;
+    /* Level BEFORE output mode: gpio_config() drives the pin at once and the
+       output register resets to 0, which for an active-LOW amplifier enable
+       (pa_active_level: 0) is ON — the power-up pop this ordering prevents. */
+    gpio_set_level((gpio_num_t)gpio, level);
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = (1ULL << gpio);
     cfg.mode = GPIO_MODE_OUTPUT;

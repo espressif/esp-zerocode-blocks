@@ -10,9 +10,27 @@ params:
   relay_active_level: { type: int, default: 1 }
   button_gpio: { type: int, required: true }
   button_active_level: { type: int, default: 0 }
+  toggle_before_reset:
+    type: bool
+    default: true
+    description: >-
+      With a factory-reset hold on the same pin (behaviors/factory_reset_long_press,
+      e.g. 10 s): any press released before the hold toggles the param exactly
+      once, at its release (a short click at the end of the click), and a press
+      that reaches the reset does not. Without it a press held past the
+      button's long-press time (1.5-2 s) toggled nothing. A double press is
+      never a toggle. No effect without a reset hold on the pin (the click
+      toggles, as before); false keeps the click-only toggle beside a hold.
 
 driver_params:
   param_id:
     type: bool
     default: APP_DRIVER_PARAM_POWER
     description: Boolean param the relay drives and the button toggles
+
+reacts:
+  driver: "A change of {{cfg.param_id}} drives the relay pin to match (active level per cfg), and a click on the block's own button toggles that param; product code writes the param and never drives the pin or reads the button for the toggle itself."
+
+facts:
+  toggle_until_reset: "With behaviors/factory_reset_long_press on the same pin, any press released before its hold toggles once and a press that reaches the hold resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold N s to reset\" needs no button code of the product's own."
+  boot_state: "The output is off at boot and its param is written false (as state) inside app_driver_init, before any framework or product code runs, so app_driver_param_seen is true and the state is known from the start; a value restored by nvs_persist_bool replaces it, so a saved ON still comes back on."

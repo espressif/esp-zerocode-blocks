@@ -113,8 +113,8 @@ bool app_aws_iot_connected(void);
 /* ── Configuration ──────────────────────────────────────────────────────
  *
  * The AWS identity — endpoint, port, thing name, certificate, private key and
- * an optional root CA — is device data: the platform's flash page asks for it
- * and writes it to the fctry partition (block.yml device_data:). It is read
+ * an optional root CA — is device data, written with the firmware to the
+ * fctry partition (block.yml device_data:). It is read
  * once, at init, and has no setter.
  *
  * Wi-Fi is the one value set on the device. The block ships `aws-setup`

@@ -20,8 +20,8 @@ frameworks: [aws_iot]
 # the app_logic_PRIV_REQUIRES wiring, both directions of the session, and the
 # claim that any task may publish.
 #
-# Onboarding: the flash page asks for the endpoint, thing name, certificate and
-# key (the framework's device data), and Wi-Fi is the console's aws-wifi
+# Onboarding: the endpoint, thing name, certificate and key are the
+# framework's device data, written with the firmware, and Wi-Fi is the console's aws-wifi
 # <ssid> <password> or the guided aws-setup.
 # The thing's IoT policy must grant iot:Connect, iot:Publish on
 # zerocode/<thing>/heartbeat, iot:Subscribe/iot:Receive on zerocode/<thing>/cmd,

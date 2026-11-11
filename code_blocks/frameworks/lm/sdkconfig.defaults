@@ -1,3 +1,8 @@
 # esp_tinylm allocates scratch and the KV cache in PSRAM — without it
 # esp_tinylm_load() returns ESP_ERR_NO_MEM and language commands are disabled.
 CONFIG_SPIRAM="y"
+# The board may have no PSRAM (an N8 S3 DevKitC) or a different mode than the
+# board defaults declare. Without this the 2nd-stage init aborts in cpu_start
+# ("Failed to init external RAM!") and the board reset-loops before
+# app_lm_init's ESP_ERR_NO_MEM path can disable language commands gracefully.
+CONFIG_SPIRAM_IGNORE_NOTFOUND="y"

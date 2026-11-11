@@ -10,7 +10,16 @@
      * Each cluster has its OWN config_t and feature namespace (there is no
      * shared concentration_measurement one). MeasurementMedium is Air (0)
      * everywhere: CO2 and TVOC's create() set it themselves; PM2.5 takes it
-     * from its config_t, set explicitly below. */
+     * from its config_t, set explicitly below.
+     *
+     * Units: PM2.5 is an esp_matter-stored cluster whose NumericMeasurement
+     * config defaults to MeasurementUnit 0 (PPM) with a non-null Min/Max of 0,
+     * so it published µg/m³ readings as ppm, each above its own MaxMeasured.
+     * CO2 and TVOC are CODE-DRIVEN in esp_matter 1.6 (their attributes are
+     * MANAGED_INTERNALLY) and esp_matter ships no server for them, so this
+     * block registers CHIP's ConcentrationMeasurementCluster itself through
+     * the cluster's init/shutdown callbacks (matter_statics); the unit lives
+     * in that server's config. */
     {{#if cfg.co2_ppm_param}}
     {
         esp_matter::cluster::carbon_dioxide_concentration_measurement::config_t co2_cfg;
@@ -18,12 +27,16 @@
         esp_matter::cluster_t *co2_c = esp_matter::cluster::carbon_dioxide_concentration_measurement::create(
             ep, &co2_cfg, CLUSTER_FLAG_SERVER);
         if (!co2_c) { ESP_LOGE(TAG, "Failed to create {{prefix_lc}} CO2 cluster"); return ESP_FAIL; }
+        esp_matter::cluster::set_init_and_shutdown_callbacks(co2_c, zc_aq_co2_init, zc_aq_co2_shutdown);
     }
     {{/if}}
     {{#if cfg.pm25_param}}
     {
         esp_matter::cluster::pm2_5_concentration_measurement::config_t pm25_cfg;
         pm25_cfg.measurement_medium = 0; /* Air */
+        pm25_cfg.features.numeric_measurement.measurement_unit = 4; /* UGM3 (µg/m³) */
+        pm25_cfg.features.numeric_measurement.min_measured_value = nullable<float>();
+        pm25_cfg.features.numeric_measurement.max_measured_value = nullable<float>();
         pm25_cfg.feature_flags = esp_matter::cluster::pm2_5_concentration_measurement::feature::numeric_measurement::get_id();
         esp_matter::cluster_t *pm25_c = esp_matter::cluster::pm2_5_concentration_measurement::create(
             ep, &pm25_cfg, CLUSTER_FLAG_SERVER);
@@ -37,6 +50,7 @@
         esp_matter::cluster_t *tvoc_c = esp_matter::cluster::total_volatile_organic_compounds_concentration_measurement::create(
             ep, &tvoc_cfg, CLUSTER_FLAG_SERVER);
         if (!tvoc_c) { ESP_LOGE(TAG, "Failed to create {{prefix_lc}} TVOC cluster"); return ESP_FAIL; }
+        esp_matter::cluster::set_init_and_shutdown_callbacks(tvoc_c, zc_aq_tvoc_init, zc_aq_tvoc_shutdown);
     }
     {{/if}}
 }

@@ -1,5 +1,13 @@
 description: Shared SPI bus init for products with multiple SPI devices on the same lines.
 
+# Adopts rather than collides: a host another block (drivers/display_ili9341_spi)
+# already initialized is logged and left as that block configured it, and the
+# panel does the same if this block ran first.
+
+provides_bus:
+  type: spi
+  port_param: host
+
 params:
   host:
     type: int

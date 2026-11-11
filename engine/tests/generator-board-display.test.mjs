@@ -284,3 +284,26 @@ test('an unreachable board pack says so in the same failure', async (t) => {
     },
   )
 })
+
+/* ── the card column is the framework's only on-screen object ─────────── */
+
+// A product that draws its own UI has no device cards. The framework's
+// full-screen column then has nothing to show and, opaque under LVGL's light
+// theme, covered the product's screen.
+test('no device cards: the framework puts nothing on the screen', async (t) => {
+  const { paths, outDir } = scaffold(t, { boardDevices: PANEL_AND_TOUCH })
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  const cpp = appDisplay(outDir)
+  assert.ok(!cpp.includes('lv_obj_create('), 'no container is created')
+  assert.match(cpp, /No device cards: the screen is the product's own/)
+  assert.match(cpp, /app_driver_register_solution\("display"/, 'the framework still registers')
+})
+
+test('device cards: they go in one full-screen column, as before', async (t) => {
+  const { paths, outDir } = scaffold(t, { boardDevices: PANEL_AND_TOUCH })
+  await generate(paths, { product: product({ instances: [cardInstance] }), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  const cpp = appDisplay(outDir)
+  assert.match(cpp, /lv_obj_t \*col = lv_obj_create\(lv_display_get_screen_active\(s_disp\)\)/)
+  assert.match(cpp, /lv_obj_add_flag\(col, LV_OBJ_FLAG_EVENT_BUBBLE\)/)
+  assert.match(cpp, /zc_card_display_card_init\(col\)|_display_card_init\(col\)/)
+})

@@ -24,3 +24,6 @@ driver_params:
     type: u8
     required: true
     description: Servo position 0-180 (uint8)
+
+reacts:
+  driver: "A change of {{cfg.position_param}} moves the servo to that angle (0-180, clamped) by setting its 50 Hz PWM duty; product code writes the param and never drives the LEDC channel itself."

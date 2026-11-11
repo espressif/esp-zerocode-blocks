@@ -8,3 +8,4 @@
 #include <driver/i2c_master.h>
 #include <esp_timer.h>
 #include <stdlib.h>
+#include <esp_rom_sys.h>

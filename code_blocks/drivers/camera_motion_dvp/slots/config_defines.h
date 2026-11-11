@@ -15,6 +15,8 @@
 #define {{prefix}}_CAM_HREF   {{cfg.pin_href}}
 #define {{prefix}}_CAM_PCLK   {{cfg.pin_pclk}}
 #define {{prefix}}_CAM_XCLK_HZ {{cfg.xclk_freq_hz}}
+#define {{prefix}}_CAM_LEDC_TIMER   {{cfg.ledc_timer}}
+#define {{prefix}}_CAM_LEDC_CHANNEL {{cfg.ledc_channel}}
 #define {{prefix}}_CAM_PX_THRESH {{cfg.pixel_threshold}}
 #define {{prefix}}_CAM_AREA_PCT  {{cfg.area_threshold_pct}}
 #define {{prefix}}_CAM_HOLD_MS   {{cfg.hold_ms}}

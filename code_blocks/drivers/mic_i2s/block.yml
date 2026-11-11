@@ -31,10 +31,19 @@ cmake_priv_requires:
   app_logic: [esp_driver_i2s]
 
 params:
+  # -1 (I2S_NUM_AUTO), not a fixed port: the C3/C5/C6/H2 have ONE I2S
+  # controller, so port 1 failed i2s_new_channel ("invalid I2S port id") and
+  # the device boot-looped. Auto takes the first controller with a free RX
+  # direction, which on a single-controller chip is controller 0 beside a
+  # speaker's TX (the two directions are independent channels), and on the
+  # classic ESP32 the driver moves it to another port if the clocks clash.
   port:
     type: int
-    default: 1
-    description: I2S peripheral number. Must differ from any other I2S block on the same product (speaker_i2s defaults to 0).
+    default: -1
+    description: >-
+      I2S peripheral number, or -1 to let the driver pick a controller with a
+      free RX direction (works on every chip, including the one-controller
+      C3/C5/C6/H2). A fixed port must exist on the target.
   bclk_gpio:
     type: int
     required: true

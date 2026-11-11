@@ -2,7 +2,8 @@ static volatile bool s_{{prefix_lc}}_on = false;
 static volatile uint8_t s_{{prefix_lc}}_brightness = 254;
 static esp_timer_handle_t s_{{prefix_lc}}_gate_timer = NULL;
 
-static void {{prefix_lc}}_gate_fire(void *arg)
+/* Runs in ISR context (ESP_TIMER_ISR dispatch), so it lives in IRAM. */
+static void IRAM_ATTR {{prefix_lc}}_gate_fire(void *arg)
 {
     if (!s_{{prefix_lc}}_on || s_{{prefix_lc}}_brightness == 0) return;
     gpio_set_level((gpio_num_t){{prefix}}_TRIAC_GATE_GPIO, 1);

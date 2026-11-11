@@ -1,6 +1,12 @@
-description: Enable ELF-format core dump to flash on crash. Costs ~15-20 KB binary +
+description: On a crash, print an ELF core dump to the console UART (base64), where the serial log captures it for post-mortem decoding. Costs ~15-20 KB binary; needs no partition.
 
-# Original notes from the .defaults file:
-#   Enable ELF-format core dump to flash on crash. Costs ~15-20 KB binary +
-#   requires a `coredump` partition in the partition table. Useful for
-#   fielded devices to diagnose post-mortem from a flash dump.
+# TO_UART, not TO_FLASH: a flash core dump needs a `coredump` partition, and
+# none of the partition-table blocks carries one — so every panic logged "no
+# core dump partition" and stored nothing; the fragment was inert. The UART
+# dump lands in the device log the platform already keeps, and works whatever
+# the table (and with task stacks in PSRAM, which TO_FLASH refuses).
+#
+# The ELF format and the checksum are no longer choices in IDF 6 (the core dump
+# module selects ELF + SHA256 itself), so they are not set here.
+#
+# Apply via: sdkconfig_fragments: [coredump]

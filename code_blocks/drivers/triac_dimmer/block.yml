@@ -7,8 +7,24 @@ description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC
 # This driver:
 #  - Hooks a GPIO ISR on the ZCD edge
 #  - Schedules a one-shot timer to fire the gate after delay_us
-#  - delay_us = (half_cycle_us * (255 - brightness)) / 255
-# Depends on peripherals/gpio_isr_service.
+#  - delay_us = ((half_cycle_us - 200) * (255 - brightness)) / 255 — the 200 us
+#    margin keeps the latest firing clear of the next zero-cross
+# Installs the shared GPIO ISR service itself if no earlier block did
+# (peripherals/gpio_isr_service is optional).
+
+# The gate pulse must land within microseconds of its deadline, so the one-shot
+# timer dispatches from the ISR (ESP_TIMER_ISR), not the esp_timer task. IDF
+# declares ESP_TIMER_ISR only when this option is on (default n) — without it
+# the block does not compile.
+# That ISR is IRAM-safe (CONFIG_ESP_TIMER_IN_IRAM, default y), so it also fires
+# while flash is being written — an NVS save of the brightness, say — and then
+# everything the callback calls must be in IRAM too. gpio_set_level is placed
+# there only with GPIO_CTRL_FUNC_IN_IRAM (default n); without it a gate pulse
+# that lands during a flash write is a cache-access panic, at 100-120 pulses
+# a second.
+sdkconfig:
+  CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD: 'y'
+  CONFIG_GPIO_CTRL_FUNC_IN_IRAM: 'y'
 
 params:
   zcd_gpio:
@@ -27,3 +43,6 @@ params:
 driver_params:
   power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
   brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+
+reacts:
+  driver: "A change of {{cfg.power_param}} or {{cfg.brightness_param}} sets whether and how late after each zero-cross the block fires the triac gate (off or brightness 0 = no gate pulse); product code writes the params and never drives the gate pin itself."

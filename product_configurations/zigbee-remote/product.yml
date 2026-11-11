@@ -12,6 +12,7 @@ instances:
     cfg:
       gpio: 9
       active_level: 0
+      position_param: APP_DRIVER_PARAM_SWITCH_POSITION
 
   # ── Controller device types (Zigbee client bindings) ────────
   - block: device_types/dimmer_remote

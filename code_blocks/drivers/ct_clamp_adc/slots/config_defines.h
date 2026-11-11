@@ -1,0 +1,9 @@
+#define {{prefix}}_CT_GPIO        {{cfg.gpio}}
+#define {{prefix}}_CT_A_PER_V     {{cfg.amps_per_volt}}
+#define {{prefix}}_CT_MAINS_V     {{cfg.mains_voltage}}
+#define {{prefix}}_CT_MAINS_HZ    {{cfg.mains_hz}}
+#define {{prefix}}_CT_PF_PCT      {{cfg.power_factor_pct}}
+#define {{prefix}}_CT_ZERO_MV     {{cfg.zero_mv}}
+#define {{prefix}}_CT_MIN_MA      {{cfg.min_current_ma}}
+#define {{prefix}}_CT_ATTEN       {{cfg.attenuation}}
+#define {{prefix}}_CT_POLL_MS     {{cfg.poll_interval_ms}}

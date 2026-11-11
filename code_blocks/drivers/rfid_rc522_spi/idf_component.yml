@@ -1,0 +1,2 @@
+dependencies:
+  abobija/rc522: "~4.0.1"

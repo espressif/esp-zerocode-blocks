@@ -1,7 +1,12 @@
+#if {{prefix}}_WC_SPLIT
+if (param_id == {{#if cfg.current_param}}{{cfg.current_param}}{{/if}} && val.u16 <= 10000 && s_{{prefix_lc}}_zb_endpoint) {
+#else
 if (param_id == {{cfg.position_param}} && s_{{prefix_lc}}_zb_endpoint) {
-    /* Driver position is centi-percent (0-10000); ZCL lift percentage is u8 0-100. */
+#endif
+    /* Driver position is centi-percent OPEN (0-10000); ZCL lift percentage is
+     * u8 percent CLOSED (0 = open, 100 = closed). */
     uint16_t centi = val.u16;
-    uint8_t pct = (uint8_t)(centi / 100 > 100 ? 100 : centi / 100);
+    uint8_t pct = (uint8_t)(100 - (centi / 100 > 100 ? 100 : centi / 100));
     if (esp_zigbee_lock_acquire(portMAX_DELAY)) {
         ezb_zcl_set_attr_value(s_{{prefix_lc}}_zb_endpoint,
             EZB_ZCL_CLUSTER_ID_WINDOW_COVERING, EZB_ZCL_CLUSTER_SERVER,

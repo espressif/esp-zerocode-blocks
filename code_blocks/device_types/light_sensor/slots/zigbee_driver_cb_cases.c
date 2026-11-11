@@ -1,5 +1,5 @@
 if (param_id == {{cfg.value_param}} && s_{{prefix_lc}}_zb_endpoint) {
-    uint16_t v = val.u16;
+    uint16_t v = {{prefix_lc}}_zb_lux_encode(val.u16);
     esp_zigbee_lock_acquire(portMAX_DELAY);
     (void)ezb_zcl_set_attr_value(s_{{prefix_lc}}_zb_endpoint,
         EZB_ZCL_CLUSTER_ID_ILLUMINANCE_MEASUREMENT, EZB_ZCL_CLUSTER_SERVER,

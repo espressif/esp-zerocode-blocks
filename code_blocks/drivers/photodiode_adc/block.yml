@@ -1,7 +1,8 @@
 description: Real ADC oneshot read for ambient light (photodiode / photoresistor / phototransistor)
 
-# Generic ADC photodiode reader. Publishes a u16 value scaled to the spec's
-# IlluminanceMeasurement::MeasuredValue range. The exact mapping from raw ADC to lux
+# Generic ADC photodiode reader. Publishes a u16 value linearly scaled from the
+# raw reading, meant as approximate lux (device_types/light_sensor takes plain
+# lux and does the Matter/Zigbee log encoding). The exact mapping from raw ADC to lux
 # depends on the photodiode + amplifier circuit — replace the simple linear scale
 # below with whatever your sensor datasheet recommends.
 
@@ -9,7 +10,11 @@ params:
   adc_unit:
     type: int
     default: 0
-    description: ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2)
+    description: >-
+      ADC unit (0 = ADC_UNIT_1, 1 = ADC_UNIT_2). Shared: several photodiodes
+      (and peripherals/adc_unit) on one unit adopt the same handle. Prefer
+      unit 0 — on ESP32/S2/S3 ADC2 is arbitrated with Wi-Fi and its reads fail
+      while Wi-Fi is up; ESP32-C2/C5/C6/H2 have no ADC2 at all.
   adc_channel:
     type: int
     required: true
@@ -34,3 +39,6 @@ driver_params:
   value_param:
     type: u16
     required: true
+
+facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."

@@ -1,0 +1,43 @@
+id: flow-meter-webui
+name: Flow Meter (Web UI)
+description: >-
+  A hall-effect water flow sensor (YF-S201 style, 450 pulses per litre) whose
+  litres-per-minute and total pulse count show on the device's own web page —
+  the catalog example of drivers/pulse_counter.
+keywords: [flow, water, pulse, hall, yf-s201, litres, rate, web ui]
+
+frameworks: [webui]
+
+instances:
+  - block: drivers/pulse_counter
+    prefix: FLOW
+    cfg:
+      gpio: 4
+      pulses_per_unit: 450
+      rate_window_ms: 1000
+      publish_ms: 1000
+      count_param: APP_DRIVER_PARAM_FLOW_PULSES
+      rate_param: APP_DRIVER_PARAM_FLOW_RATE
+
+  - block: behaviors/webui_row
+    prefix: ROW_RATE
+    cfg:
+      label: Flow (L/min)
+      kind: value
+      param: APP_DRIVER_PARAM_FLOW_RATE
+      value_kind: u32
+
+  - block: behaviors/webui_row
+    prefix: ROW_TOTAL
+    cfg:
+      label: Pulses
+      kind: value
+      param: APP_DRIVER_PARAM_FLOW_PULSES
+      value_kind: u32
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Flow Meter

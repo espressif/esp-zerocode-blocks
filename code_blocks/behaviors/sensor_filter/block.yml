@@ -1,0 +1,56 @@
+description: "Average or median of a numeric param's last N readings, sampled on a fixed period and published to its own param — a smoothed reading, a decision window, a 5-minute average"
+
+# WHY SAMPLED, NOT NOTIFIED. A listener only hears a param CHANGE: a write of
+# the value it already holds is dropped, so a window filled from notifications
+# freezes on a steady reading (a load that settles at 0 mA kept its last
+# non-zero samples; a soil probe holding 41 % averaged hours-old values). This
+# block reads the source's CURRENT value every sample_ms on the bus's poll task,
+# so a steady reading counts every period like any other.
+#
+# The output is published from the first sample on, over the samples taken so
+# far, and settles as the window fills (samples x sample_ms). With
+# stale_after_ms set, a period in which the source was not written for that
+# long adds nothing (a sensor that stopped answering does not keep feeding its
+# last value); the output then holds its last value. The output is written with
+# app_driver_set_param, so its listeners hear changes of the filtered value.
+
+params:
+  source_param:
+    type: string
+    required: true
+    description: The reading to filter — APP_DRIVER_PARAM_<NAME>
+  output_param:
+    type: string
+    required: true
+    description: Where the filtered value is published — a different param of the same value_kind
+  value_kind:
+    type: string
+    default: i16
+    enum: [i16, u16, u32]
+    description: Both params' value type
+  mode:
+    type: string
+    default: average
+    enum: [average, median]
+    description: average (rounded to the nearest unit) or median (an even window takes the mean of the two middle values)
+  samples:
+    type: int
+    default: 5
+    description: How many readings the window holds, 1-32
+  sample_ms:
+    type: int
+    default: 1000
+    description: How often the source is read, at least 10 ms
+  stale_after_ms:
+    type: int
+    default: 0
+    description: When > 0, a period adds no sample unless the source was written within this many ms
+
+param_refs:
+  source_param: "{{cfg.value_kind}}"
+  output_param: "{{cfg.value_kind}}"
+
+facts:
+  sampled: "It reads the source every sample_ms whether or not the reading changed, so a steady reading counts every period; a window filled from change notifications freezes on a steady value."
+  window: "The output is the average or median of the last samples readings, published from the first reading on and settling once the window is full (samples x sample_ms)."
+  stale: "With stale_after_ms set, a sensor that stopped writing adds nothing to the window and the output keeps its last value."

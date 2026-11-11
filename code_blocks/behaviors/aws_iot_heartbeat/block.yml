@@ -1,4 +1,12 @@
-description: Publishes a periodic heartbeat to AWS IoT, subscribes to a command topic (logging what arrives), and with `presence` set keeps a retained presence topic — "online" on connect, "offline" from the broker via the MQTT last will (app_aws_iot_set_will). A worked example of the aws_iot connectivity API — and the smallest thing that exercises both directions of the session.
+description: >-
+  Publishes a periodic JSON heartbeat ({"uptime_s", "thing"}, built with
+  json_generator) to AWS IoT, subscribes to a command topic and reads each
+  command as JSON with json_parser ({"action", "value"} logged; anything else
+  logged raw), and with `presence` set keeps a retained presence topic —
+  "online" on connect, "offline" from the broker via the MQTT last will
+  (app_aws_iot_set_will). A worked example of the aws_iot connectivity API AND
+  of the two native JSON components — the smallest thing that exercises both
+  directions of the session.
 
 # Behavior, logic slots only. Requires frameworks/aws_iot in the same product:
 # the block system has no way to DECLARE that (no block.yml key expresses a

@@ -84,7 +84,19 @@ export function validateBlock(block: Block): ValidationResult {
   }
 
   for (const [refKey, refType] of Object.entries(block.param_refs ?? {})) {
-    if (!VALUE_TYPES.includes(refType as ValueType)) {
+    // `{{cfg.<key>}}`: the type is the instance's choice — that key must be a
+    // declared param whose enum lists only value types.
+    const fromCfg = /^\{\{\s*cfg\.(\w+)\s*\}\}$/.exec(String(refType))
+    if (fromCfg) {
+      const src = block.params?.[fromCfg[1]!]
+      if (!src?.enum || src.enum.some((v) => !VALUE_TYPES.includes(v as ValueType))) {
+        errors.push({
+          level: 'error',
+          ...ctx,
+          message: `param_refs.${refKey} takes its type from cfg.${fromCfg[1]}, which must be a param with an enum of value types (${VALUE_TYPES.join('|')})`,
+        })
+      }
+    } else if (!VALUE_TYPES.includes(refType as ValueType)) {
       errors.push({
         level: 'error',
         ...ctx,
@@ -96,6 +108,19 @@ export function validateBlock(block: Block): ValidationResult {
         level: 'error',
         ...ctx,
         message: `param_refs.${refKey} references undeclared cfg param '${refKey}'`,
+      })
+    }
+  }
+
+  for (const [name, type] of Object.entries(block.owned_params ?? {})) {
+    if (!/^APP_DRIVER_PARAM_[A-Z0-9_]+$/.test(name)) {
+      errors.push({ level: 'error', ...ctx, message: `owned_params.${name}: a param name is APP_DRIVER_PARAM_<NAME>` })
+    }
+    if (!VALUE_TYPES.includes(type as ValueType)) {
+      errors.push({
+        level: 'error',
+        ...ctx,
+        message: `owned_params.${name} has invalid type '${type}' (expected ${VALUE_TYPES.join('|')})`,
       })
     }
   }
@@ -179,6 +204,7 @@ interface ParamRef {
   type: ValueType
   emittedBy: string[]
   consumedBy: string[]
+  sharedBy?: string[]
 }
 
 /* ── esp-board-manager board packs ────────────────────────────────────────
@@ -264,6 +290,9 @@ export function boardChip(boardDir: string): string | undefined {
  *   gpio_*                knob gpio_encoder_a/b
  *   *_io_num, *_io_<n>    spi sclk/mosi/miso/quadwp/quadhd, uart tx/rx/rts/cts,
  *                         sdmmc data_io_0..7
+ *   *_io                  a DVP camera's control lines (esp_cam_ctlr's
+ *                         dvp_config: pclk_io, vsync_io, de_io, reset_io,
+ *                         pwdn_io, xclk_io)
  * plus every DIRECT integer under a `pins:` map (sda/scl/mclk/bclk/ws/dout/
  * din/clk/cmd/d0..d7) — direct only, so `pins.invert_flags` is not descended.
  * Keys like `port`, `spi_port`, `uart_num`, `channel_id`, `bus_id` are
@@ -273,6 +302,11 @@ function isPinKey(key: string): boolean {
     key === 'pin' || key.endsWith('_pin') ||
     key === 'gpio_num' || key.endsWith('_gpio_num') ||
     key.endsWith('_io_num') || /_io_\d+$/.test(key) ||
+    // pclk_io / vsync_io / de_io / reset_io / pwdn_io: a DVP camera's control
+    // lines (bmgr dvp_config, after esp_cam_ctlr). Without this the
+    // ESP-Mosaico's camera held GPIO 17/19/48/53/55 and they validated as
+    // free. esp-virtual-parts' gen_hwcat_v2.py mirrors this rule.
+    key.endsWith('_io') ||
     // gpio_encoder_a / gpio_encoder_b: the knob device (bmgr v0.7.2) keeps
     // its pins under a gpio_ PREFIX. Without this the M5Dial's encoder pins
     // validated as free.
@@ -406,6 +440,217 @@ export function boardPinOwners(boardDir: string): Map<number, BoardPinOwner> {
   return out
 }
 
+/**
+ * Framework pairs that cannot share one image yet. Each is a boot-time failure
+ * no build catches, so the engine refuses the composition rather than emit a
+ * firmware that aborts or loses its radio on the bench. The platform's registry
+ * (zerocode-ai shared/src/frameworks/profiles.ts) should say the same; until it
+ * does, this is what stops the pair.
+ *
+ *   matter + rainmaker — app_rainmaker_init always runs app_network_init, which
+ *     calls esp_wifi_init under ESP_ERROR_CHECK. Listed after Matter (whose
+ *     chip stack initialised Wi-Fi synchronously) that is ESP_ERR_INVALID_STATE
+ *     and an abort; listed before it, both still run a BLE commissioning /
+ *     provisioning stack on one NimBLE host. RainMaker has no shared-network
+ *     mode to defer with. The pair itself is supported upstream
+ *     (esp-rainmaker examples/matter): Matter owns Wi-Fi and BLE, and RainMaker
+ *     joins through it with a certificate claimed from a host BEFORE
+ *     commissioning, which is not a self-claim. This catalog does not build
+ *     that yet, so the refusal says "not yet", not "never".
+ *   ble_mesh + matter — ble_mesh calls nimble_port_init itself, and Matter's
+ *     sidecar turns OBSERVER/CENTRAL off (mesh cannot scan: ble_gap_disc
+ *     compiles to "not supported") and sets USE_BLE_ONLY_FOR_COMMISSIONING, so
+ *     CHIP deinits NimBLE and releases BT memory after commissioning.
+ *   ble_mesh + rainmaker — the same two NimBLE owners: RainMaker's BLE
+ *     provisioning and the mesh host.
+ */
+const FRAMEWORK_CONFLICTS: ReadonlyArray<readonly [string, string, string]> = [
+  ['matter', 'rainmaker', 'here both bring up Wi-Fi and BLE onboarding, and RainMaker has no shared-network mode (esp_wifi_init aborts on the second call). Supported upstream, RainMaker joins through Matter with a certificate claimed before commissioning, which this catalog does not build yet'],
+  ['matter', 'ble_mesh', 'both own the NimBLE host; Matter turns BLE scanning off and tears NimBLE down after commissioning'],
+  ['rainmaker', 'ble_mesh', 'both own the NimBLE host (RainMaker BLE provisioning and the mesh stack)'],
+]
+
+/** One message per conflicting pair among `frameworks`; empty when the mix is fine. */
+export function frameworkConflicts(frameworks: readonly string[]): string[] {
+  return FRAMEWORK_CONFLICTS
+    .filter(([a, b]) => frameworks.includes(a) && frameworks.includes(b))
+    .map(([a, b, why]) => `frameworks ${a} and ${b} cannot be combined yet: ${why}. Pick one of them.`)
+}
+
+/** LEDC sharing conflicts among a product's instances, one message each.
+ *
+ *  Every chip has four LEDC timers, and a timer has ONE frequency: whichever
+ *  instance configures it second retunes it for both. A servo (50 Hz) and a
+ *  dc_motor_h_bridge (20 kHz) both defaulting to timer 3 gave a 20 kHz
+ *  "servo" or a 50 Hz motor; a buzzer retuning per note bled into whatever
+ *  shared its timer. And two instances on one CHANNEL fight over one output.
+ *  Nothing caught either — the product built, booted and misbehaved.
+ *
+ *  An LEDC user is a block with a `ledc_timer` param. Its channels are its
+ *  `ledc_channel` / `*_channel` params. Its frequency is its `freq_hz` param
+ *  when it has one; a block that calls ledc_set_freq() retunes at run time
+ *  and can share its timer with nobody; any other block has a frequency of
+ *  its own (servo_pwm's 50 Hz), shared safely only with instances of itself.
+ *  Values are the instance cfg, else the param default. */
+export function ledcConflicts(
+  instances: ReadonlyArray<{ block?: string; prefix?: string; cfg?: Record<string, unknown> }>,
+  blocks: ReadonlyMap<string, Block>,
+): string[] {
+  const out: string[] = []
+  const timers = new Map<string, { who: string; freq: string }>()
+  const channels = new Map<string, string>()
+  for (const inst of instances) {
+    const block = inst.block ? blocks.get(inst.block) : undefined
+    if (!block?.params || !('ledc_timer' in block.params)) continue
+    const cfg = inst.cfg ?? {}
+    const value = (k: string): unknown => cfg[k] ?? block.params?.[k]?.default
+    const who = `${inst.block}/${inst.prefix}`
+    const timer = value('ledc_timer')
+    if (timer !== undefined && timer !== '') {
+      const retunes = Object.values(block.slots ?? {}).some((src) => src.includes('ledc_set_freq('))
+      const freq = retunes ? `retuned at run time by ${who}`
+        : 'freq_hz' in block.params ? `${value('freq_hz')} Hz`
+        : `${inst.block}'s own frequency`
+      const key = String(timer)
+      const prev = timers.get(key)
+      if (!prev) timers.set(key, { who, freq })
+      else if (retunes || prev.freq !== freq) {
+        out.push(`LEDC timer ${key} shared by ${prev.who} (${prev.freq}) and ${who} (${freq}) — a timer has one frequency, so the later init retunes it for both; give one a different ledc_timer`)
+      }
+    }
+    for (const k of Object.keys(block.params)) {
+      if (k !== 'ledc_channel' && !k.endsWith('_channel')) continue
+      const ch = value(k)
+      if (ch === undefined || ch === '') continue
+      const key = String(ch)
+      const prev = channels.get(key)
+      if (prev) out.push(`LEDC channel ${key} used by both ${prev} and ${who}.${k} — one channel drives one output; give one a different channel`)
+      else channels.set(key, `${who}.${k}`)
+    }
+  }
+  return out
+}
+
+/** A block that `needs_internet` with nothing that `provides_internet`, and a
+ *  `singleton` block listed twice. Both build and link (or fail to link with a
+ *  duplicate symbol nobody can read) and then do nothing on the device. */
+export function networkIssues(
+  instances: ReadonlyArray<{ block?: string; prefix?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworkBlocks: ReadonlyMap<string, Block>,
+): string[] {
+  const out: string[] = []
+  const providers = [
+    ...instances.filter((i) => i.block && blocks.get(i.block)?.provides_internet).map((i) => i.block as string),
+    ...[...frameworkBlocks].filter(([, b]) => b.provides_internet).map(([n]) => `frameworks/${n}`),
+  ]
+  const needers = instances.filter((i) => i.block && blocks.get(i.block)?.needs_internet)
+  if (needers.length > 0 && providers.length === 0) {
+    const fws = [...blocks.values()].filter((b) => b.kind === 'framework' && b.provides_internet).map((b) => b.id.split('/').pop())
+    out.push(
+      `${[...new Set(needers.map((i) => i.block))].join(', ')} needs internet, and nothing in this product brings up a network — ` +
+      `add behaviors/wifi_station${fws.length ? `, or a framework that does (${fws.join(', ')})` : ''}`,
+    )
+  }
+  const seen = new Map<string, number>()
+  for (const i of instances) {
+    if (!i.block || !blocks.get(i.block)?.singleton) continue
+    seen.set(i.block, (seen.get(i.block) ?? 0) + 1)
+  }
+  for (const [id, n] of seen) if (n > 1) out.push(`${id} may be listed once; it is listed ${n} times`)
+  return out
+}
+
+/** A block listed without any of the frameworks it `requires_frameworks`:
+ *  every line of it lives in that framework's slots, so it would generate
+ *  nothing at all. */
+export function missingFrameworks(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworks: readonly string[],
+): string[] {
+  const out: string[] = []
+  for (const id of new Set(instances.map((i) => i.block).filter((b): b is string => !!b))) {
+    const need = blocks.get(id)?.requires_frameworks ?? []
+    if (need.length && !need.some((f) => frameworks.includes(f))) {
+      out.push(`${id} works only with the ${need.join(' or ')} framework, which this product does not select — add ${need.length > 1 ? 'one of them' : 'it'} to frameworks:, or drop the block`)
+    }
+  }
+  return out
+}
+
+/** Two instances that each define the same C-linkage function (two RFID
+ *  readers both defining rfid_on_card): the product fails to link with a
+ *  duplicate symbol. Read from the slots, so any block's public function is
+ *  covered; one message per function. */
+export function duplicateCSymbols(
+  instances: ReadonlyArray<{ block?: string; prefix?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+): string[] {
+  const owners = new Map<string, string[]>()
+  for (const inst of instances) {
+    const block = inst.block ? blocks.get(inst.block) : undefined
+    if (!block) continue
+    const names = new Set<string>()
+    for (const body of Object.values(block.slots ?? {})) {
+      const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      for (const m of code.matchAll(/extern\s+"C"\s+[A-Za-z_][\w\s*]*?\b([A-Za-z_]\w*)\s*\([^;{)]*\)\s*\{/g)) {
+        if (!m[1]!.includes('{{')) names.add(m[1]!)
+      }
+    }
+    for (const n of names) owners.set(n, [...(owners.get(n) ?? []), `${inst.block}${inst.prefix ? ` (prefix=${inst.prefix})` : ''}`])
+  }
+  return [...owners].filter(([, who]) => who.length > 1)
+    .map(([n, who]) => `${who.join(' and ')} each define ${n}(), so the product cannot link — compose only one of them`)
+}
+
+/** Frameworks that bring up a Wi-Fi station in their own init, before any
+ *  behavior's logic_init: a station behavior beside one stands aside. */
+const SYNC_STATION_FRAMEWORKS = ['matter', 'rainmaker', 'mqtt', 'agents']
+
+/** A behavior that brings up a Wi-Fi station where it cannot work: beside
+ *  aws_iot alone (aws_iot decides two seconds after boot and defers to a
+ *  station already up, so the behavior would take the radio and aws_iot's own
+ *  network setup would configure nothing), beside espnow (the radio stays on
+ *  ESP-NOW's fixed channel, so it stands aside and nothing reaches the
+ *  internet), or beside a web UI that is its own access point (webui with no
+ *  framework that joins a network). Errors: each builds and then does not do
+ *  what the product asked. */
+export function stationConflicts(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworks: readonly string[],
+): string[] {
+  const stations = [...new Set(instances.map((i) => i.block).filter((id): id is string => !!id && blocks.get(id)?.kind !== 'framework' && !!blocks.get(id)?.provides_internet))]
+  if (stations.length === 0) return []
+  const syncOwner = frameworks.some((f) => SYNC_STATION_FRAMEWORKS.includes(f))
+  const out: string[] = []
+  for (const id of stations) {
+    if (frameworks.includes('espnow')) {
+      out.push(`${id} cannot join a network beside espnow: ESP-NOW keeps the radio on its own fixed channel and ${id} stands aside, so nothing reaches the internet — drop ${id}, or espnow`)
+    } else if (frameworks.includes('aws_iot') && !syncOwner) {
+      out.push(`${id} is not needed beside aws_iot, which joins the owner's network itself (aws-setup); with both, ${id} takes the radio first and aws_iot's own network setup configures nothing — drop ${id}`)
+    } else if (frameworks.includes('webui') && !syncOwner && !frameworks.includes('aws_iot')) {
+      out.push(`${id} cannot join a network beside webui alone: the web UI makes the device its own access point and ${id} stands aside — drop ${id}, or add a framework that joins the network (${SYNC_STATION_FRAMEWORKS.join(', ')})`)
+    }
+  }
+  return out
+}
+
+/** A behavior that brings up Wi-Fi beside a framework that already does it in
+ *  its own init: it defers at run time, so its setup commands configure
+ *  nothing. (aws_iot alone is a stationConflicts error instead.) */
+export function redundantNetwork(
+  instances: ReadonlyArray<{ block?: string }>,
+  blocks: ReadonlyMap<string, Block>,
+  frameworkBlocks: ReadonlyMap<string, Block>,
+): string[] {
+  const fws = [...frameworkBlocks].filter(([n, b]) => b.provides_internet && SYNC_STATION_FRAMEWORKS.includes(n)).map(([n]) => n)
+  if (fws.length === 0) return []
+  return [...new Set(instances.map((i) => i.block).filter((id): id is string => !!id && blocks.get(id)?.kind !== 'framework' && !!blocks.get(id)?.provides_internet))]
+    .map((id) => `${id} is redundant beside ${fws.join(', ')}, which already brings up Wi-Fi; it stands aside at run time — drop it`)
+}
+
 export function validateProduct(
   given: Product,
   blocks: Map<string, Block>,
@@ -450,6 +695,9 @@ export function validateProduct(
   // FLASH-BUDGET GATES (audio) — same rules the generator enforces, surfaced
   // at catalog-validation time so a bad product never reaches a build.
   const frameworks = product.frameworks ?? []
+  for (const message of frameworkConflicts(frameworks)) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
   if (frameworks.includes('audio')) {
     const table = product.partition_table ?? ''
     if (!['8mb-voice', '16mb-voice'].includes(table)) {
@@ -465,6 +713,20 @@ export function validateProduct(
         level: 'error',
         ...ctx,
         message: `audio + ${bigTransports.join('+')} needs 16MB flash (98% OTA-slot fill measured on 8mb-voice) — set partition_table: 16mb-voice`,
+      })
+    }
+  }
+
+  // A web UI time row stores minutes since midnight (0-1439), which a bool or
+  // u8 param cannot hold: 07:30 would be written as 194.
+  for (const inst of product.instances ?? []) {
+    if (inst.block !== 'behaviors/webui_row' || inst.cfg?.kind !== 'time') continue
+    const vk = String(inst.cfg?.value_kind ?? 'u8')
+    if (vk === 'bool' || vk === 'u8') {
+      errors.push({
+        level: 'error',
+        ...ctx,
+        message: `behaviors/webui_row (prefix=${inst.prefix}) is a time row, which stores minutes since midnight (0-1439); value_kind ${vk} cannot hold that — set value_kind: u16`,
       })
     }
   }
@@ -629,7 +891,11 @@ export function validateProduct(
       }
     }
 
-    for (const [refKey, refType] of Object.entries(block.param_refs ?? {})) {
+    for (const [refKey, declaredType] of Object.entries(block.param_refs ?? {})) {
+      const fromCfg = /^\{\{\s*cfg\.(\w+)\s*\}\}$/.exec(String(declaredType))
+      const refType = (fromCfg
+        ? String(cfg[fromCfg[1]!] ?? block.params?.[fromCfg[1]!]?.default ?? '')
+        : declaredType) as ValueType
       const paramId = String(cfg[refKey] ?? block.params?.[refKey]?.default ?? '')
       if (!paramId) {
         // Optional param left empty = feature disabled (its {{#if cfg.X}} slot is
@@ -651,7 +917,7 @@ export function validateProduct(
       }
       let entry = paramMap.get(paramId)
       if (!entry) {
-        entry = { name: paramId, type: refType, emittedBy: [], consumedBy: [] }
+        entry = { name: paramId, type: refType, emittedBy: [], consumedBy: [], sharedBy: [] }
         paramMap.set(paramId, entry)
       } else if (entry.type !== refType) {
         errors.push({
@@ -661,7 +927,14 @@ export function validateProduct(
         })
       }
       if (block.kind === 'driver') entry.emittedBy.push(`${inst.block}/${inst.prefix}`)
-      else if (block.kind === 'device_type') entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
+      else if (block.kind === 'device_type') {
+        entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
+        // A `shared` driver param is listened to with an `if` (a *_watch slot),
+        // never a `case`, so any number of device types may consume it.
+        if ((block.params?.[refKey] as { shared?: boolean } | undefined)?.shared === true) {
+          (entry.sharedBy ??= []).push(`${inst.block}/${inst.prefix}`)
+        }
+      }
       else {
         entry.emittedBy.push(`${inst.block}/${inst.prefix}`)
         entry.consumedBy.push(`${inst.block}/${inst.prefix}`)
@@ -689,7 +962,7 @@ export function validateProduct(
     // hard compile error the product author only sees at build time. ERROR
     // here so it's caught at validation. (Multiple non-device-type consumers
     // — behaviors, persistence — are fine; they render in separate files.)
-    const deviceConsumers = ref.consumedBy.filter((c) => c.startsWith('device_types/'))
+    const deviceConsumers = ref.consumedBy.filter((c) => c.startsWith('device_types/') && !(ref.sharedBy ?? []).includes(c))
     if (deviceConsumers.length > 1) {
       errors.push({
         level: 'error',
@@ -697,6 +970,24 @@ export function validateProduct(
         message: `param '${ref.name}' consumed by ${deviceConsumers.length} device-type instances [${deviceConsumers.join(', ')}] — duplicate case labels in every selected framework's driver_cb; give each instance its own param`,
       })
     }
+  }
+
+  errors.push(...ledcConflicts(product.instances, blocks).map((message) => ({ level: 'error' as const, ...ctx, message })))
+
+  for (const message of networkIssues(product.instances, blocks, frameworkBlocks)) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of missingFrameworks(product.instances, blocks, product.frameworks ?? [])) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of duplicateCSymbols(product.instances, blocks)) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of stationConflicts(product.instances, blocks, product.frameworks ?? [])) {
+    errors.push({ level: 'error', ...ctx, message })
+  }
+  for (const message of redundantNetwork(product.instances, blocks, frameworkBlocks)) {
+    warnings.push({ level: 'warning', ...ctx, message })
   }
 
   // ── Chip/pin compatibility ─────────────────────────────────────────────
@@ -765,15 +1056,15 @@ export function validateProduct(
   let boardUnresolved = false
   if (boardFile) {
     const ciChips = product.ci_chips ?? []
-    // The chips CI builds this product on and the chip the user's hardware
-    // carries have to be the same silicon, or the build proves nothing about
-    // the board it claims to be for.
-    const wrongCi = ciChips.filter((c) => c !== boardFile.chip)
-    if (wrongCi.length > 0) {
+    // CI has to build this product on the chip the board carries, or the
+    // build proves nothing about the board it claims to be for. Other chips
+    // in the list are other boards the product is proven on: a catalog
+    // product built on [esp32c6, esp32c3] applies to a C6 board.
+    if (ciChips.length > 0 && !ciChips.includes(boardFile.chip)) {
       errors.push({
         level: 'error',
         ...ctx,
-        message: `ci_chips [${ciChips.join(', ')}] disagrees with the board file's chip (${boardFile.chip}, board '${boardFile.selected}')`,
+        message: `the board's chip (${boardFile.chip}, board '${boardFile.selected}') is not among the chips this product is built on (ci_chips [${ciChips.join(', ')}])`,
       })
     }
   }

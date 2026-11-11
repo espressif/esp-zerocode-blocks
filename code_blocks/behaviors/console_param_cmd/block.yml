@@ -40,6 +40,24 @@ params:
       param whose repetition is the point (a ring, a press, a dispense, a
       re-trigger): with state, the second identical command disappears.
 
+  scale:
+    type: int
+    default: 1
+    description: >-
+      The param holds the typed value times this (a temperature in hundredths:
+      100, so "target 55.5" stores 5550). With scale > 1 a decimal is accepted.
+  min:
+    type: int
+    default: 0
+    description: Lowest RAW value accepted (after scale); min and max both 0 = the value kind's whole range
+  max:
+    type: int
+    default: 0
+    description: Highest RAW value accepted (after scale); out of range is refused, not clamped
+
+facts:
+  units: "A param the product holds scaled (hundredths of a degree) takes the scale param, so the owner types the value as shown (55.5) and min/max refuse anything outside the product's range; without them the typed number is stored raw."
+
 # mode must match the PRODUCER's call: a param the product fires as an event
 # (see CLAUDE.md → State vs events) is bench-driven as an event too.
 #

@@ -38,7 +38,9 @@ instances:
   - block: drivers/mic_i2s
     prefix: ROOM
     cfg:
-      port: 1
+      # Auto, not 1: the C3/C6 have a single I2S controller, and port 1
+      # failed at boot there. Auto puts the mic's RX beside the speaker's TX.
+      port: -1
       bclk_gpio: 4
       ws_gpio: 5
       din_gpio: 6

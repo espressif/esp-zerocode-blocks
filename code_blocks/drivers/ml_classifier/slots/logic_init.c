@@ -11,6 +11,14 @@
     };
     s_{{prefix_lc}}_session = zc_tflite_session_create(&{{prefix_lc}}_cfg);
     if (s_{{prefix_lc}}_session != NULL) {
+#if {{prefix}}_TFL_TARGET_CLASS >= 0
+        /* An out-of-range class scores 0 every time: say so once, not never. */
+        if ((size_t){{prefix}}_TFL_TARGET_CLASS >= zc_tflite_output_count(s_{{prefix_lc}}_session)) {
+            ESP_LOGE(TAG, "{{prefix_lc}}: target_class %d is out of range — the model has %u classes",
+                     {{prefix}}_TFL_TARGET_CLASS,
+                     (unsigned)zc_tflite_output_count(s_{{prefix_lc}}_session));
+        }
+#endif
         /* 4096 suits the default reference model (one FullyConnected). The
          * interpreter recurses through the graph on THIS task's stack, so a
          * deeper model needs a deeper task — drivers/ml_person_detect uses

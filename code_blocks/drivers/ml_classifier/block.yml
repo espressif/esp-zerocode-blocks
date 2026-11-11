@@ -1,4 +1,4 @@
-description: "Periodic on-device ML classifier — runs a model every interval_ms and publishes the winning class to the param bus. Needs frameworks: [ml]. Feed it real data by overriding the weak <prefix_lc>_fill_input() hook; left alone it runs the framework's reference model on zeroed input, which is a working smoke test and nothing more."
+description: "Periodic on-device ML classifier — runs a model every interval_ms and publishes a detect verdict (for target_class, or any class when unset), its score, and optionally the winning class index to the param bus. Needs frameworks: [ml]. Feed it real data by overriding the weak <prefix_lc>_fill_input() hook; left alone it runs the framework's reference model on zeroed input, which is a working smoke test and nothing more."
 
 # WHY A DRIVER AND NOT PART OF THE FRAMEWORK: framework blocks carry no cfg,
 # and everything interesting here is configurable — arena size, cadence, the
@@ -40,7 +40,17 @@ params:
   threshold_pct:
     type: int
     default: 50
-    description: Dequantized top-class score, in percent, at or above which detect_param goes true.
+    description: Dequantized score, in percent, at or above which detect_param goes true.
+  target_class:
+    type: int
+    default: -1
+    description: >-
+      Output index of the class that counts as a detection. detect_param goes
+      true only while THIS class wins and scores >= threshold_pct, and
+      score_param carries its score. -1 (default) = whichever class wins —
+      right only for a model whose every class is a detection; a model with a
+      "background"/"nothing" class (person-detect: 0 = no person, 1 = person)
+      MUST set this, or detect is true almost all the time.
 
 driver_params:
   detect_param:
@@ -49,4 +59,7 @@ driver_params:
     description: Driver param ID set true while the winning class scores at or above threshold_pct.
   score_param:
     type: u8
-    description: Optional driver param ID carrying the winning class score, 0-100. Omit to skip publishing it.
+    description: Optional driver param ID carrying the score, 0-100 — of target_class when set, else of the winning class. Omit to skip publishing it.
+  class_param:
+    type: u8
+    description: Optional driver param ID carrying the winning class index (argmax). Omit to skip publishing it.

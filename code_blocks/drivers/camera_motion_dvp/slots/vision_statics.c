@@ -3,9 +3,30 @@
 static uint8_t s_{{prefix_lc}}_prev[{{prefix}}_CAM_W * {{prefix}}_CAM_H];
 static bool s_{{prefix_lc}}_have_prev = false;
 
+/* Kept for the retries: filled once by vision_node_init. */
+static camera_config_t s_{{prefix_lc}}_cam_cfg;
+
+/* A camera not seated or powered at boot is a degraded state, not a dead
+ * feature: retry the init with a growing pause (5 s .. 60 s) until it answers. */
+static void {{prefix_lc}}_camera_until_up(void)
+{
+    uint32_t pause_ms = 5000;
+    for (;;) {
+        esp_err_t err = esp_camera_init(&s_{{prefix_lc}}_cam_cfg);
+        if (err == ESP_OK) return;   /* a failed init released what it took */
+        ESP_LOGW(TAG, "{{prefix_lc}}: camera init failed (%s) — retrying in %lu s",
+                 esp_err_to_name(err), (unsigned long)(pause_ms / 1000));
+        vTaskDelay(pdMS_TO_TICKS(pause_ms));
+        pause_ms = pause_ms >= 30000 ? 60000 : pause_ms * 2;
+    }
+}
+
 static void {{prefix_lc}}_motion_task(void *arg)
 {
     (void)arg;
+    {{prefix_lc}}_camera_until_up();
+    ESP_LOGI(TAG, "Camera {{prefix_lc}}: motion detection at %dx%d, poll %d ms",
+             {{prefix}}_CAM_W, {{prefix}}_CAM_H, {{prefix}}_CAM_POLL_MS);
     bool motion = false;
     int64_t last_motion_ms = 0;
     const int total = {{prefix}}_CAM_W * {{prefix}}_CAM_H;

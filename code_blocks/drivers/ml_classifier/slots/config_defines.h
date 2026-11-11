@@ -10,3 +10,5 @@
 #define {{prefix}}_TFL_ARENA_BYTES   ({{cfg.arena_base_kb}} * 1024)
 #endif
 #define {{prefix}}_TFL_THRESHOLD_PCT {{cfg.threshold_pct}}
+/* -1 = any winning class counts; >= 0 = only that output index. */
+#define {{prefix}}_TFL_TARGET_CLASS ({{cfg.target_class}})

@@ -34,15 +34,33 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
     return {{prefix_lc}}_err;
 }
 
+/* Sensirion CRC-8 over one 2-byte word: polynomial 0x31, init 0xFF (datasheet). */
+static uint8_t {{prefix_lc}}_sht4_crc8(const uint8_t *w)
+{
+    uint8_t crc = 0xFF;
+    for (int i = 0; i < 2; i++) {
+        crc ^= w[i];
+        for (int b = 0; b < 8; b++) crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static esp_err_t {{prefix_lc}}_sht4x_read(int16_t *t_x100, int16_t *rh_x100)
 {
     uint8_t cmd = {{prefix}}_SHT4X_CMD_MEAS;
     esp_err_t err = i2c_master_transmit(s_{{prefix_lc}}_i2c_dev, &cmd, 1, 50);
     if (err != ESP_OK) return err;
-    vTaskDelay(pdMS_TO_TICKS(10));
+    /* +1 tick: vTaskDelay(n) ends at the n-th tick BOUNDARY, so it waits
+       anywhere in (n-1, n] ticks. At the default 100 Hz pdMS_TO_TICKS(10) is
+       ONE tick — 0 to 10 ms — against the 0xFD measurement's 8.3 ms maximum,
+       and an early read is NACKed. One extra tick makes the floor 10 ms at any
+       tick rate. */
+    vTaskDelay(pdMS_TO_TICKS(10) + 1);
     uint8_t buf[6] = {0};
     err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) return err;
+    /* A corrupted frame publishes as a real reading unless the CRC says no. */
+    if ({{prefix_lc}}_sht4_crc8(&buf[0]) != buf[2] || {{prefix_lc}}_sht4_crc8(&buf[3]) != buf[5]) return ESP_ERR_INVALID_CRC;
     uint16_t t_raw = ((uint16_t)buf[0] << 8) | buf[1];
     uint16_t h_raw = ((uint16_t)buf[3] << 8) | buf[4];
     /* T_C * 100 = -4500 + 17500 * t_raw / 65535 */

@@ -1,4 +1,4 @@
-description: "Doorbell device type (button press reported over Matter; Switch cluster with the Momentary Switch feature). Mirrors generic_switch: a position param change updates CurrentPosition."
+description: "Doorbell device type (button press reported over Matter; Switch cluster with the Momentary Switch feature). Every press_param notification is one ring: an InitialPress event with CurrentPosition 1 then back to 0."
 # Matter-only today. RainMaker/Zigbee: no direct equivalent.
 device_types:
   matter: doorbell
@@ -10,4 +10,4 @@ driver_params:
   press_param:
     type: bool
     required: true
-    description: Driver param ID toggled on button press; true -> Switch CurrentPosition 1 (pressed), false -> 0 (released). Pair with drivers/button (momentary_button publishes nothing).
+    description: Driver param ID that changes once per button press (either direction; drivers/button toggles it) — each notification rings once (InitialPress). Pair with drivers/button.

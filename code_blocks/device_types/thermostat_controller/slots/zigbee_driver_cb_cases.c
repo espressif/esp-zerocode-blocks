@@ -1,4 +1,7 @@
-if (param_id == {{cfg.setpoint_param}} && s_{{prefix_lc}}_zb_endpoint) {
+/* A controller turns a param into a COMMAND to bound devices, so the shell's
+ * post-join/reboot resync (ZB_SOURCE_RESYNC) must not reach it: replaying the
+ * remembered state would switch every bound device after each reboot. */
+if (param_id == {{cfg.setpoint_param}} && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
     s_{{prefix_lc}}_setpoint_val = val.i16;
     ezb_zcl_attribute_t attr = {};
     attr.id = EZB_ZCL_ATTR_THERMOSTAT_OCCUPIED_HEATING_SETPOINT_ID;

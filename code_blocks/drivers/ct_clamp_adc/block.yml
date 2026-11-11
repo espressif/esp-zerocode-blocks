@@ -1,0 +1,85 @@
+description: "AC current clamp (SCT-013 style current transformer with a burden and a mid-supply bias) read on an ADC pin: true RMS current with the bias and the idle noise removed, and apparent power at a fixed mains voltage"
+
+# The clamp's output rides on a DC bias (usually ~1.65 V from a divider), so
+# a reading is: sample a whole number of mains cycles, take the MEAN of that
+# window as the bias, and the RMS of (sample - mean) as the AC signal. The
+# mean is computed in 64-bit from calibrated millivolts, per window, so a
+# drifting bias never shows up as current.
+#
+# An idle clamp still reads the ADC's own noise (tens of mV RMS), which at
+# 30 A/V is a few hundred mA — several watts of phantom load. The ZERO
+# reference removes it: the noise RMS is subtracted in quadrature
+# (sqrt(signal^2 - zero^2)), and anything left under min_current_ma reads 0.
+# The built-in zero_mv is a typical value; the owner records THEIR clamp's
+# with nothing switched on, over the USB serial console, with no rebuild:
+#   ct-cal zero    nothing running through the clamp: store the idle noise
+#   ct-cal show    noise now, the stored zero, current and power
+#   ct-cal reset   back to zero_mv
+# With two or more clamps each verb takes the instance prefix (lower case) as
+# a second word. The zero is kept in NVS (namespace zc_ct_cal, keyed by the
+# prefix's first 15 characters); a factory reset clears it.
+#
+# Power is APPARENT power (V x I x power_factor) at the configured mains
+# voltage — the clamp measures current only. Prefer an ADC1 pin: on
+# ESP32/S2/S3 ADC2 reads fail while Wi-Fi is up.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: ADC-capable GPIO the clamp's biased output is wired to
+  amps_per_volt:
+    type: int
+    default: 30
+    description: Clamp ratio in amps per volt RMS at the ADC pin (SCT-013-030 = 30, SCT-013-005 = 5; 100 A clamps with a 33 ohm burden ~ 60)
+  mains_voltage:
+    type: int
+    default: 230
+    description: Mains RMS voltage in volts, used to turn current into power (230 / 120)
+  mains_hz:
+    type: int
+    default: 50
+    description: Mains frequency (50 / 60); each reading covers 10 whole cycles
+  power_factor_pct:
+    type: int
+    default: 100
+    description: Power factor in percent applied to V x I (100 = apparent power)
+  zero_mv:
+    type: int
+    default: 8
+    description: Built-in idle noise, mV RMS at the pin, until the owner runs ct-cal zero
+  min_current_ma:
+    type: int
+    default: 50
+    description: Currents below this read as 0 mA
+  attenuation:
+    type: int
+    default: 3
+    description: 0=0dB, 1=2.5dB, 2=6dB, 3=12dB (12 dB for a 1.65 V bias swinging +-1 V)
+  poll_interval_ms:
+    type: int
+    default: 1000
+    description: How often a reading is taken and published
+
+driver_params:
+  current_param:
+    type: u32
+    required: true
+    description: RMS current in mA (device_types/electrical_sensor current_param)
+  power_param:
+    type: u32
+    required: false
+    default: ""
+    description: (Optional) power in mW at mains_voltage x power_factor (electrical_sensor active_power_param). Empty disables.
+
+cmake_priv_requires:
+  app_logic: [nvs_flash, console, esp_timer]
+
+console_commands:
+  - "ct-cal show|zero|reset [clamp]"
+
+facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."
+  rms: "The current is a true RMS over 10 whole mains cycles with the bias removed per reading, published as whole mA; power is current x the configured mains voltage x power factor, in mW — the clamp measures current only, so voltage is not measured."
+  zero_reference: "An idle clamp reads the ADC's own noise; the firmware subtracts a zero reference (the owner records it with nothing switched on by typing ct-cal zero on the USB serial console) and reads anything under min_current_ma as 0, so an empty outlet reads 0 W."
+  reading_interval: "A reading is taken and published every second by default; listeners get a change only when the value changes."

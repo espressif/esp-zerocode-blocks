@@ -1,0 +1,11 @@
+#define {{prefix}}_AIN_GPIO      {{cfg.gpio}}
+#define {{prefix}}_AIN_ATTEN     {{cfg.attenuation}}
+#define {{prefix}}_AIN_DIV_NUM   ({{cfg.divider_num}})
+#define {{prefix}}_AIN_DIV_DEN   ({{cfg.divider_den}})
+#define {{prefix}}_AIN_IN_LO     ({{cfg.in_lo_mv}})
+#define {{prefix}}_AIN_IN_HI     ({{cfg.in_hi_mv}})
+#define {{prefix}}_AIN_OUT_LO    ({{cfg.out_lo}})
+#define {{prefix}}_AIN_OUT_HI    ({{cfg.out_hi}})
+#define {{prefix}}_AIN_SAMPLES   ({{cfg.samples}})
+#define {{prefix}}_AIN_POLL_MS   ({{cfg.poll_ms}})
+#define {{prefix}}_AIN_KIND_{{cfg.value_kind}} 1

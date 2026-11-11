@@ -1,6 +1,6 @@
 id: air-quality-monitor
 name: Air Quality Monitor
-description: Indoor air quality monitor (Matter Air Quality Sensor). Driver currently a stub publishing a fixed AirQuality enum value.
+description: Indoor air quality monitor (Matter Air Quality Sensor). The sensor driver is a placeholder that publishes nothing yet — wire a real sensor driver before it measures anything.
 keywords: [air quality, AQI, CO2, TVOC, PM2.5, BME688, SCD4x]
 frameworks: [matter]
 

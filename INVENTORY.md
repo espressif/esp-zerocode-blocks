@@ -29,7 +29,7 @@ Catalog of all code_blocks and product_configurations under
 |---|---|---|
 | `driver` | 63 | Hardware peripherals — relay, PWM LED, fan, button, I2C sensors, encoder, I2S mic/speaker, etc. |
 | `device_type` | 60 | Cross-framework device types — light, dimmable_light, fan, thermostat, occupancy_sensor, … (per-framework bindings via matter_* slots; rainmaker_* planned) |
-| `behavior` | 37 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
+| `behavior` | 44 | Runtime patterns — NVS persistence, OTA, factory reset, LED patterns, console commands, watchdogs, … |
 | `peripheral` | 7 | Shared bus/unit init — I2C, SPI, OneWire, UART, ADC, GPIO ISR service, PCNT |
 | `framework` | 16 | matter / rainmaker / zigbee / ble_mesh / audio / mqtt / aws_iot / display / vision / ble_hid / espnow / webui / agents / sound / ml / lm — each owns its `app_<framework>/` component |
 | `partition_table` | 5 | 2mb / 4mb / 8mb / 8mb-voice / 16mb-voice partition CSVs |
@@ -60,10 +60,24 @@ Chips).
 `led-strip-cct`, `ceiling-panel-light`, `outdoor-flood-light`,
 `in-wall-dimmer`
 
-### Sensors (9)
+### Sensors (11)
 `temp-humidity-sensor`, `motion-sensor`, `contact-sensor`,
 `water-leak-sensor`, `ambient-light-sensor`, `air-quality-monitor`,
-`smoke-co-alarm`, `thread-contact-sensor`, `environment-sensor-hub`
+`smoke-co-alarm`, `thread-contact-sensor`, `environment-sensor-hub`,
+`laundry-done-monitor`, `washer-done-telegram`
+
+`laundry-done-monitor` watches a washer (MPU6050 `activity_param`) and a dryer
+(`drivers/vibration_switch`, an SW-420 module) with one
+`behaviors/cycle_done_detector` each, and lights a lamp per machine when its
+cycle is done. It is where those three blocks are built. A cycle running when
+the device restarts is dropped, not reported done (`resume_after_reboot`
+carries it on instead), and `stale_after_s` on the vibration switch flags a
+sensor that has seen no pulse for that long.
+
+`washer-done-telegram` sends a Telegram message when the washer's cycle ends
+(`drivers/vibration_switch` → `behaviors/cycle_done_detector` →
+`behaviors/telegram_notify`), framework-less, on Wi-Fi from
+`behaviors/wifi_station`. It is where those two network blocks are built.
 
 `environment-sensor-hub` is a multi-probe station on ONE I2C bus: three
 temperature/humidity probes at different heights (SHT4x @0x44, SHT3x @0x45,
@@ -222,7 +236,7 @@ flash size never drift. 16MB S3 boards only.
 `mqtt-color-light` — first HA **JSON-schema** light: plain-topic lights
 carry state and brightness on separate topics and cannot express colour,
 so color_light's mqtt binding publishes ONE retained payload with state +
-brightness + hs colour and parses commands with cJSON (no value_template —
+brightness + hs colour and parses commands with json_parser (no value_template —
 jinja braces collide with the slot engine). Driver hue/sat are Matter units
 (0-254); both conversion directions round, or HA sends h240/s80 and gets
 back h239/s79. VERIFIED on the emu+mosquitto rig: discovery, retained
@@ -266,13 +280,19 @@ generator workaround for an upstream NULL-deref in esp_agent_init (text
 mode with NULL audio configs crashes; dummy configs passed).
 
 `webui-room-node` — first `frameworks: [webui]` product: the device serves
-its OWN control page. Standalone SoftAP ("ZeroCode-<id>", password
-"zerocode") at http://192.168.4.1 — or shared-net when a Wi-Fi transport
-is co-selected (mDNS zerocode-<id>.local either way). Device types
-contribute `webui_entities` manifest rows; one embedded plain-ASCII page
-renders them (toggle/slider/value/binary) against GET /api/state +
-GET /api/set, params addressed BY NAME. esp32c3, dimmable pwm light +
+its OWN control page. Standalone SoftAP ("ZeroCode-<id>", a per-device
+password made on first boot, kept in NVS and printed in the boot log) at
+http://192.168.4.1 — or shared-net when a Wi-Fi transport is co-selected
+(mDNS zerocode-<id>.local either way). Device types contribute
+`webui_entities` manifest rows; one embedded plain-ASCII page renders them
+(toggle/slider/value/binary) against GET /api/state + POST /api/set (the
+page's own X-ZC-Request header required), params addressed BY NAME. esp32c3, dimmable pwm light +
 DHT22 temperature.
+
+`probe-thermostat` — `frameworks: [webui, mqtt]` heating thermostat on a
+DS18B20 probe (peripherals/onewire_bus + drivers/ds18b20) and a heat relay as
+the thermostat's heating_param: the catalog product that compiles the
+1-Wire probe driver.
 
 ### BLE HID (1)
 `ble-media-remote` — first `frameworks: [ble_hid]` product, and the first
@@ -424,8 +444,8 @@ build against a pre-cloned tree. The block carries **no third-party source**.
 
 Like `ml` and `lm` it is a **pure copy-in framework**: not one line in
 `engine/src/generator.ts`. The AWS identity (endpoint, port, thing name,
-certificate, key, optional root CA) is `device_data:` — the flash page asks for
-it and writes it to `fctry`, and the device has no command or setter for it.
+certificate, key, optional root CA) is `device_data:`, written with the
+firmware to `fctry`, and the device has no command or setter for it.
 Wi-Fi is the serial console: a guided `aws-setup`, or `aws-wifi`, both thin
 wrappers over the PUBLIC `app_aws_iot_set_wifi` (plus `_configured`,
 `_owns_wifi`) and the base console's `app_console_read_line`, so a product with
@@ -438,7 +458,7 @@ build it with no AWS account. `aws-iot-board-light` is the second product: a
 colour light on a C3 devkit's own LED and BOOT button. Every Wi-Fi chip (not esp32h2; not esp32p4 — esp-aws-iot does not list
 it).
 
-### MQTT (1)
+### MQTT (2)
 `mqtt-room-node` — first `frameworks: [mqtt]` product: light + DHT22
 temperature over Home Assistant MQTT discovery. Wi-Fi + broker configured on
 the serial console (guided `mqtt-setup`, or `mqtt-wifi` / `mqtt-broker`, all
@@ -448,7 +468,7 @@ ship with IDF — no managed components. Every Wi-Fi chip (not esp32h2); on
 esp32p4 the Wi-Fi is the companion radio's, reached over esp_wifi_remote.
 **44 of 53 device types carry `mqtt_*` bindings** — full HA coverage:
 switch/outlet, light (brightness + color-temp), sensor (temperature,
-humidity, power, energy, air quality…), binary_sensor (motion, contact,
+humidity, soil moisture, power, energy, air quality…), binary_sensor (motion, contact,
 leak, freeze, smoke/CO), fan, cover, climate (thermostat heat / AC cool),
 lock (LOCK+UNLOCK — unlike voice, HA is an authenticated controller),
 number (setpoints), select (appliance modes), and **device_triggers** for
@@ -459,6 +479,21 @@ without are `# MQTT-absent` with reasons (4 remaining controllers, 2 with
 no params, device_energy_management). Full key names in discovery JSON,
 plain payload values, never value_template. First framework the EMULATOR verifies end-to-end
 (esp-emu --net user; boot + unconfigured path proven on a virtual esp32c3).
+
+`device_types/generic_binary_sensor` and `generic_sensor` carry a PRODUCT'S own
+flag or reading (needs water, filter due, a counter) as its own entity, with
+the Home Assistant device_class / unit / state_class chosen per instance —
+where a specific device type's class is fixed (water_leak_detector and
+rain_sensor read Wet/Dry). MQTT, web page, display and RainMaker; no Matter or
+Zigbee binding. `plant-moisture-mqtt` uses one for its reservoir float switch
+(class problem), and `behaviors/mqtt_republish` to send its reading every 10
+minutes even while it does not change.
+
+`battery-door-sensor` — a reed switch on battery: `behaviors/deep_sleep_cycle`
+wakes it on either edge of the contact (and hourly), sleeps once the broker has
+acknowledged the retained state, and signs off cleanly so Home Assistant keeps
+it available between wakes. It is where that behavior and its MQTT hook are
+built.
 
 ### Display panels (2)
 `drivers/display_ili9341_spi` — 240x320 SPI TFT, the ubiquitous cheap panel;
@@ -556,6 +591,9 @@ its product-specific drivers/device types:
 - `behaviors/network_status_log` — Wi-Fi / IP transition logging
 - `behaviors/sntp_time` — wall clock: timezone + SNTP, optional bus bool on first sync; coexists with RainMaker's own SNTP (observes it)
 - `behaviors/wifi_disconnect_recovery` — log a Wi-Fi outage; reboot after N seconds offline only when `reboot_after_seconds > 0` (opt-in)
+- `behaviors/wifi_station` — Wi-Fi station for a product with no networking framework: credentials from the console (`wifi-setup` guided, or `wifi-set`) kept in NVS, reconnect with backoff; stands aside when a framework owns Wi-Fi
+- `behaviors/mqtt_republish` — MQTT only: re-sends every entity's current retained state (device types and product entities) every `republish_s` seconds, from the framework's own task; `only_on_schedule: true` holds changes for that schedule (first value and reconnects still at once) — "report every N minutes"; `app_mqtt_set_republish_s()` / `app_mqtt_set_republish_only_on_schedule()` underneath
+- `behaviors/telegram_notify` — Telegram bot messages: `telegram_notify_send()` queues and returns, a TLS task sends, undelivered messages persist in NVS and retry (backoff capped by `max_retry_s`); `telegram_notify_send_keyed()` replaces a waiting message with the same key, and a full queue drops keyed messages first; optional replies (`telegram_notify_on_reply`) with the backlog skipped at boot; chat id learnt with `tg-learn`
 
 **Status LED + identify**
 - `drivers/status_led` — LED hardware (default GPIO 15)
@@ -593,7 +631,7 @@ with a `sdkconfig:` map.
 | Fragment | Description |
 |---|---|
 | `matter_thread` | Matter over Thread (802.15.4) instead of Wi-Fi. esp32c5 / esp32c6 / esp32h2. |
-| `c6_thread_only` | Superseded by `matter_thread`; no product uses it. Its `CONFIG_ESP_WIFI_ENABLED="n"` is inert — that symbol is promptless in IDF 6.x and cannot be set from sdkconfig. |
+| `c6_thread_only` | Superseded by `matter_thread`; no product uses it. Enables OpenThread only — Wi-Fi stays (`CONFIG_ESP_WIFI_ENABLED` is promptless in IDF 6.x and cannot be set from sdkconfig, so the key was dropped). |
 
 ### Build modes
 | Fragment | Description |
@@ -607,20 +645,20 @@ Touch eFuses; **irreversible**. Not applied during dev. A future
 
 | Fragment | Description |
 |---|---|
-| `secure_boot` | Secure Boot v2 — bootloader verifies app signature against eFuse-burned key. ONE-WAY. |
-| `flash_encryption` | Flash Encryption (release mode) — bootloader + app encrypted on flash. ONE-WAY. Combine with secure_boot. |
+| `secure_boot` | Secure Boot v2 — bootloader verifies app signature against eFuse-burned key. ONE-WAY once virtual eFuses are off; under today's mandatory `CONFIG_EFUSE_VIRTUAL=y` nothing is burned and there is no chain of trust. Needs a signing key at build time. |
+| `flash_encryption` | Flash Encryption (release mode) — bootloader + app encrypted on flash. ONE-WAY once virtual eFuses are off; under today's mandatory `CONFIG_EFUSE_VIRTUAL=y` it falls back to development mode and encrypts nothing. Combine with secure_boot. |
 | `nvs_encryption` | Encrypt NVS partition (Wi-Fi creds, fabric keys, persisted params). Pair with flash_encryption. |
 
 ### Power profiles
 | Fragment | Description |
 |---|---|
-| `power_management` | IDF PM + tickless idle + Wi-Fi sleep IRAM. ~50-70% idle power reduction. |
+| `power_management` | IDF PM with DFS at startup + tickless idle + sleep IRAM. Automatic light sleep stays off (it stops PWM/console/GPIO a product relies on) — call `esp_pm_configure` to opt in. DFS lowers APB when idle: LEDC PWM blocks (`LEDC_AUTO_CLK` picks APB first on ESP32/C2/C3/S2/S3) and `uart_bus` (`UART_SCLK_DEFAULT`) drift unless given a DFS-safe clock (XTAL / RC_FAST / REF_TICK); the console UART is moved by IDF. |
 | `wifi_min_memory` | Reduce Wi-Fi RX/TX buffer pools. ~10-15 KB RAM saved at cost of latency. |
 
 ### Diagnostics & I/O
 | Fragment | Description |
 |---|---|
-| `coredump` | ELF core-dump-to-flash on crash. Needs a `coredump` partition. |
+| `coredump` | ELF core dump printed to the console UART on crash (the device log captures it). No partition needed — no table carries a `coredump` one. |
 | `usb_serial_console` | Route console + logs to USB-Serial-JTAG (c3/c6/s3/h2). |
 
 ---
@@ -690,8 +728,8 @@ cat firmware/templates/product_configurations/smart-plug/product.yml
 ```
 
 Agents browse the same catalog through the `list_templates`,
-`search_templates`, and `get_template` tools (backed by
-`firmware/services/src/templates/`).
+`search_templates`, and `get_template` tools of a host that consumes this
+catalog.
 
 The validator catches missing producer/consumer relationships across
 blocks (param-type conflicts, dangling refs):
@@ -714,9 +752,11 @@ pnpm exec tsx scripts/validate-templates.ts --strict
   expose controller endpoints but emit no commands. Need
   `behaviors/emit_onoff_toggle`, `behaviors/emit_level_step`,
   `behaviors/emit_color_step`.
-- **Matter 1.5/1.6 device types** — `soil_moisture_sensor`, cameras. NO LONGER
-  BLOCKED: esp_matter is 1.6.0 (spec 1.6) since the ESP-IDF 6 move. This is now
-  work someone can just do.
+- **Matter 1.5/1.6 device types** — cameras. NO LONGER BLOCKED: esp_matter is
+  1.6.0 (spec 1.6) since the ESP-IDF 6 move. This is now work someone can just
+  do. (`device_types/soil_sensor` is done: SoilMeasurement wired from
+  `drivers/soil_moisture_adc`, plus MQTT / webui / display / RainMaker; no
+  Zigbee — esp-zigbee-lib 2.x has no Soil Moisture cluster.)
 - **ESP-Mosaico, remaining** — every peripheral in the user guide's pin table is
   wired except the 1 Gbit SPI NAND (no block exposes flash storage yet) and the
   camera on the 2×10P module headers (`drivers/camera_motion_v4l2` builds; the
@@ -739,5 +779,4 @@ pnpm exec tsx scripts/validate-templates.ts --strict
   (backend/CLI) pre-binds the output directory; the agent doesn't pass
   a path.
 
-Both paths go through the same `TemplateService` in
-`firmware/services/src/templates/`.
+Both paths go through the same engine (`engine/`).

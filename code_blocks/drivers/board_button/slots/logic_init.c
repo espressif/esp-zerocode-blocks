@@ -25,6 +25,12 @@
                 ESP_LOGE(TAG, "{{prefix_lc}}: single click not bound — check the button timings (a hold must be longer than the double-click window)");
                 {{prefix_lc}}_bound = false;
             }
+            if (iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_DOWN, NULL, {{prefix_lc}}_press_down_cb, NULL) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_UP, NULL, {{prefix_lc}}_press_up_cb, NULL) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_END, NULL, {{prefix_lc}}_press_end_cb, NULL) != ESP_OK) {
+                ESP_LOGE(TAG, "{{prefix_lc}}: press tracking not bound");
+                {{prefix_lc}}_bound = false;
+            }
             if (iot_button_register_cb({{prefix_lc}}_btn, BUTTON_DOUBLE_CLICK, NULL, {{prefix_lc}}_double_click_cb, NULL) != ESP_OK) {
                 ESP_LOGE(TAG, "{{prefix_lc}}: double click not bound — check the button timings (a hold must be longer than the double-click window)");
                 {{prefix_lc}}_bound = false;
@@ -44,6 +50,19 @@
                 {{prefix_lc}}_bound = false;
             } else {
                 ESP_LOGI(TAG, "{{prefix_lc}}: factory reset armed — hold '{{cfg.device}}' for {{cfg.factory_reset_ms}} ms");
+            }
+            /* Hold feedback: press-down arms the cue, release cancels it. */
+            const esp_timer_create_args_t {{prefix_lc}}_cue_args = {
+                .callback = &{{prefix_lc}}_fr_cue_cb,
+                .arg = NULL,
+                .dispatch_method = ESP_TIMER_TASK,
+                .name = "{{prefix_lc}}_fr_cue",
+                .skip_unhandled_events = true,
+            };
+            if (esp_timer_create(&{{prefix_lc}}_cue_args, &s_{{prefix_lc}}_fr_cue) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_DOWN, NULL, {{prefix_lc}}_fr_down_cb, NULL) != ESP_OK
+                || iot_button_register_cb({{prefix_lc}}_btn, BUTTON_PRESS_UP, NULL, {{prefix_lc}}_fr_up_cb, NULL) != ESP_OK) {
+                ESP_LOGE(TAG, "{{prefix_lc}}: factory-reset hold feedback not bound — the reset still works");
             }
 {{/if}}            if ({{prefix_lc}}_bound) {
                 ESP_LOGI(TAG, "{{prefix_lc}}: board button '{{cfg.device}}' bound (click / double click / long press {{cfg.long_press_ms}} ms)");

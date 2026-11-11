@@ -48,3 +48,6 @@ driver_params:
     type: bool
     default: APP_DRIVER_PARAM_POWER
     description: Driver param ID this endpoint maps to (boolean)
+
+facts:
+  is_an_outlet: "Every app shows this as an OUTLET/PLUG (Matter On/Off Plug-in Unit, Zigbee Mains Power Outlet, RainMaker plug); use it for each switched socket of a power strip, one instance per outlet. A lamp is device_types/light."

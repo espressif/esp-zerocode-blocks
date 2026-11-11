@@ -1,6 +1,9 @@
 case {{cfg.position_param}}: {
-    /* Two-tone doorbell chime on any position change (press). */
-    static const zc_tone_t {{prefix_lc}}_chime[] = { { 880, 150 }, { 0, 40 }, { 660, 250 } };
-    app_sound_play({{prefix_lc}}_chime, 3);
+    /* Two-tone doorbell chime on each press. A position of 0 carries no press
+     * (the position_param contract). */
+    if (val.u8 != 0) {
+        static const zc_tone_t {{prefix_lc}}_chime[] = { { 880, 150 }, { 0, 40 }, { 660, 250 } };
+        app_sound_play({{prefix_lc}}_chime, 3);
+    }
     return;
 }

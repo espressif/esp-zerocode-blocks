@@ -22,6 +22,21 @@
         .skip_unhandled_events = true,
     };
     ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_gate_args, &s_{{prefix_lc}}_gate_timer));
-    gpio_isr_handler_add((gpio_num_t){{prefix}}_TRIAC_ZCD_GPIO, {{prefix_lc}}_zcd_isr, NULL);
-    ESP_LOGI(TAG, "Triac dimmer {{prefix_lc}}: ZCD=%d gate=%d", {{prefix}}_TRIAC_ZCD_GPIO, {{prefix}}_TRIAC_GATE_GPIO);
+    /* Adopt-or-install the shared GPIO ISR service (drivers/encoder does the
+       same): INVALID_STATE is "already installed", not an error. Relying on
+       peripherals/gpio_isr_service being listed ABOVE this block was an
+       unchecked assumption — without it gpio_isr_handler_add failed, its
+       result was ignored, and the dimmer silently never fired. */
+    esp_err_t {{prefix_lc}}_err = gpio_install_isr_service(0);
+    if ({{prefix_lc}}_err == ESP_ERR_INVALID_STATE) {{prefix_lc}}_err = ESP_OK;
+    if ({{prefix_lc}}_err == ESP_OK) {
+        {{prefix_lc}}_err = gpio_isr_handler_add((gpio_num_t){{prefix}}_TRIAC_ZCD_GPIO, {{prefix_lc}}_zcd_isr, NULL);
+    }
+    if ({{prefix_lc}}_err != ESP_OK) {
+        /* Fail closed: the gate is held low, so the load stays OFF. */
+        ESP_LOGE(TAG, "Triac dimmer {{prefix_lc}}: ZCD interrupt on GPIO %d unavailable (%s) — dimmer disabled",
+                 {{prefix}}_TRIAC_ZCD_GPIO, esp_err_to_name({{prefix_lc}}_err));
+    } else {
+        ESP_LOGI(TAG, "Triac dimmer {{prefix_lc}}: ZCD=%d gate=%d", {{prefix}}_TRIAC_ZCD_GPIO, {{prefix}}_TRIAC_GATE_GPIO);
+    }
 }

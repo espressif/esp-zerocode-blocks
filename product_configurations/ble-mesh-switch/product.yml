@@ -82,6 +82,9 @@ instances:
       command_name: scene
       target_param: APP_DRIVER_PARAM_SWITCH_POSITION
       value_kind: u8
+      # A press is an EVENT (the button fires it); the mesh scene binding
+      # sends Toggle only for events, so the bench command fires too.
+      mode: event
   - block: behaviors/console_uptime
     prefix: CON_UPTIME
     cfg: {}

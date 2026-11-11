@@ -28,7 +28,7 @@ description: >-
 # GRAYSCALE QQVGA (160x120): the previous-frame buffer is 19 KB in DRAM.
 
 cmake_priv_requires:
-  app_vision: [espressif__esp_video, esp_timer]
+  app_vision: [espressif__esp_video, esp_timer, esp_driver_i2c]
 
 params:
   # SCCB (camera I2C) — the sensor's control channel.
@@ -51,6 +51,10 @@ params:
   pin_d7:    { type: int, default: 17 }
   xclk_hz:   { type: int, default: 20000000, description: XCLK driven to the sensor }
   sccb_hz:   { type: int, default: 100000 }
+  sccb_i2c_port:
+    type: int
+    default: 0
+    description: I2C port for SCCB. If a bus already exists on it (an i2c_bus peripheral, a board) the camera shares that bus and pin_sda/pin_scl are unused; otherwise one is created on those pins.
   poll_ms:   { type: int, default: 200, description: frame interval between diffs }
   pixel_threshold: { type: int, default: 25, description: per-pixel luma delta that counts as changed }
   area_threshold_pct: { type: int, default: 3, description: percent of frame that must change }

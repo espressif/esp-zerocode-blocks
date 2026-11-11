@@ -60,3 +60,7 @@ driver_params:
     type: u8
     default: APP_DRIVER_PARAM_BRIGHTNESS
     description: Driver param ID for CurrentLevel (1–254; 0 and 255 are reserved)
+
+# What the block does on its dispatch slots (returned by generate() as reactions).
+reacts:
+  ble_mesh: "A change of {{cfg.power_param}} or {{cfg.brightness_param}} is this node's own state: it goes into the Generic OnOff / Level server and is published as a status; product code writes the params and never publishes to the mesh itself."

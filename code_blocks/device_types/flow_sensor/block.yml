@@ -22,5 +22,18 @@ driver_params:
     type: u16
     required: true
     description: Driver param ID for measured flow (uint16, 10ths of m³/h)
+  status_param:
+    type: bool
+    required: false
+    shared: true
+    default: ""
+    description: >-
+      (Optional) the reading is valid (true) or not (false) — the driver's
+      status_param (aht21, bh1750, dht22, ds18b20, hcsr04 publish one). When
+      false, Home Assistant shows the sensor as unknown instead of the last
+      value. Empty disables.
 
 # Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.
+
+facts:
+  unavailable: "With status_param wired to the driver's status, a sensor that stops answering shows as unknown in Home Assistant instead of its last reading, and its value comes back by itself when the sensor does; product code never publishes a placeholder value."

@@ -1,11 +1,25 @@
 {
+#if !SOC_PCNT_SUPPORTED
+#error "peripherals/pcnt_unit: this chip has no PCNT (pulse counter) peripheral"
+#endif
     pcnt_unit_config_t {{prefix_lc}}_cfg = {};
     {{prefix_lc}}_cfg.high_limit = {{cfg.high_limit}};
     {{prefix_lc}}_cfg.low_limit = {{cfg.low_limit}};
-    {{prefix_lc}}_cfg.flags.accum_count = 0;
-    ESP_ERROR_CHECK(pcnt_new_unit(&{{prefix_lc}}_cfg, &s_{{prefix_lc}}_pcnt));
-    pcnt_unit_enable(s_{{prefix_lc}}_pcnt);
-    pcnt_unit_clear_count(s_{{prefix_lc}}_pcnt);
-    pcnt_unit_start(s_{{prefix_lc}}_pcnt);
-    ESP_LOGI(TAG, "PCNT unit {{prefix_lc}} initialized");
+    /* Accumulate across the limits — the hardware counter is 16 bits. The
+       driver only accumulates at a limit that is a watch point. */
+    {{prefix_lc}}_cfg.flags.accum_count = 1;
+    /* Degraded, not fatal: PCNT units are a small pool shared with encoder
+       and hlw8012, and running out must not boot-loop the product. The
+       handle stays NULL; <prefix>_pcnt_handle() says so to its consumer. */
+    esp_err_t {{prefix_lc}}_err = pcnt_new_unit(&{{prefix_lc}}_cfg, &s_{{prefix_lc}}_pcnt);
+    if ({{prefix_lc}}_err == ESP_OK) {{prefix_lc}}_err = pcnt_unit_add_watch_point(s_{{prefix_lc}}_pcnt, {{cfg.high_limit}});
+    if ({{prefix_lc}}_err == ESP_OK) {{prefix_lc}}_err = pcnt_unit_add_watch_point(s_{{prefix_lc}}_pcnt, {{cfg.low_limit}});
+    if ({{prefix_lc}}_err != ESP_OK) {
+        if (s_{{prefix_lc}}_pcnt) { pcnt_del_unit(s_{{prefix_lc}}_pcnt); s_{{prefix_lc}}_pcnt = NULL; }
+        ESP_LOGE(TAG, "PCNT unit {{prefix_lc}}: not created (%s) — no free unit?", esp_err_to_name({{prefix_lc}}_err));
+    } else {
+        /* NOT enabled or started: channels can only be added to a unit in the
+           init state. The consumer enables + starts it after adding them. */
+        ESP_LOGI(TAG, "PCNT unit {{prefix_lc}} created (consumer adds channels, then enables + starts)");
+    }
 }

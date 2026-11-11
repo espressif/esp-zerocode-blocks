@@ -51,10 +51,17 @@ static esp_err_t {{prefix_lc}}_rd16(uint8_t reg, uint16_t *out)
 static void {{prefix_lc}}_poll_cb(void *arg)
 {
     (void)arg;
-    if (!s_{{prefix_lc}}_present) return;
-
+    /* The state-of-charge read IS the presence test (no chip-id register): a
+       gauge missing at boot, or a battery fitted later, starts reporting at
+       the next poll that answers. Logged on the change only. */
     uint16_t soc = 0;
-    if ({{prefix_lc}}_rd16({{prefix}}_GAUGE_REG_SOC, &soc) != ESP_OK) return;
+    if ({{prefix_lc}}_rd16({{prefix}}_GAUGE_REG_SOC, &soc) != ESP_OK) {
+        if (s_{{prefix_lc}}_present) ESP_LOGW(TAG, "{{prefix_lc}}: BQ27220 stopped answering");
+        s_{{prefix_lc}}_present = false;
+        return;
+    }
+    if (!s_{{prefix_lc}}_present) ESP_LOGI(TAG, "{{prefix_lc}}: BQ27220 answering");
+    s_{{prefix_lc}}_present = true;
     /* The gauge can report >100 briefly just after a full charge. Clamping
        here keeps every consumer from having to know that. */
     if (soc > 100) soc = 100;

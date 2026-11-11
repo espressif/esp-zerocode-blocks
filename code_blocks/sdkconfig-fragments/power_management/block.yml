@@ -1,7 +1,34 @@
-description: Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
+description: Enable IDF Power Management with dynamic frequency scaling at startup, plus FreeRTOS tickless idle and sleep-IRAM placement. Automatic light sleep stays off. DFS lowers the APB clock when idle, so LEDC PWM (buzzer, servo, fan, dimmed LEDs) on its default APB source and a uart_bus link drift unless moved to a DFS-safe clock.
 
-# Original notes from the .defaults file:
-#   Enable IDF Power Management (DFS + light sleep) and FreeRTOS tickless idle.
-#   Reduces average power on Wi-Fi-connected idle by 50-70%. Use for
-#   battery-powered or always-on plug-in products that should be efficient.
-#   sdkconfig_fragments: [power_management]
+# DFS (CPU at XTAL when idle, max on demand under PM locks) is what this
+# fragment turns on. It needs CONFIG_PM_DFS_INIT_AUTO: PM_ENABLE alone only
+# builds the PM machinery, and with no esp_pm_configure() call anywhere (no
+# block makes one) DFS was never active — the fragment saved nothing and still
+# paid the PM-lock overhead.
+#
+# Automatic LIGHT SLEEP is deliberately not enabled: in light sleep the CPU and
+# most peripherals stop between ticks, so PWM/LEDC outputs, the UART console
+# and GPIO edges a product relies on stop or are missed unless each is set up
+# for it. A product that wants it calls esp_pm_configure() with
+# light_sleep_enable = true itself, once its peripherals are ready for it.
+#
+# DFS SLOWS THE APB CLOCK when nothing holds a lock, and a peripheral clocked
+# from APB then runs slow (ESP-IDF Power Management > "Dynamic Frequency
+# Scaling and Peripheral Drivers"). What that means for the catalog:
+#   - The UART CONSOLE is safe: with PM on, IDF moves it to REF_TICK/XTAL.
+#   - peripherals/uart_bus configures UART_SCLK_DEFAULT, which is APB on most
+#     chips: the driver holds an APB lock while it transmits, but reception at
+#     a lowered APB can garble. Pick UART_SCLK_XTAL (REF_TICK on the ESP32)
+#     for a link that must receive under this fragment.
+#   - LEDC (pwm_led*, pwm_rgb, buzzer_melody, servo_pwm, fan_pwm,
+#     dc_motor_h_bridge) uses LEDC_AUTO_CLK, which takes the APB clock FIRST
+#     on the ESP32, -C2, -C3, -S2 and -S3 (the -C5/-C6/-H2 try XTAL first).
+#     LEDC holds no PM lock, so the PWM frequency drops while APB is lowered:
+#     a buzzer's pitch, a servo's pulse width, a visible flicker. The fix per
+#     block is a DFS-compatible source — LEDC_USE_XTAL_CLK where the chip has
+#     it, LEDC_USE_RC_FAST_CLK (low-speed mode, ~8 MHz, less accurate) or
+#     LEDC_USE_REF_TICK on the ESP32 — see the LEDC page's clock table.
+#   - SPI master, I2C, I2S, GPTimer, PCNT, Wi-Fi and BT take the APB lock
+#     themselves and are unaffected.
+#
+# Apply via: sdkconfig_fragments: [power_management]

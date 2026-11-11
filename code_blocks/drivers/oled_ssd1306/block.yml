@@ -1,8 +1,9 @@
-description: Basic SSD1306 128x64 OLED via I2C — initializes the display and provides a clear/print API. Depends on peripherals/i2c_bus.
+description: Basic SSD1306 128x64 OLED via I2C — initializes the display and provides a clear/print/text-at-any-size API. Depends on peripherals/i2c_bus.
 
 # Minimal SSD1306 driver: init sequence + framebuffer flush. Includes a tiny 6x8
-# bitmap font for ASCII (basic Latin only). For richer text or graphics, swap in
-# u8g2 or lvgl post-generation.
+# bitmap font for ASCII (basic Latin only), drawn at any integer scale. The
+# API is declared in app_config.h (see config_defines.h). For richer graphics,
+# swap in u8g2 or lvgl post-generation.
 
 # This block TALKS on an I2C bus it does not configure: it attaches a device to
 # whatever bus already exists on the port below (driver/i2c_master.h,
@@ -32,3 +33,7 @@ params:
       for different speeds.
   i2c_port: { type: int, default: 0 }
   i2c_address: { type: int, default: 0x3C }
+
+facts:
+  drawing: "Product code draws through <prefix>_oled_text(x, y, scale, s) (scale 1-8: 6*scale x 8*scale pixels a character, e.g. scale 3 = 18x24 for a big mm:ss), <prefix>_oled_fill and <prefix>_oled_print, all declared in app_config.h; a screen is composed with _text/_fill and sent once with _show — never by adding functions to the generated app_driver.cpp."
+  refresh: "One _show sends the whole 1 KB frame over I2C (about 25 ms at 400 kHz, 100 ms at 100 kHz), so a screen updates once per change, not once per character."

@@ -1,0 +1,99 @@
+description: >-
+  Digital vibration switch module (SW-420, SW-18010P, 801S and other
+  comparator-output "vibration sensor" boards) on a GPIO — counts its pulses
+  and publishes an activity level in pulses per minute. Its output pulses
+  while shaken, it is never a steady "vibrating" level, so do not read it as
+  one. Bind the activity to behaviors/cycle_done_detector for a washer or
+  dryer "cycle finished" monitor.
+
+# WHAT IT PUBLISHES. The module's output flickers while the switch is shaken
+# and rests at its inactive level otherwise: a reading of the pin at any one
+# instant is noise. So every pulse (its edge into the active level) is counted
+# in an interrupt, and once per window the count becomes a rate.
+#
+# THE UNIT is pulses per minute, not per second: a gentle machine gives a few
+# pulses per window, and a per-second rate rounds those to zero. Clamped at
+# 65535 (about 1 kHz, a module shaken hard with its sensitivity turned up).
+#
+# POLARITY. Each pulse has one edge of each kind, so the count does not
+# depend on active_level. It decides the health check only: a line that sits
+# at its ACTIVE level for a whole window with no pulse is either inverted
+# (active_level wrong) or turned up so far the comparator never releases. That
+# is logged once, and the window reports 0.
+#
+# CHATTER. A comparator without hysteresis rings on every transition; edges
+# closer than min_pulse_gap_us count as one pulse.
+#
+# SENSOR HEALTH. stale_after_s > 0 turns stale_param true (and logs once) when
+# no pulse has been counted for that long, and false at the next pulse. It is
+# this driver's own clock, independent of behaviors/cycle_done_detector and
+# its quiet time, so it neither races nor resets a cycle. It cannot tell an
+# unplugged sensor from a machine that has not run: set it beyond the longest
+# normal gap between uses.
+
+cmake_priv_requires:
+  app_driver: [esp_driver_gpio, esp_timer]
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: GPIO wired to the module's DO (digital out) pin
+  active_level:
+    type: int
+    default: 1
+    description: >-
+      Level the module drives while shaken (1 for most SW-420 boards; the
+      board's LED shows it). Only used to recognise a line stuck active.
+  pull:
+    type: string
+    default: none
+    enum: [none, pullup, pulldown]
+    description: >-
+      Internal pull. none for a module, which drives the line itself; pullup
+      for a bare switch wired from the GPIO to GND.
+  window_ms:
+    type: int
+    default: 2000
+    description: >-
+      Counting window in milliseconds. Each window publishes one activity
+      value: the pulses counted in it scaled to pulses per minute
+      (count x 60000 / window_ms), whatever the window length.
+  min_pulse_gap_us:
+    type: int
+    default: 1000
+    description: >-
+      Microseconds; edges closer together than this count as one pulse
+      (comparator ringing).
+  stale_after_s:
+    type: int
+    default: 0
+    description: >-
+      Seconds with no pulse before the sensor is reported stale (stale_param
+      true, and a log line); the next pulse clears it. 0 (default) = off.
+      Must exceed the longest normal gap between uses (86400 = a day). A cut
+      wire on a floating input can read as noise pulses: with stale_after_s
+      set, give the pin a pull toward its inactive level (pulldown when
+      active_level is 1).
+
+driver_params:
+  activity_param:
+    type: u16
+    required: true
+    description: >-
+      Activity in pulses PER MINUTE (not per second, not per window) over
+      the last window, 0 = still. A level for behaviors/cycle_done_detector,
+      not a yes/no.
+  stale_param:
+    type: bool
+    required: false
+    description: >-
+      Optional — true once no pulse has been seen for stale_after_s, false
+      again at the next pulse (false from boot). For a "sensor disconnected"
+      alert: device_types/generic_binary_sensor with device_class problem, or
+      a notification trigger.
+
+facts:
+  activity_unit: "The activity level is in pulses per minute, whatever the counting window: a requirement of N pulses per second is a level of N x 60 (2 pulses a second = 120), and that is the number to give any threshold that reads this activity."
+  stale_alert: "For a \"sensor disconnected\" or \"no vibration for N hours\" alert, set stale_after_s and bind stale_param (true after that long with no pulse, false at the next one); it runs on its own clock, separate from any cycle detection, so product code needs no timer of its own."
+  stale_limit: "It cannot tell a dead or unplugged sensor from a machine that has simply not run for that long, so the alert means \"no vibration seen for N hours\", not a proven fault, and stale_after_s must exceed the longest normal gap between uses."

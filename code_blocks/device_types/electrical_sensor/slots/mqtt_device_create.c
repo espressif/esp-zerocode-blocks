@@ -13,7 +13,7 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_power_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
@@ -24,7 +24,7 @@
          * the sensor has produced it — the zero the bus holds before that is not a
          * measurement. The normal publish path takes over on the first real value. */
         if (app_driver_param_seen({{cfg.active_power_param}})) {
-            esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_power_topic, buf, 0, 1, true);
+            zc_mqtt_publish(s_{{prefix_lc}}_power_topic, buf, 0, 1, true);
         }
     }
 {{#if cfg.voltage_param}}
@@ -42,7 +42,7 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_voltage_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
@@ -53,7 +53,7 @@
          * the sensor has produced it — the zero the bus holds before that is not a
          * measurement. The normal publish path takes over on the first real value. */
         if (app_driver_param_seen({{cfg.voltage_param}})) {
-            esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_voltage_topic, buf, 0, 1, true);
+            zc_mqtt_publish(s_{{prefix_lc}}_voltage_topic, buf, 0, 1, true);
         }
     }
 {{/if}}
@@ -72,7 +72,7 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_current_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
@@ -83,7 +83,7 @@
          * the sensor has produced it — the zero the bus holds before that is not a
          * measurement. The normal publish path takes over on the first real value. */
         if (app_driver_param_seen({{cfg.current_param}})) {
-            esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_current_topic, buf, 0, 1, true);
+            zc_mqtt_publish(s_{{prefix_lc}}_current_topic, buf, 0, 1, true);
         }
     }
 {{/if}}

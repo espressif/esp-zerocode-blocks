@@ -13,7 +13,7 @@
     /* No standard illuminance param type — custom read-only float in lux. */
     s_{{prefix_lc}}_lux_param = esp_rmaker_param_create(
         "Illuminance", NULL,
-        esp_rmaker_float({{prefix_lc}}_encoded_to_lux(init.u16)), PROP_FLAG_READ);
+        esp_rmaker_float((float)init.u16), PROP_FLAG_READ);
     esp_rmaker_device_add_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_lux_param);
     esp_rmaker_device_assign_primary_param(s_{{prefix_lc}}_device, s_{{prefix_lc}}_lux_param);
     esp_rmaker_node_add_device(node, s_{{prefix_lc}}_device);

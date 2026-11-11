@@ -1,0 +1,78 @@
+description: "Analog soil moisture probe (capacitive v1.2/v2.0 or resistive fork) read on an ADC pin and published as moisture percent (0-100), calibrated between a dry and a wet reading"
+
+# The probe's analog output goes to one ADC-capable GPIO; the pin's ADC unit
+# and channel are looked up from the GPIO at boot (adc_oneshot_io_to_channel),
+# so the same cfg works on every chip. Each poll averages a few readings and
+# maps them linearly onto 0-100 %:
+#   percent = (raw - dry_raw) * 100 / (wet_raw - dry_raw), clamped to 0..100
+# so it works whichever way the probe moves — a capacitive probe reads LOWER
+# when wet (dry_raw > wet_raw), a resistive fork usually HIGHER.
+#
+# The defaults suit a capacitive v1.2 probe at 3.3 V with 12 dB attenuation
+# (~3000 in air, ~1300 in a glass of water). Every probe differs, so the owner
+# calibrates THEIR probe after flashing, with no rebuild: the driver registers
+# one `soil-cal` console command for all its instances —
+#   soil-cal dry    probe in dry air: store its averaged reading as 0 %
+#   soil-cal wet    probe in water:   store its averaged reading as 100 %
+#   soil-cal show   raw reading now, the dry and wet points, percent
+#   soil-cal reset  back to dry_raw / wet_raw
+# With two or more probes each verb takes the instance prefix (lower case) as
+# a second word. The points are kept in NVS (namespace zc_soil_cal, one blob per
+# probe, keyed by the prefix's first 15 characters) and loaded over the cfg at
+# boot, so they survive reboots and a factory reset (NVS erase) clears them.
+# dry_raw / wet_raw are therefore only the starting point.
+#
+# Prefer an ADC1 pin: on ESP32/S2/S3 ADC2 reads fail while Wi-Fi is up, and
+# ESP32-C2/C5/C6/H2 have no ADC2 at all.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: ADC-capable GPIO the probe's analog output (AOUT) is wired to
+  attenuation:
+    type: int
+    default: 3
+    description: 0=0dB, 1=2.5dB, 2=6dB, 3=12dB (full scale; right for a probe powered from 3.3 V)
+  dry_raw:
+    type: int
+    default: 3000
+    description: Built-in raw ADC reading with the probe in dry air (= 0 %) until the owner runs soil-cal dry
+  wet_raw:
+    type: int
+    default: 1300
+    description: Built-in raw ADC reading with the probe in water (= 100 %) until the owner runs soil-cal wet
+  samples:
+    type: int
+    default: 8
+    description: Readings averaged per poll (1-64)
+  poll_interval_ms:
+    type: int
+    default: 5000
+    description: How often the probe is read
+
+driver_params:
+  value_param:
+    type: u8
+    required: true
+    description: Param this probe publishes — soil moisture, whole percent 0-100 (device_types/soil_sensor mirrors it)
+  raw_param:
+    type: u16
+    required: false
+    default: ""
+    description: (Optional) param for the averaged raw ADC reading. Empty disables. Not needed to calibrate — `soil-cal show` prints the raw reading.
+
+cmake_priv_requires:
+  app_logic: [nvs_flash, console, esp_timer]
+
+# Console commands this block registers; scripts/check.py fails if one is not
+# a registered string literal in the block's sources.
+console_commands:
+  - "soil-cal show|dry|wet|reset [probe]"
+
+facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."
+  calibration: "The moisture percent is a straight line between a dry reading (probe in air) and a wet reading (probe in water), so it is a relative wetness for that probe, not a laboratory volumetric water content; the firmware starts from typical values and each probe should be calibrated once."
+  calibrating: "The owner calibrates over the USB serial console with no rebuild: with the probe in dry air type soil-cal dry, with it in a glass of water type soil-cal wet; soil-cal show prints the raw reading, both points and the percent, and soil-cal reset returns to the built-in points (with several probes, each command takes the probe's name)."
+  calibration_kept: "The calibration is saved on the device, so it survives reboots and power cuts, and a factory reset clears it back to the built-in points."
+  reading_interval: "The probe is read every 5 seconds by default and the reading is an average of several samples."

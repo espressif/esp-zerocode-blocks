@@ -25,3 +25,9 @@ void zc_ble_hid_send_consumer(uint16_t usage)
 {
     (void)usage;
 }
+
+void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers)
+{
+    (void)keycode;
+    (void)modifiers;
+}

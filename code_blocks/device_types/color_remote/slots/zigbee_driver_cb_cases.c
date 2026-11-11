@@ -1,4 +1,7 @@
-if (param_id == {{cfg.power_param}} && s_{{prefix_lc}}_zb_endpoint) {
+/* A controller turns a param into a COMMAND to bound devices, so the shell's
+ * post-join/reboot resync (ZB_SOURCE_RESYNC) must not reach it: replaying the
+ * remembered state would switch every bound device after each reboot. */
+if (param_id == {{cfg.power_param}} && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
     ezb_zcl_on_off_cmd_t cmd = {};
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
     cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;
@@ -15,7 +18,7 @@ if (param_id == {{cfg.power_param}} && s_{{prefix_lc}}_zb_endpoint) {
         ESP_LOGW(TAG, "{{prefix_lc}}: failed to acquire Zigbee lock for On/Off command");
     }
 }
-if (param_id == {{cfg.level_param}} && s_{{prefix_lc}}_zb_endpoint) {
+if (param_id == {{cfg.level_param}} && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
     ezb_zcl_level_move_to_level_cmd_t cmd = {};
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
     cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;
@@ -27,7 +30,7 @@ if (param_id == {{cfg.level_param}} && s_{{prefix_lc}}_zb_endpoint) {
         if (err != EZB_ERR_NONE) ESP_LOGW(TAG, "{{prefix_lc}}: MoveToLevel failed (0x%x)", err);
     }
 }
-if (param_id == {{cfg.hue_param}} && s_{{prefix_lc}}_zb_endpoint) {
+if (param_id == {{cfg.hue_param}} && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
     ezb_zcl_color_control_move_to_hue_cmd_t cmd = {};
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
     cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;
@@ -40,7 +43,7 @@ if (param_id == {{cfg.hue_param}} && s_{{prefix_lc}}_zb_endpoint) {
         if (err != EZB_ERR_NONE) ESP_LOGW(TAG, "{{prefix_lc}}: MoveToHue failed (0x%x)", err);
     }
 }
-if (param_id == {{cfg.saturation_param}} && s_{{prefix_lc}}_zb_endpoint) {
+if (param_id == {{cfg.saturation_param}} && s_{{prefix_lc}}_zb_endpoint && source != ZB_SOURCE_RESYNC) {
     ezb_zcl_color_control_move_to_saturation_cmd_t cmd = {};
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_NONE;
     cmd.cmd_ctrl.src_ep = s_{{prefix_lc}}_zb_endpoint;

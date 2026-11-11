@@ -35,6 +35,10 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
 }
 
 static uint8_t s_{{prefix_lc}}_oled_fb[1024]; /* 128x64 / 8 */
+/* Frame + panel transfers from several tasks: one lock around both. */
+static SemaphoreHandle_t s_{{prefix_lc}}_oled_lock = NULL;
+static void {{prefix_lc}}_oled_lock(void) { if (s_{{prefix_lc}}_oled_lock) xSemaphoreTakeRecursive(s_{{prefix_lc}}_oled_lock, portMAX_DELAY); }
+static void {{prefix_lc}}_oled_unlock(void) { if (s_{{prefix_lc}}_oled_lock) xSemaphoreGiveRecursive(s_{{prefix_lc}}_oled_lock); }
 
 /* 6x8 ASCII font (printable subset 0x20-0x7E). 5 columns + 1 spacer. */
 static const uint8_t s_{{prefix_lc}}_oled_font[][5] = {
@@ -88,11 +92,68 @@ static void {{prefix_lc}}_oled_flush(void)
     }
 }
 
-void {{prefix_lc}}_oled_clear(void) { memset(s_{{prefix_lc}}_oled_fb, 0, sizeof(s_{{prefix_lc}}_oled_fb)); {{prefix_lc}}_oled_flush(); }
+void {{prefix_lc}}_oled_show(void)
+{
+    if (s_{{prefix_lc}}_i2c_dev == NULL) return;
+    {{prefix_lc}}_oled_lock();
+    {{prefix_lc}}_oled_flush();
+    {{prefix_lc}}_oled_unlock();
+}
+
+void {{prefix_lc}}_oled_clear(void)
+{
+    {{prefix_lc}}_oled_lock();
+    memset(s_{{prefix_lc}}_oled_fb, 0, sizeof(s_{{prefix_lc}}_oled_fb));
+    {{prefix_lc}}_oled_show();
+    {{prefix_lc}}_oled_unlock();
+}
+
+static void {{prefix_lc}}_oled_px(int x, int y, int on)
+{
+    if (x < 0 || x > 127 || y < 0 || y > 63) return;
+    uint8_t bit = (uint8_t)(1u << (y & 7));
+    if (on) s_{{prefix_lc}}_oled_fb[(y >> 3) * 128 + x] |= bit;
+    else    s_{{prefix_lc}}_oled_fb[(y >> 3) * 128 + x] &= (uint8_t)~bit;
+}
+
+void {{prefix_lc}}_oled_fill(int x, int y, int w, int h, int on)
+{
+    {{prefix_lc}}_oled_lock();
+    for (int yy = y; yy < y + h; ++yy)
+        for (int xx = x; xx < x + w; ++xx) {{prefix_lc}}_oled_px(xx, yy, on);
+    {{prefix_lc}}_oled_unlock();
+}
+
+/* The 5x7 font scaled up: a character is 6*scale wide (one column of space)
+ * and 8*scale tall; its cell is cleared first, so redrawing a value in place
+ * leaves no old pixels behind. */
+void {{prefix_lc}}_oled_text(int x, int y, int scale, const char *s)
+{
+    if (!s) return;
+    if (scale < 1) scale = 1;
+    if (scale > 8) scale = 8;
+    {{prefix_lc}}_oled_lock();
+    for (; *s && x < 128; ++s, x += 6 * scale) {
+        char ch = *s;
+        if (ch < 0x20 || ch > 0x7E) ch = ' ';
+        const uint8_t *g = s_{{prefix_lc}}_oled_font[ch - 0x20];
+        for (int c = 0; c < 6; ++c) {
+            uint8_t col = c < 5 ? g[c] : 0;
+            for (int r = 0; r < 8; ++r) {
+                int on = (col >> r) & 1;
+                for (int dy = 0; dy < scale; ++dy)
+                    for (int dx = 0; dx < scale; ++dx)
+                        {{prefix_lc}}_oled_px(x + c * scale + dx, y + r * scale + dy, on);
+            }
+        }
+    }
+    {{prefix_lc}}_oled_unlock();
+}
 
 void {{prefix_lc}}_oled_print(int row, const char *s)
 {
     if (row < 0 || row > 7 || !s) return;
+    {{prefix_lc}}_oled_lock();
     int col = 0;
     while (*s && col < 126) {
         char ch = *s++;
@@ -101,5 +162,6 @@ void {{prefix_lc}}_oled_print(int row, const char *s)
         for (int i = 0; i < 5 && col < 127; ++i) s_{{prefix_lc}}_oled_fb[row * 128 + col++] = g[i];
         if (col < 127) s_{{prefix_lc}}_oled_fb[row * 128 + col++] = 0;
     }
-    {{prefix_lc}}_oled_flush();
+    {{prefix_lc}}_oled_show();
+    {{prefix_lc}}_oled_unlock();
 }

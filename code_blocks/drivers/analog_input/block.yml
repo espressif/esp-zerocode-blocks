@@ -1,0 +1,80 @@
+description: "Any analog voltage on one ADC pin — a battery through a divider, a 0.5-4.5 V pressure transducer, a potentiometer, an analog sensor: calibrated millivolts, an optional divider and straight-line map to the product's units, averaged, on the bus's poll task"
+
+# CALIBRATED, NOT NOMINAL. A raw count times 3100 / 4095 is off by 100-200 mV
+# on a real chip, and a battery cut-off or a pressure alarm judged on that is
+# wrong; ESP-IDF's ADC calibration (curve or line fitting, whichever the chip
+# has) gives true millivolts. A chip with no scheme falls back to the nominal
+# full scale and says so at boot.
+#
+# The pin's millivolts times divider_num / divider_den is the voltage at the
+# source (a 100 k / 100 k divider on a battery: 2 / 1). With out_hi != out_lo
+# that voltage is mapped on the straight line in_lo_mv -> out_lo,
+# in_hi_mv -> out_hi (a 0.5-4.5 V transducer for 0-100 PSI: 500, 4500, 0, 100),
+# without clamping, so an out-of-range input shows as out of range; otherwise the
+# value is the source voltage in mV. Each reading averages `samples` reads.
+# Read on the bus's poll task (app_driver_poll_every), never a timer callback.
+
+params:
+  gpio:
+    type: int
+    required: true
+    description: ADC-capable GPIO the voltage is on
+  attenuation:
+    type: int
+    default: 3
+    description: 0=0dB, 1=2.5dB, 2=6dB, 3=12dB (the widest input range, about 0-3.1 V at the pin)
+  divider_num:
+    type: int
+    default: 1
+    description: Source voltage = pin voltage x divider_num / divider_den (a 1:1 divider on a battery is 2 / 1)
+  divider_den:
+    type: int
+    default: 1
+    description: See divider_num
+  in_lo_mv:
+    type: int
+    default: 0
+    description: Source mV that maps to out_lo (used only when out_hi != out_lo)
+  in_hi_mv:
+    type: int
+    default: 3300
+    description: Source mV that maps to out_hi
+  out_lo:
+    type: int
+    default: 0
+    description: Value at in_lo_mv, in the product's units
+  out_hi:
+    type: int
+    default: 0
+    description: Value at in_hi_mv; out_hi == out_lo publishes the source voltage in mV instead
+  samples:
+    type: int
+    default: 8
+    description: Reads averaged per reading, 1-64
+  poll_ms:
+    type: int
+    default: 1000
+    description: How often a reading is published, at least 20 ms
+  value_param:
+    type: string
+    required: true
+    description: Where the reading is published — APP_DRIVER_PARAM_<NAME>
+  value_kind:
+    type: string
+    default: u32
+    enum: [i16, u16, u32]
+    description: value_param's type (the reading is clamped to it)
+
+param_refs:
+  value_param: "{{cfg.value_kind}}"
+
+driver_params:
+  status_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) true after a good reading, false when the ADC read fails. Empty disables.
+
+facts:
+  calibrated: "It reports calibrated millivolts (ESP-IDF's ADC calibration), so thresholds on a battery or a transducer are judged on the true voltage; product code never converts raw counts itself."
+  scaled: "A divider and a straight-line map (in_lo_mv/in_hi_mv to out_lo/out_hi) put the reading in the product's units, averaged over `samples` reads every poll_ms; a reading outside the map's range is published as such, not clamped to it."

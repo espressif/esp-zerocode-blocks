@@ -16,13 +16,13 @@
                  s_node_id,
                  s_{{prefix_lc}}_setpoint_state_topic,
                  s_{{prefix_lc}}_setpoint_cmd_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_setpoint_cmd_topic, 1);
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.setpoint_param}}, &init);
         char buf[16]; snprintf(buf, sizeof(buf), "%.2f", (double)init.i16 / 100.0);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_setpoint_state_topic, buf, 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_setpoint_state_topic, buf, 0, 1, true);
     }
 }

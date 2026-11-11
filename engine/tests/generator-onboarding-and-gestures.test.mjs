@@ -30,6 +30,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse as parseYaml } from 'yaml'
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const eng = await import(join(ROOT, 'engine/dist/index.js'))
@@ -92,7 +93,27 @@ test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its ident
   }
   const console = read('components/app_aws_iot/zc_aws_console.cpp')
   const registered = [...code(console).matchAll(/\{ "(aws-[a-z-]+)",/g)].map((m) => m[1])
-  assert.deepEqual(registered, ['aws-setup', 'aws-wifi', 'aws-status'])
+  assert.deepEqual(registered, ['aws-setup', 'aws-wifi', 'aws-status', 'aws-inject'])
+  // aws-inject is the bench's broker: it hands a (topic, payload) to the same
+  // dispatcher a PUBLISH from AWS reaches, so a command handler can be driven on
+  // the emulator with no session (2026-10-16: every command feature of an
+  // aws_iot product was shipping "unverified").
+  const inject = code(console).slice(code(console).indexOf('static void aws_inject_task'), code(console).indexOf('static void wifi_saved_note'))
+  assert.match(inject, /static int aws_inject_cmd\(int argc, char \*\*argv\)/)
+  assert.match(inject, /zc_aws_subs_dispatch\(&job->pub\)/)
+  assert.ok(!/MQTTAgent_|app_aws_iot_publish\(/.test(inject), 'inject never touches the session')
+  // Callbacks run on the session task's stack in real delivery; the console's
+  // is half that, so inject delivers on a task of the same size.
+  assert.match(inject, /xTaskCreate\(aws_inject_task, "aws_inject", ZC_AWS_TASK_STACK,/)
+  assert.match(read('components/app_aws_iot/zc_aws_agent.cpp'), /xTaskCreate\(session_task, "aws_iot", ZC_AWS_TASK_STACK,/)
+  // A topic nothing subscribes to says so, instead of silently doing nothing.
+  assert.match(inject, /no subscription matches/)
+  // ESP-IDF's console keeps quotes it does not open an argument with, so the
+  // usage it is taught must be "no quotes", never "quote the JSON".
+  const fw = parseYaml(readFileSync(join(ROOT, 'code_blocks/frameworks/aws_iot/block.yml'), 'utf8'))
+  const injectLine = fw.onboarding.console.commands.find((c) => c.startsWith('aws-inject'))
+  assert.match(injectLine, /no quotes/)
+  assert.ok(!/quote a JSON|quote JSON/i.test(console + injectLine), 'never told to quote the payload')
   assert.match(console, /app_console_read_line\(/, 'it reads answers through the shared reader')
   // ONE implementation of the storage: the commands are wrappers.
   assert.ok(!/nvs_(open|set_|erase)/.test(console), 'no NVS access left in the console commands')
@@ -100,8 +121,8 @@ test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its ident
   assert.match(read('components/app_aws_iot/CMakeLists.txt'), /"zc_aws_config\.cpp"/)
   // The last will: a {thing} template substituted at EACH connect and passed
   // to MQTT_Connect; plus the
-  // retained publish its "online" counterpart needs. Three of three writers
-  // that reached it hand-added a will to this component before it existed.
+  // retained publish its "online" counterpart needs (before it existed, a
+  // product hand-added a will to this component).
   assert.match(header, /esp_err_t app_aws_iot_set_will\(const char \*topic, const char \*payload, uint8_t qos, bool retain\);/)
   assert.match(header, /esp_err_t app_aws_iot_publish_retained\(/)
   const agent = read('components/app_aws_iot/zc_aws_agent.cpp')
@@ -157,7 +178,7 @@ test('board_button: double click, long press and a factory-reset hold, on the bo
   assert.match(control, /iot_button_set_param\(btn_btn, BUTTON_SHORT_PRESS_TIME_MS, \(void \*\)\(intptr_t\)350\)/)
   assert.match(control, /btn_lp\.long_press\.press_time = 2000;/)
   assert.match(control, /btn_fr\.long_press\.press_time = 6000;[\s\S]*btn_factory_reset_cb/)
-  assert.match(control, /nvs_flash_erase\(\);\s*esp_restart\(\);/)
+  assert.match(control, /factory reset"\);\s*if \(app_utils_factory_reset\(\) != ESP_OK\)/)
   // still NO pin and no second device on the board's line
   assert.ok(!/app_button_get_or_create|gpio_config/.test(code(control)))
 })
@@ -183,7 +204,9 @@ test('board_button with no target param leaves every gesture to the product', as
   const control = read('components/app_logic/control.cpp')
   assert.ok(!control.includes('#define KEY_SINGLE_CLICK_TOGGLES'))
   assert.ok(!/app_driver_set_param/.test(control.slice(control.indexOf('key_board_button_cb'))), 'a click toggles nothing')
-  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    key_on_single_click\(\);/)
+  assert.match(control, /static void key_click\(void\)\n\{\n    key_on_single_click\(\);\n\}/)
+  assert.match(control, /#define KEY_TOGGLE_BEFORE_RESET 0\n/, 'no target: the click is the click, nothing waits for the press end')
+  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    if \(KEY_TOGGLE_BEFORE_RESET\) return;[^\n]*\n    key_click\(\);/)
 })
 
 /* ── the board's own LED: colour ─────────────────────────────────────── */
@@ -226,6 +249,12 @@ test('aws_iot_heartbeat: presence is opt-in — without it, no retained will and
   assert.ok(!logic.includes('app_aws_iot_set_will'), 'no last will by default')
   assert.ok(!logic.includes('app_aws_iot_publish_retained'), 'no retained "online" by default')
   assert.match(logic, /app_aws_iot_publish\(/, 'the heartbeat itself is unchanged')
+  // The command topic is subscribed ONCE at init (subscribe is declarative and
+  // replayed at every connect), never in the connect handler: a device that has
+  // not connected — the emulator — must still reach the handler via aws-inject.
+  const onConnected = logic.slice(logic.indexOf('hb_on_connected(void *arg'), logic.indexOf('hb_beat(void *arg'))
+  assert.ok(onConnected.length > 0 && !onConnected.includes('app_aws_iot_subscribe'), 'no subscribe in the connect handler')
+  assert.match(logic, /hb_build_topics\(\);\s*esp_err_t hb_sub = app_aws_iot_subscribe\(s_hb_cmd_topic, 1,\s*hb_on_cmd, NULL\);/)
 })
 
 test('aws_iot: the connect runs on a snapshot of the config, new Wi-Fi ends the backoff, and a session that does not hold is backed off', async (t) => {

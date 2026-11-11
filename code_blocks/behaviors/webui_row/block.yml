@@ -1,0 +1,65 @@
+description: "One row on the web UI page for any driver param — the product's own setting (a mode switch, a limit, a time of day) or reading (a computed value) — in the page's row kinds: toggle, slider, number, value, binary, time."
+
+# Device types bring their own rows (webui_entities). A param that belongs to
+# the PRODUCT — an Auto/Manual switch its logic reads, the speed it decided, a
+# threshold the owner sets — had no way onto the page: product code spliced
+# rows into the generated page, or started a second HTTP server that could not
+# bind port 80. This block is the row, as data. One instance per row.
+#
+# It also DECLARES the param (param_refs with the type the product picks), so a
+# product-only param exists in the enum without a producer block. Product code
+# reads it with app_driver_get_param / the change notify and writes a reading
+# with app_driver_set_param; a control row's writes from the page land on the
+# bus with source LOCAL like any other.
+#
+# Kinds, as the page draws them:
+#   toggle — a switch: off writes min, on writes max (bool: 0/1)
+#   slider — a range from min to max
+#   number — the value with - and + buttons moving it by step
+#   value  — a read-only reading (shows -- until first written)
+#   binary — a read-only ACTIVE / clear state
+#   time   — a time of day the owner sets (HH:MM), stored as minutes since
+#            midnight (0-1439, whatever min and max say; value_kind u16): a
+#            schedule's feeding, lights-on or watering time
+# The value is shown divided by scale (a temperature in centi-degrees: scale 100).
+
+requires_frameworks: [webui]
+
+params:
+  label:
+    type: string
+    required: true
+    description: Row label on the page (plain text, no quotes)
+  kind:
+    type: string
+    default: value
+    enum: [toggle, slider, number, value, binary, time]
+    description: How the page draws the row; toggle, slider, number and time take writes from the page
+  param:
+    type: string
+    required: true
+    description: Driver param the row shows (and, for a control, writes) — APP_DRIVER_PARAM_<NAME>
+  value_kind:
+    type: string
+    default: u8
+    enum: [bool, u8, i16, u16, u32]
+    description: The param's value type
+  min:
+    type: int
+    default: 0
+    description: Lowest value a control writes (a toggle's off); a time row is always 0-1439
+  max:
+    type: int
+    default: 100
+    description: Highest value a control writes (a toggle's on); a time row is always 0-1439
+  scale:
+    type: int
+    default: 1
+    description: The page shows the raw value divided by this
+  step:
+    type: int
+    default: 1
+    description: A number row's - / + step, in raw units
+
+param_refs:
+  param: "{{cfg.value_kind}}"
