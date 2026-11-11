@@ -93,10 +93,12 @@ static void {{prefix_lc}}_beat(void *arg)
         return;
     }
 
-    /* Called from the esp_timer task, not the session task — which is the whole
-     * point of the agent underneath: any task may publish. */
+    /* Called from the shared esp_timer task (any task may publish), so it
+     * never waits for queue room: under a backed-up connection a 1 s wait here
+     * stalled every other timer in the product. A full queue skips this beat;
+     * the next one follows. */
     esp_err_t err = app_aws_iot_publish(s_{{prefix_lc}}_hb_topic, body, (size_t)(n - 1),
-                                        0, pdMS_TO_TICKS(1000));
+                                        0, 0);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "{{prefix_lc}}: heartbeat not sent: %s", esp_err_to_name(err));
     }

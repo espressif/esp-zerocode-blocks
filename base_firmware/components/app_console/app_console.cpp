@@ -10,7 +10,8 @@
  * Always-on built-in commands (intentionally minimal — every product gets
  * these and nothing else by default):
  *   reboot          — software restart
- *   factory_reset   — wipe NVS + reboot (drops Matter commissioning)
+ *   factory_reset   — app_factory_reset_hook, wipe NVS + reboot (drops
+ *                     Matter commissioning)
  *   mem             — quick heap free / largest block
  *
  * Richer commands (uptime, chip info, version, log-level, detailed heap,
@@ -46,17 +47,11 @@ static int cmd_reboot(int argc, char **argv)
     return 0; /* unreachable */
 }
 
+/* app_factory_reset_hook (app_utils.h), erase NVS, reboot. A product that
+ * clears more defines the hook; it never registers its own factory_reset. */
 static int cmd_factory_reset(int argc, char **argv)
 {
-    ESP_LOGW(TAG, "Factory reset: erasing NVS...");
-    esp_err_t err = nvs_flash_erase();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "NVS erase failed: %s", esp_err_to_name(err));
-        return 1;
-    }
-    ESP_LOGI(TAG, "NVS erased. Rebooting...");
-    esp_restart();
-    return 0; /* unreachable */
+    return app_utils_factory_reset() == ESP_OK ? 0 : 1;
 }
 
 static int cmd_mem(int argc, char **argv)

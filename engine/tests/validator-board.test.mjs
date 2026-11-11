@@ -171,6 +171,11 @@ test('ci_chips disagreeing with the board file is an error', () => {
   assert.match(r.errors[0].message, /esp32s31/)
 })
 
+test('ci_chips naming the board chip AND others is fine — the product is proven on the board chip', () => {
+  const root = pack({ chip: 'esp32s31' })
+  assert.deepEqual(errs(validateProduct(product({ ci_chips: ['esp32c6', 'esp32s31'] }), BLOCKS, { boardsDir: root, board: boardFile() })), [])
+})
+
 test("the board file's chip must agree with the resolved bmgr board's own", () => {
   // The board file says the user has a C6; the bmgr board it resolved to is an
   // S31 board. One of the two is wrong and the build would prove nothing.

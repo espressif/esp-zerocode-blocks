@@ -47,3 +47,6 @@ driver_params:
     type: bool
     required: false
     description: "Optional sensor-health bool: true after a successful read, false after a failed one. Displays and publishers gate 'no data' on it; without it a dead sensor keeps its last reading on the bus."
+
+facts:
+  sensor_health: "Every poll writes the readings, but an unchanged one is not notified, so a steady temperature looks like a dead sensor: wire status_param (true after a good read, false after a failed one) or ask app_driver_param_written_us(temp_param), never treat an unchanged value as stale."

@@ -12,3 +12,18 @@ params:
     type: int
     default: 5000
     description: How long to hold before factory reset triggers
+  reset_cue_ms:
+    type: int
+    default: 1500
+    description: >-
+      How long a press lasts before the base's app_factory_reset_hold_started()
+      runs (app_utils.h) — the reset is now being counted down. Released after
+      it and before hold_time_ms, app_factory_reset_hold_cancelled() runs. The
+      default is the button component's own long-press time, which a control
+      button on the same pin keeps: a press that long is no longer a click, so
+      the feedback never shows for a click. Keep it at or past any longer
+      long press set on that pin.
+
+facts:
+  control_button_toggles_until_reset: "A control button on the same pin (drivers/button, relay_with_button, multi_event_button) toggles on any press released before hold_time_ms, not only a short click, and a press that reaches the hold resets without toggling — the reset records its hold on the shared button device."
+  reset_hold_feedback: "A press held past reset_cue_ms (1.5 s) calls app_factory_reset_hold_started() and an early release app_factory_reset_hold_cancelled() (app_utils.h, weak, defined in app_logic) — feedback during the hold goes there; the button's callbacks are never unregistered or re-registered, so a control button on the same pin keeps its click and the reset keeps working."

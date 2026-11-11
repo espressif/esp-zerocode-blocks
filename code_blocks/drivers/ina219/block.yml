@@ -1,6 +1,6 @@
 description: Texas Instruments INA219 I2C voltage + current sensor. Useful for USB power monitoring, battery monitors.
 
-# Configures INA219 at default 32V, 2A range (40mΩ shunt by default).
+# Configures INA219 at default 32V, 2A range (100 mΩ shunt by default; set shunt_milliohm to the board's).
 # Power = bus voltage × shunt current. Multiplier depends on calibration register.
 # This block uses fixed-config readout — for full programmability extend post-generation.
 

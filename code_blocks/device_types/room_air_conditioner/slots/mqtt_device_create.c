@@ -24,7 +24,7 @@
                  s_{{prefix_lc}}_temp_cmd_topic,
                  s_{{prefix_lc}}_mode_state_topic,
                  s_{{prefix_lc}}_mode_cmd_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_temp_cmd_topic, 1);
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_mode_cmd_topic, 1);
@@ -33,9 +33,9 @@
         char buf[16];
         app_driver_get_param({{cfg.cool_setpoint_param}}, &init);
         snprintf(buf, sizeof(buf), "%.2f", (double)init.i16 / 100.0);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_temp_state_topic, buf, 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_temp_state_topic, buf, 0, 1, true);
         /* Seed the mode too, or HA shows it unknown until someone changes it. */
         app_driver_get_param({{cfg.power_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_mode_state_topic, init.b ? "cool" : "off", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_mode_state_topic, init.b ? "cool" : "off", 0, 1, true);
     }
 }

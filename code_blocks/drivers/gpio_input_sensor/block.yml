@@ -33,7 +33,7 @@ params:
   debounce_ms:
     type: int
     default: 20
-    description: "A level must hold for this long (rounded up to whole polls) before it is published — contact bounce on reed switches, floats and buttons otherwise becomes a burst of edges on the param bus. 0 disables (publish on the first differing sample)."
+    description: "A level must be seen to hold for at least this long (consecutive polls spanning it, so at least two) before it is published — contact bounce on reed switches, floats and buttons otherwise becomes a burst of edges on the param bus. 0 disables (publish on the first differing sample)."
 
 driver_params:
   target_param:

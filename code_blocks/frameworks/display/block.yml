@@ -49,3 +49,17 @@ early_build:
       prefix: EARLY_LCD
       unless_board_has: display_lcd
       cfg: { sclk_gpio: 4, mosi_gpio: 5, dc_gpio: 2, cs_gpio: 0 }
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  network: "A display brings no network: on its own, the product has no Wi-Fi, no phone app and no remote control, so the screen is the only way to see or change anything."
+  screen: "Each device in the product appears as a card in one scrolling list, with its name and current state: an on/off switch for a light, a reading for a sensor, the temperature and a 5–35 °C setpoint slider for a thermostat."
+  touch: "Controls on the cards work only with a touch panel; on a screen with no touch layer the cards show state but cannot change it."
+  live: "A card updates by itself when the state changes another way, such as a button on the device."
+  units: "Temperatures are shown in °C only."
+  panel: "A board with its own screen uses that screen; otherwise the wired screen must be one the catalog drives: a 240x320 ILI9341 SPI screen (touch with an FT5x06/FT6x36), an ST7789 SPI screen (240x240, 240x320, 135x240 and similar), a 480x480 CO5300 with CST9220 touch, or the ESP32-P4 board's 7-inch 1024x600 screen, which has no touch yet."
+  not_shown: "Remotes and switches (scene button, dimmer remote, colour remote, on/off light switch), doorbell, chime, heat pump and a few controller types have no card."
+  any_touch: "Every touch of the screen, wherever it lands, calls app_display_on_touch() (app_display.h) before any object sees it, so waking a dimmed screen or switching views on a tap needs only that function — objects of the product's own, even full-screen ones, cannot swallow it."
+  screen_on: "The screen and backlight come on at boot and stay on; nothing dims or sleeps unless the spec asks for it."
+  taps: "When the screen shows device cards, every tap on the card list also reaches the screen itself (the list passes clicks up so a screen-level handler sees them), so product code handles a tap on the screen or on its own objects, never both, or each tap is handled twice."

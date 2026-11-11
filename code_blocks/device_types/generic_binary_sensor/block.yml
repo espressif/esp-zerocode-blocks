@@ -1,0 +1,51 @@
+description: "Generic Binary Sensor device type (a product's own on/off flag shown as its own entity: \"Needs water\", \"Filter due\", \"Tank empty\") (MQTT: Home Assistant binary_sensor with a chosen device_class; RainMaker: esp.device.other; web page; display)"
+device_types:
+  rainmaker: esp.device.other
+# No Matter binding: every Matter device type with a Boolean State gives it a
+# fixed meaning (contact, water leak, rain, freeze), which is the mislabel this
+# block exists to avoid. No Zigbee binding: an IAS Zone carries a fixed zone
+# type the same way, and esp-zigbee-lib 2.x has no Binary Input device to
+# report a bare flag. A Matter or Zigbee product gets no entity for it.
+
+# Framework SDK deps come from the framework blocks — this block contributes
+# only bindings.
+
+params:
+  label:
+    type: string
+    default: Status
+    description: User-visible entity name (Home Assistant entity name / RainMaker device name / web and display row; must be unique per node)
+  device_class:
+    type: string
+    default: ""
+    enum: ["", battery, battery_charging, carbon_monoxide, cold, connectivity, door, garage_door, gas, heat, light, lock, moisture, motion, moving, occupancy, opening, plug, power, presence, problem, running, safety, smoke, sound, tamper, update, vibration, window]
+    description: >-
+      Home Assistant binary_sensor device_class — decides the words HA shows for
+      on/off ("problem": Problem/OK, "moisture": Wet/Dry, "opening": Open/Closed).
+      Empty = no class (On/Off). Pick the class whose ON word means the flag is
+      true: a "needs water" flag is problem, never moisture.
+  on_text:
+    type: string
+    default: "On"
+    description: Text the display shows while the flag is true
+  off_text:
+    type: string
+    default: "Off"
+    description: Text the display shows while the flag is false
+
+driver_params:
+  value_param:
+    type: bool
+    required: true
+    description: Driver param ID this entity mirrors (boolean — true when the flag is raised). Usually written by the product's own logic with app_driver_set_param.
+
+facts:
+  use_it_for: "Use it for a product's own yes/no flag that no specific device type describes (needs water, filter due, tank empty, door left open too long); it shows as one entity under the label the spec gives it."
+  home_assistant: "Over MQTT, Home Assistant discovers it as a binary sensor whose on/off words come from its device_class (problem: Problem/OK, moisture: Wet/Dry, opening: Open/Closed), so a \"needs water\" flag is class problem; it stays unknown until the product first sets the flag."
+  fixed_classes: "A specific device type's Home Assistant class is fixed (rain_sensor and water_leak_detector say moisture, contact_sensor door, occupancy_sensor occupancy), so it is the wrong block for a flag of another meaning."
+  web_page: "On the web page it is a row showing ACTIVE while the flag is true and clear while it is false."
+  display: "On the display it is a card with its name and its on or off text."
+  rainmaker: "In the RainMaker app it is a read-only device with one on/off value under its label."
+  no_matter_zigbee: "Matter and Zigbee have no binding: a Matter or Zigbee product shows no entity for it."
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

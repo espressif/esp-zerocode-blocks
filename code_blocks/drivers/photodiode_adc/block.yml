@@ -39,3 +39,6 @@ driver_params:
   value_param:
     type: u16
     required: true
+
+facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."

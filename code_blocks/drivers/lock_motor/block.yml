@@ -61,3 +61,6 @@ driver_params:
     description: >-
       Driver param ID (boolean — true = locked). Written as a command; the
       driver writes back the sensed state after each pulse and on a manual turn
+
+reacts:
+  driver: "A change of {{cfg.locked_param}} drives the lock or unlock H-bridge pin for pulse_ms, then writes back the sensed bolt position from position_gpio; product code writes the param and never drives the motor pins or reports the lock state itself."

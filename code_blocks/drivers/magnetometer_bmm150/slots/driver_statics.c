@@ -65,13 +65,53 @@ static uint32_t {{prefix_lc}}_mag3(int32_t x, int32_t y, int32_t z)
     return (uint32_t)r;
 }
 
+/* Power up, identify, set normal mode — on the poll task (it waits). Retried
+ * until it succeeds, and again after repeated failed reads (a power-cycled
+ * BMM150 wakes in SUSPEND and answers nothing). */
+static bool {{prefix_lc}}_bring_up(void)
+{
+    /* A BMM150 wakes in SUSPEND and answers nothing — not even CHIP_ID — until
+       bit0 of the power register is set: power up, wait, THEN identify. */
+    {{prefix_lc}}_wr({{prefix}}_MAG_REG_POWER, 0x01);
+    /* 10 ms, not 5: pdMS_TO_TICKS() rounds DOWN, and under one tick it is 0. */
+    vTaskDelay(pdMS_TO_TICKS(10));
+    uint8_t id = 0;
+    if ({{prefix_lc}}_rd({{prefix}}_MAG_REG_CHIP_ID, &id, 1) != ESP_OK || id != {{prefix}}_MAG_CHIP_ID_VAL) {
+        return false;
+    }
+    /* Normal mode, 10 Hz: the sensor averages, we take the latest. */
+    {{prefix_lc}}_wr({{prefix}}_MAG_REG_OPMODE, 0x00);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    return true;
+}
+
+static uint32_t s_{{prefix_lc}}_fails = 0;
+
 static void {{prefix_lc}}_poll_cb(void *arg)
 {
     (void)arg;
-    if (!s_{{prefix_lc}}_present_dev) return;
+    if (!s_{{prefix_lc}}_present_dev) {
+        if (!{{prefix_lc}}_bring_up()) {
+            if (s_{{prefix_lc}}_fails++ == 0) {
+                ESP_LOGW(TAG, "{{prefix_lc}}: no BMM150 at 0x%02x yet — retrying", {{prefix}}_MAG_ADDR);
+            }
+            return;
+        }
+        s_{{prefix_lc}}_present_dev = true;
+        s_{{prefix_lc}}_fails = 0;
+        ESP_LOGI(TAG, "{{prefix_lc}}: BMM150 ready");
+    }
 
     uint8_t d[8] = {0};
-    if ({{prefix_lc}}_rd({{prefix}}_MAG_REG_DATA, d, sizeof(d)) != ESP_OK) return;
+    if ({{prefix_lc}}_rd({{prefix}}_MAG_REG_DATA, d, sizeof(d)) != ESP_OK) {
+        if (++s_{{prefix_lc}}_fails >= 3) {
+            s_{{prefix_lc}}_present_dev = false;
+            s_{{prefix_lc}}_fails = 0;
+            ESP_LOGW(TAG, "{{prefix_lc}}: BMM150 not answering — probing again");
+        }
+        return;
+    }
+    s_{{prefix_lc}}_fails = 0;
 
     /* X and Y are 13-bit, Z is 15-bit, each left-aligned in its pair with the
      * low bits used for other flags — shifting back down is what recovers the

@@ -39,7 +39,7 @@ static void {{prefix_lc}}_smooth_task(void *arg)
                 c = cur.u8;
                 move = (c != t);
                 int diff = (int)t - (int)c;
-                int step = {{prefix}}_SMOOTH_STEP;
+                int step = {{prefix}}_SMOOTH_STEP_OK;
                 if (diff >  step) c += step;
                 else if (diff < -step) c -= step;
                 else c = t;

@@ -33,9 +33,9 @@ cmake_priv_requires:
 # CLAUDE.md → Shared buses.
 # The part a board declares as a `custom` device (board_devices.yaml `chip: bmm150`)
 # that THIS block drives. Discovery only — it changes nothing in generation:
-# get_board names this block for such a device, and the block talks to it over
-# the board's own I2C bus (requires_bus adopts it), so no pin is stated. A writer
-# that did not find it hand-wrote a driver with its own pins instead.
+# a board-aware consumer of the catalog can name this block for such a device,
+# and the block talks to it over the board's own I2C bus (requires_bus adopts
+# it), so no pin is stated — rather than a hand-written driver with pins of its own.
 board_part: bmm150
 
 requires_bus:

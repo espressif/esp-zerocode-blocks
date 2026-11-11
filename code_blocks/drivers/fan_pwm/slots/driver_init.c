@@ -19,7 +19,7 @@
     {{prefix_lc}}_fan_chan_cfg.duty = 0;
     {{prefix_lc}}_fan_chan_cfg.hpoint = 0;
     {{prefix_lc}}_fan_chan_cfg.sleep_mode = LEDC_SLEEP_MODE_NO_ALIVE_NO_PD;
-    {{prefix_lc}}_fan_chan_cfg.flags.output_invert = 0;
+    {{prefix_lc}}_fan_chan_cfg.flags.output_invert = {{prefix}}_FAN_OUTPUT_INVERT ? 1 : 0;
     ESP_ERROR_CHECK(ledc_channel_config(&{{prefix_lc}}_fan_chan_cfg));
     s_{{prefix_lc}}_fan_max_duty = {{prefix_lc}}_fan_max_duty;
     ESP_LOGI(TAG, "Fan PWM {{prefix_lc}} initialized (GPIO %d ch=%d, %d Hz, %d-bit)", {{prefix}}_FAN_GPIO, {{prefix}}_FAN_LEDC_CHANNEL,

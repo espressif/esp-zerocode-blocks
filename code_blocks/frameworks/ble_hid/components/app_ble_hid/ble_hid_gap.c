@@ -29,6 +29,7 @@
 #include "host/ble_hs.h"
 #include "host/ble_store.h"
 #include "host/util/util.h"
+#include "services/gap/ble_svc_gap.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 #include "ble_hid_gap.h"
@@ -76,6 +77,12 @@ esp_err_t ble_hid_gap_adv_init(uint16_t appearance, const char *device_name)
     }
     s_device_name = device_name;
     const size_t name_len = strlen(device_name);
+    /* The GAP Device Name characteristic too: a host that reads it after
+     * connecting otherwise relabels the device with NimBLE's default name. */
+    int gap_rc = ble_svc_gap_device_name_set(device_name);
+    if (gap_rc != 0) {
+        ESP_LOGW(TAG, "GAP device name not set (%d)", gap_rc);
+    }
 
     /* Advertising packet: what a host needs to list the device as a HID
      * peripheral — flags, appearance, the HID service UUID — plus as much of

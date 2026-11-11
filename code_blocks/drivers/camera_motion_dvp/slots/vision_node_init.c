@@ -25,14 +25,8 @@
     {{prefix_lc}}_cam.fb_location = CAMERA_FB_IN_DRAM;
     {{prefix_lc}}_cam.grab_mode = CAMERA_GRAB_LATEST;
 
-    esp_err_t {{prefix_lc}}_err = esp_camera_init(&{{prefix_lc}}_cam);
-    if ({{prefix_lc}}_err != ESP_OK) {
-        /* No camera is a degraded state, not a boot blocker. */
-        ESP_LOGE(TAG, "{{prefix_lc}}: camera init failed (%s) — motion detection disabled",
-                 esp_err_to_name({{prefix_lc}}_err));
-    } else {
-        xTaskCreate({{prefix_lc}}_motion_task, "{{prefix_lc}}_motion", 4096, NULL, 5, NULL);
-        ESP_LOGI(TAG, "Camera {{prefix_lc}}: motion detection at %dx%d, poll %d ms",
-                 {{prefix}}_CAM_W, {{prefix}}_CAM_H, {{prefix}}_CAM_POLL_MS);
-    }
+    /* The motion task brings the camera up itself and keeps retrying while
+       it is missing — boot never waits for it. */
+    s_{{prefix_lc}}_cam_cfg = {{prefix_lc}}_cam;
+    xTaskCreate({{prefix_lc}}_motion_task, "{{prefix_lc}}_motion", 4096, NULL, 5, NULL);
 }

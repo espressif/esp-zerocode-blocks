@@ -14,6 +14,6 @@
              "\"type\":\"button_short_press\",\"subtype\":\"button_1\","
              "\"device\":{\"identifiers\":[\"zc_%s\"],\"name\":\"ZeroCode %s\",\"manufacturer\":\"ZeroCode AI\"}}",
              s_{{prefix_lc}}_trigger_topic, s_node_id, s_node_id);
-    esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+    zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     ESP_LOGI(TAG, "{{prefix_lc}}: HA device trigger announced");
 }

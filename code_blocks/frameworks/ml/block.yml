@@ -108,3 +108,14 @@ radio: false
 # (heap_caps_malloc_prefer), so a product without PSRAM still boots — but it
 # then spends that many KB of internal RAM instead, silently. Nothing
 # validates this today.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  ready_made: "The one ready-made model answers whether a person is in front of the camera, with present or not and a confidence score; it is small and noisy, fine for presence but not for counting people or recognising who they are."
+  person_chip: "The ready-made person detector needs an ESP32-S3 with an ESP32-CAM-style (DVP) camera; on the other chips there is no ready-made model."
+  own_model: "There is no way yet to bring the person's own trained model: any model other than the ready-made one has to be added to the block catalog first."
+  other_inputs: "Recognising sounds, motion patterns or sensor readings has no ready-made path: both the model and the code that feeds it readings would have to be made for this product."
+  no_model: "The firmware builds without a model, but then nothing is recognised, and nothing is ever learned or trained on the device."
+  in_the_app: "A result is a lasting yes/no state with a score (an occupancy sensor showing occupied), checked every few seconds, not a count of events."
+  offline: "Everything runs on the device with no network, and no picture or reading leaves it."

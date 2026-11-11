@@ -31,6 +31,11 @@
     esp_timer_handle_t {{prefix_lc}}_poll = NULL;
     ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_poll_args, &{{prefix_lc}}_poll));
     ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_poll, 20000ULL)); /* 20 ms */
+    /* At boot the curtain is wherever it was left: at an end if a limit says
+       so, otherwise unknown. */
+    if ({{prefix_lc}}_at_limit(1)) {{prefix_lc}}_report_current(10000);
+    else if ({{prefix_lc}}_at_limit(-1)) {{prefix_lc}}_report_current(0);
+    else {{prefix_lc}}_report_current(0xFFFF);
     ESP_LOGI(TAG, "Curtain motor {{prefix_lc}} initialized (limits active-%s, max run %d ms)",
              {{prefix}}_LIMIT_ACTIVE ? "high" : "low", {{prefix}}_MAX_RUN_MS);
 }

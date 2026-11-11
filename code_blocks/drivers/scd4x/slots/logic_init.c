@@ -13,16 +13,11 @@
         (void){{prefix_lc}}_scd_send_cmd(0x3F86);
         vTaskDelay(pdMS_TO_TICKS(500));
         {{prefix_lc}}_scd_send_cmd(0x21B1);
-        const esp_timer_create_args_t {{prefix_lc}}_args = {
-            .callback = &{{prefix_lc}}_scd_poll_cb,
-            .arg = NULL,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "{{prefix_lc}}_scd",
-            .skip_unhandled_events = true,
-        };
-        esp_timer_handle_t {{prefix_lc}}_timer = NULL;
-        ESP_ERROR_CHECK(esp_timer_create(&{{prefix_lc}}_args, &{{prefix_lc}}_timer));
-        ESP_ERROR_CHECK(esp_timer_start_periodic({{prefix_lc}}_timer, (uint64_t){{prefix}}_SCD_POLL_MS * 1000ULL));
+        /* On the bus's poll task, not the shared esp_timer task: the read waits
+           for the bus and the device (app_driver_poll_every, app_driver.h). */
+        if (app_driver_poll_every(&{{prefix_lc}}_scd_poll_cb, NULL, (uint32_t)({{prefix}}_SCD_POLL_MS)) != ESP_OK) {
+            ESP_LOGE(TAG, "scd4x {{prefix_lc}}: could not start polling");
+        }
         ESP_LOGI(TAG, "SCD4x {{prefix_lc}}: periodic measurement started");
     }
 }

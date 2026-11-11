@@ -40,3 +40,7 @@ params:
       at every daily query. Zigbee products only.
 
 param_refs: {}
+
+# What the block does on its dispatch slots (returned by generate() as reactions).
+reacts:
+  zigbee_action: "The Zigbee OTA Upgrade client answers the hub's image offer and downloads, checks and installs the image it sends, then reboots into it; product code never starts or answers a Zigbee OTA itself."
