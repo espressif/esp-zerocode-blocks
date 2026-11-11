@@ -60,6 +60,10 @@ extern "C" void app_main(void)
     /* Initialize business logic */
     ESP_ERROR_CHECK(app_logic_init());
 
+    /* What the composed behaviors do once the product's logic is up (a press
+     * that woke the device, delivered after every saved value is restored) */
+    ESP_ERROR_CHECK(zc_behaviors_start());
+
     /* Start device console */
     ESP_ERROR_CHECK(app_console_init());
 

@@ -1,0 +1,67 @@
+id: probe-thermostat
+name: Probe Thermostat
+description: >-
+  A heating thermostat that reads a DS18B20 probe on a 1-Wire bus and drives
+  a heat relay, with its own control page and Home Assistant over MQTT: the
+  page and HA show the probe's temperature, set the target, switch heating on
+  or off and show whether the heat is running.
+keywords: [thermostat, heating, ds18b20, 1-wire, probe, web ui, mqtt, home assistant, climate]
+
+# COMBO: frameworks: [webui, mqtt], as webui-thermostat, with the room
+# temperature from a DS18B20 instead of an SHT4x — the catalog product that
+# compiles drivers/ds18b20 and peripherals/onewire_bus. The relay's param is
+# the thermostat's heating_param (the page's "heating now" row and HA's
+# climate action); the logic that drives the relay is product code.
+frameworks: [webui, mqtt]
+
+instances:
+  - block: peripherals/onewire_bus
+    prefix: OW
+    cfg:
+      gpio: 4
+
+  - block: drivers/ds18b20
+    prefix: PROBE
+    cfg:
+      bus_handle_fn: ow_onewire_handle
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  - block: drivers/relay
+    prefix: HEAT
+    cfg:
+      gpio: 10
+      param_id: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - block: device_types/thermostat
+    prefix: THERMO
+    cfg:
+      label: Thermostat
+      local_temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      heat_setpoint_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      system_mode_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      heating_param: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - block: behaviors/nvs_persist_i16
+    prefix: PERSIST_HEATSP
+    cfg:
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      nvs_namespace: app
+      nvs_key: heatsp
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_SYSMODE
+    cfg:
+      target_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      nvs_namespace: app
+      nvs_key: sysmode
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_get
+    prefix: GET_TEMP
+    cfg:
+      command_name: get-temp
+      target_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      value_kind: i16
+
+  - include: diagnostics-core

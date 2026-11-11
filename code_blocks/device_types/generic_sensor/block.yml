@@ -43,8 +43,19 @@ driver_params:
     type: i16
     required: true
     description: Driver param ID this entity mirrors (int16, the value times cfg.scale). Usually written by the product's own logic with app_driver_set_param.
+  status_param:
+    type: bool
+    required: false
+    shared: true
+    default: ""
+    description: >-
+      (Optional) the reading is valid (true) or not (false) — the driver's
+      status_param (aht21, bh1750, dht22, ds18b20, hcsr04 publish one). When
+      false, Home Assistant shows the sensor as unknown instead of the last
+      value. Empty disables.
 
 facts:
+  unavailable: "With status_param wired to the driver's status, a sensor that stops answering shows as unknown in Home Assistant instead of its last reading, and its value comes back by itself when the sensor does; product code never publishes a placeholder value."
   use_it_for: "Use it for a product's own numeric reading that no specific device type describes (days since watered, a counter, a computed level); it shows as one entity under the label the spec gives it, with the unit the spec names."
   home_assistant: "Over MQTT, Home Assistant discovers it as a sensor with its unit, device_class and state_class; it stays unknown until the product first sets the value."
   range: "The value is a whole number from -32768 to 32767 divided by its scale (1, 10, 100 or 1000), so two decimals reach -327.68 to 327.67."

@@ -63,11 +63,42 @@ esp_err_t app_utils_ledc_timer_config(ledc_timer_config_t *cfg, uint32_t *max_du
  * `factory_reset` console command: the console keeps only one of two commands
  * with the same name.
  *
- * It may run on any task (a button's timer task) and at boot (a power-cycle
- * reset, before the product's own init), so it must not block for long or
- * rely on the product being initialized. Nothing it does can stop the reset.
+ * It may run on any task (a button's timer task), at boot (a power-cycle
+ * reset, before the product's own init) and on the Matter thread (removal
+ * from the last fabric, which takes this same reset), so it must
+ * not block for long, wait on Matter work, or rely on the product being
+ * initialized. Nothing it does can stop the reset.
  */
 void app_factory_reset_hook(void);
+
+/**
+ * PRODUCT HOOKS: feedback while a factory-reset button is HELD — every
+ * hold-to-reset path calls them: board_button's factory_reset_ms,
+ * factory_reset_long_press and factory_reset_button_combo.
+ *
+ *   app_factory_reset_hold_started()   the press (both buttons, for a combo)
+ *       has lasted the block's cue time (its `reset_cue_ms`; see the block),
+ *       so it is no longer a click or an ordinary long press: the reset is
+ *       now being counted down. Show it (an LED full blue, a beep).
+ *   app_factory_reset_hold_cancelled() the button was released before the
+ *       reset fired (or the reset's NVS erase failed and the device carries
+ *       on). Go back to normal.
+ *
+ * When the hold completes, app_factory_reset_hook() runs as for every reset
+ * and the device reboots; cancelled is not called. A press released before
+ * the cue calls neither. Each hold calls started at most once, and cancelled
+ * only after started.
+ *
+ * The defaults do nothing. Define them like app_factory_reset_hook (a file
+ * under components/app_logic/, C linkage — include this header in a .cpp).
+ * Never unregister or re-register the button block's own callbacks to get
+ * this: its click, long press and reset keep working only through them.
+ *
+ * They run on the esp_timer task (the button's timer task): keep them short
+ * and never block — set a param, fire an event, notify a task.
+ */
+void app_factory_reset_hold_started(void);
+void app_factory_reset_hold_cancelled(void);
 
 /**
  * The factory reset every path shares: app_factory_reset_hook(), erase the

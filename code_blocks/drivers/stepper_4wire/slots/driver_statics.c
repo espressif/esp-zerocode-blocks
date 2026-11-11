@@ -42,7 +42,7 @@ static void {{prefix_lc}}_step_cb(void *arg)
         /* A new target written between the read above and the stop found the
            timer still running, so its start was refused — restart for it. */
         if (s_{{prefix_lc}}_target != s_{{prefix_lc}}_current) {
-            esp_timer_start_periodic(s_{{prefix_lc}}_step_timer, (uint64_t){{prefix}}_ST_DELAY_US);
+            esp_timer_start_periodic(s_{{prefix_lc}}_step_timer, (uint64_t){{prefix}}_ST_PERIOD_US);
         }
         return;
     }

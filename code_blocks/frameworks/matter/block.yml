@@ -7,6 +7,8 @@ chips: [esp32, esp32c3, esp32c5, esp32c6, esp32h2, esp32s3, esp32s31]
 # connection is the point. On the ESP32-P4 the radio is a companion chip over
 # ESP-Hosted; a product with no radio framework gets no hosted stack at all.
 radio: true
+# A Wi-Fi station on every chip with Wi-Fi; on esp32h2 Matter runs over Thread
+# and generate() refuses a block that needs the internet.
 provides_internet: true
 # Behaviors every Matter product gets unless it lists or excludes them.
 defaults:
@@ -14,6 +16,18 @@ defaults:
   - behaviors/network_status_log
   - behaviors/uptime_log
   - behaviors/wifi_disconnect_recovery
+
+# State the framework publishes on the param bus under fixed names, so product
+# code and other blocks' cfg can read it (the generator writes them from the
+# Matter thread: the boot value after esp_matter::start, then on each event).
+#   MATTER_COMMISSIONED  true while the device is on at least one fabric —
+#                        from the fabric table at boot, re-read on
+#                        commissioning complete / fabric committed / removed.
+#   MATTER_PAIRING_OPEN  true while it advertises for pairing (commissioning
+#                        window opened .. closed).
+owned_params:
+  APP_DRIVER_PARAM_MATTER_COMMISSIONED: bool
+  APP_DRIVER_PARAM_MATTER_PAIRING_OPEN: bool
 
 # This is a "framework" block. The generator processes product.frameworks: [matter, ...]
 # by loading each framework block, copying its components/ subtree into the output,
@@ -27,10 +41,13 @@ defaults:
 # What the framework gives the owner and cannot do, in words a spec can
 # promise. Copied into every product's seed.
 facts:
+  level_with_on_off: "On a dimmable or colour light, every On and Off from a Matter app also moves the brightness: an On sets it to the minimum and fades to the stored level, an Off fades to the minimum and then puts the stored level back. Product code listening to brightness sees those writes, so it must not read a brightness change as the owner dimming while the light is turning on or off."
+  repeat_on_off: "A Matter On sent to a device that is already on, or Off to one already off, is answered by the On/Off cluster itself and never reaches the product, so nothing the product does can react to it (restarting a timer, entering a mode); a spec cannot promise \"press On again to …\" over Matter — a toggle, a different command or a local button can carry that instead."
   pairing: "The device is added over Bluetooth from any Matter app, and the app gives it the home's Wi-Fi (or Thread) network during setup, so nothing about the network is set on the device itself."
-  setup_code: "Every device uses the same development setup code (passcode 20202021, discriminator 3840): the device never prints it, the studio's flash page shows it, and Matter apps warn that it is an uncertified test device."
+  setup_code: "Every device uses the same development setup code (passcode 20202021, discriminator 3840): the device never prints it (it is ESP Matter's standard test code, the same on every device), and Matter apps warn that it is an uncertified test device."
   pairing_window: "An unpaired device can be added for 15 minutes after it powers up; after that, unplug it and plug it back in to try again."
   controllers: "One device can be in up to 5 Matter apps or hubs at the same time."
   reset: "Removing the device from its last Matter app returns it to factory state, ready to pair again; the framework adds no reset button of its own."
   network: "It runs on Wi-Fi; it uses Thread only on an ESP32-H2 (always) or on a C5/C6 when Thread is chosen, and then the home needs a Thread border router."
+  paired_state: "A status light that shows paired or unpaired reads APP_DRIVER_PARAM_MATTER_COMMISSIONED (true while the device is in any Matter app, correct from boot even with the router down) and APP_DRIVER_PARAM_MATTER_PAIRING_OPEN (true while it can be added); Wi-Fi or Thread connectivity and attribute writes are not a pairing signal."
   switches: "A Matter switch, dimmer remote or scene button shows up in the app but does not control other Matter devices out of the box."

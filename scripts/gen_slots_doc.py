@@ -52,7 +52,7 @@ def dest_for(slot: str) -> str:
     for prefix, dest in DEST:
         if slot.startswith(prefix):
             return dest
-    return 'see the generator (firmware/services/src/templates/generator.ts)'
+    return 'see the generator (engine/src/generator.ts)'
 
 
 def main() -> None:

@@ -13,5 +13,13 @@ case {{cfg.system_mode_param}}: {
      * voice) — the mode command path only publishes what IT was told. The
      * endpoint is heat-only, so any non-Off mode reads as "heat". */
     zc_mqtt_publish(s_{{prefix_lc}}_mode_state_topic, val.u8 == 0 ? "off" : "heat", 0, 1, true);
+{{#if cfg.heating_param}}
+    {{prefix_lc}}_publish_action();
+{{/if}}
     return;
 }
+{{#if cfg.heating_param}}
+case {{cfg.heating_param}}:
+    {{prefix_lc}}_publish_action();
+    return;
+{{/if}}

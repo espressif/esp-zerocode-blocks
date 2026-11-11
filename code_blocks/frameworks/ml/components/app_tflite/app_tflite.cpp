@@ -18,7 +18,12 @@
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+// esp-tflite-micro 1.4.3 moved the schema under tensorflow/lite/micro/.
+#if __has_include("tensorflow/lite/micro/schema/schema_generated.h")
+#include "tensorflow/lite/micro/schema/schema_generated.h"
+#else
 #include "tensorflow/lite/schema/schema_generated.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <esp_log.h>

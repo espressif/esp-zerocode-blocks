@@ -76,7 +76,8 @@ static bool {{prefix_lc}}_known_id(uint8_t id)
 static uint16_t s_{{prefix_lc}}_cause = 0xFFFF;
 
 /* Probe and configure. Register writes only — no delay — so the poll can call
- * it to recover without blocking the shared esp_timer task. Wake comes first:
+ * it to recover without holding up the bus poll task, which serves every
+ * other poll too. Wake comes first:
  * after a power-on or brownout the chip is asleep (PWR_MGMT_1 = 0x40).
  * An unknown WHO_AM_I is NOT configured: 0x68 is also a common RTC's address,
  * and these writes would land in its registers. */

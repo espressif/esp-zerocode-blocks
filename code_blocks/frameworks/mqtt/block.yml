@@ -79,6 +79,7 @@ onboarding:
 # What the framework gives the owner and cannot do, in words a spec can
 # promise. Copied into every product's seed.
 facts:
+  own_topics: "The product's own topics (not Home Assistant entities) go through app_mqtt_publish / app_mqtt_subscribe (app_mqtt.h) on the framework's one connection; a second MQTT client to the same broker takes the same default client id and the broker drops the two in turn, forever."
   in_the_app: "Home Assistant finds it by itself and shows one device, named \"ZeroCode\" plus the board's 12-character hardware address, with one entity per device type, named by the label the spec gives it."
   entity_kinds: "Each catalog device type appears in Home Assistant as a light, switch, fan, cover, lock, climate, sensor, binary sensor, number or select; a dimmer remote or scene button appears only as triggers for automations, with no state of its own."
   not_announced: "A device type with no MQTT binding (doorbell, chime, light sensor, pressure sensor, heat pump, extractor hood and a few controller types) does not appear in Home Assistant."

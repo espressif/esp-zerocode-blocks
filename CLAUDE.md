@@ -136,6 +136,43 @@ that sent nothing on the second press. A deduped write now logs at DEBUG
 (`set_param(N) unchanged — not propagated`) so the swallow is at least visible
 in a device log.
 
+### An unchanged write leaves only a timestamp
+
+Because `set_param` dedups, a sensor reading the same value every poll is
+indistinguishable, by notifications, from one that stopped. Product code must
+never infer staleness from value changes (a steady 12.0 °C read as "stale"
+after 15 s would stop a heater from answering its target). Two signals exist: the driver's
+`status_param` (ds18b20, aht21, dht22, bh1750, hcsr04 — true after a good read,
+false after a failed one), and `app_driver_param_written_us(id)` — the
+`esp_timer` time of the param's last write, unchanged writes and events
+included, 0 if never written. Each sensor driver says so in its `facts:`, and
+`base_firmware/facts.yml` carries the rule for every product.
+
+### Listeners run on the writing task — decisions go through one task
+
+`set_param` calls listeners outside the bus lock, on whichever task wrote: a
+sensor poll, the esp_timer task, MQTT, the web server, the console, Matter,
+Zigbee, LVGL. A product decision made inside a listener (read mode + target +
+temperature, write the relay) therefore runs on two tasks at once, and the
+older decision can land last. The bus does NOT serialize listener delivery, on
+purpose: Matter's attribute callback, Zigbee's action handler and LVGL's event
+callbacks call `set_param` while holding their stack lock, and the matter /
+zigbee / display listeners take that same lock — a bus-wide dispatch mutex held
+across listeners inverts the order and deadlocks (A holds dispatch, waits for
+the CHIP lock; the CHIP task holds the CHIP lock, waits for dispatch). A
+product mutex held across `set_param` deadlocks the same way.
+
+Instead, `app_driver_run_serialized(fn, arg)` runs `fn(arg)` on ONE lazily
+created task (`app_serial`, 6 KB, priority 5): the listener only asks, the
+decision reads every param it needs and writes. A request still waiting for the
+same `fn + arg` is merged (the decision re-reads, so one run covers every write
+before it); one made while it runs — from inside it, or from its own write's
+listeners — runs again after it, never nested. Nothing is held while a decision
+runs, so it may write params whose listeners take any stack lock. More than
+`APP_DRIVER_SERIAL_SLOTS` (16) distinct waiting requests return
+`ESP_ERR_NO_MEM`. Tested with two writing threads, re-entry and merging in
+`base_firmware/components/app_driver/test/test_run_serialized.cpp`.
+
 ### A late listener is handed the current values
 
 Drivers and behaviors take their first reading during init, before
@@ -177,13 +214,45 @@ code is its boot behaviour**, and no later code can undo it:
 Every factory-reset path — the base console's `factory_reset`, the
 `factory_reset_*` behaviors, `board_button`'s `factory_reset_ms` hold — calls
 `app_utils_factory_reset()` (base `app_utils`): it runs the weak
-`app_factory_reset_hook()`, erases the default NVS partition and reboots. A
+`app_factory_reset_hook()`, erases the default NVS partition and reboots.
+Matter's removal from the last fabric takes the same call, on the Matter
+thread — `esp_matter::factory_reset()` clears only Matter's own namespaces, so
+a product's saved state survived it. A
 product that keeps data elsewhere (its own partition, the fctry values) defines
 the hook in a file under `components/app_logic/` (WHOLE_ARCHIVE, so a file
 holding only the definition is linked) with C linkage. It never registers a
 second `factory_reset` console command: esp_console keeps one of two same-named
 commands, so one silently replaces the other. `check.py` fails a block slot
 that calls `nvs_flash_erase()` itself or names a `"factory_reset"` command.
+
+Every hold-to-reset path (`board_button`'s `factory_reset_ms`,
+`factory_reset_long_press`, `factory_reset_button_combo`) also calls the weak
+`app_factory_reset_hold_started()` once the press has lasted its
+`reset_cue_ms` and `app_factory_reset_hold_cancelled()` when it is released
+before the reset (app_utils.h), so a product shows feedback during the hold
+without touching the button block's callbacks. The cue is a one-shot
+`esp_timer` from press-down, not a per-callback long press: iot_button never
+fires one shorter than the DEVICE's long-press time, which on a shared pin is
+whoever created the device. Tested by `engine/tests/factory-reset-hold.test.mjs`.
+
+A control button beside a reset hold on the same button toggles on ANY press
+released before the hold, not on the click alone (`toggle_before_reset`, on by
+default, on `board_button`, `button`, `relay_with_button`,
+`multi_event_button`). iot_button reports a click only for a press released
+before the DEVICE's long-press time (1.5-2 s, the board's or the first
+creator's), so "press to toggle, hold 10 s to reset" did nothing for a 2-10 s
+press — the hold cue started and was cancelled with no toggle. The toggle now
+runs at `BUTTON_PRESS_END` of a gesture of one press shorter than the hold: a
+click at the same moment `SINGLE_CLICK` fires (after the double-click window,
+so a double press stays a double click), a longer press at its release, and a
+press that reaches the reset never. A gpio block learns the hold at the press
+from the button registry (`factory_reset_long_press` records it with
+`app_button_set_reset_hold`), so instance order does not matter; without a
+hold on the pin the click toggles as before. A long press the product's
+`<prefix>_on_long_press` override handles is that gesture, not a toggle — the
+weak default marks the press unhandled, so an unhandled one still toggles.
+The simulator in the same test models the click window, repeats and
+`PRESS_END` as iot_button 4.2 does.
 
 ## Block slots
 
@@ -196,12 +265,15 @@ indent.
 |---|---|---|
 | `config_defines` | `app_config.h` | GPIO numbers, channel IDs, `#define`s |
 | `driver_includes` / `driver_statics` / `driver_init` / `driver_apply_cases` | `app_driver.cpp` | hardware init + per-param HW writes |
+| `driver_boot_state` | `app_driver_init()`, after every driver's init (never replaced by the board manager) | an on/off output writes the state it left its output in onto its param, guarded on `!app_driver_param_seen`, so the param is known from boot (`drivers/relay`, `relay_with_button`, `board_gpio_ctrl`) |
 | `matter_includes` / `matter_statics` | `app_matter.cpp` | per-endpoint includes + state |
 | `matter_endpoint_create` | inside `app_matter_init()` | endpoint creation |
+| `matter_init` | inside `app_matter_init()`, right after the framework registers on the bus (before the node, before `esp_matter::start()`) | register a listener on the framework's own params (`behaviors/commissioning_led` on `APP_DRIVER_PARAM_MATTER_COMMISSIONED`) so the boot value reaches it |
 | `matter_driver_cb_cases` | `matter_driver_cb()` | param → attribute push |
 | `matter_attr_cb_cases` | `app_attribute_update_cb()` | attribute → param push |
 | `matter_identify_cases` / `matter_event_cases` | identify + chip event handlers | |
 | `logic_includes` / `logic_statics` / `logic_init` | `app_logic/<concern>.cpp` — grouped by concern (persist / indicator / console / diagnostics / factory_reset / control / …); each behavior's `logic_init` becomes a `static <name>_init()`, run by the slim `app_logic.cpp` orchestrator | sensor poll tasks, button handlers, console cmd registration, NVS persist |
+| `logic_start` | the same concern file, as a `static <name>_start()` run by `zc_behaviors_start()`, which `app_main` calls right AFTER `app_logic_init()` | what must happen once the product's listeners are registered and every saved value is restored: the button press that woke the device from deep sleep |
 | `main_includes` / `main_init` | `app_main.cpp` | per-framework `#include` + init call (framework blocks only) |
 
 ## Block top-level fields
@@ -215,14 +287,16 @@ Beyond slots, a block can also contribute:
 | `sdkconfig` | Adds key/value pairs to the product's `sdkconfig.defaults` |
 | `param_refs` | Declares the value type of a `cfg` key that holds a driver param ID |
 | `params` | Schema for `cfg` (with `type`, `required`, `default`, `enum`, `description`) |
+| `owned_params` | Params the block itself writes under a fixed name, no cfg behind them: `APP_DRIVER_PARAM_<NAME>: <type>`. Every product composing the block gets them in its param enum. `frameworks/matter` publishes `APP_DRIVER_PARAM_MATTER_COMMISSIONED` (on any fabric, from the fabric table at boot and on each fabric event) and `APP_DRIVER_PARAM_MATTER_PAIRING_OPEN` (advertising for pairing); the generator emits each write only for a name the block declares. |
 | `provides_bus` / `requires_bus` | Which shared bus this block configures, or only talks on — see **Shared buses** |
 | `bmgr` | esp-board-manager mapping, read only when a board file is supplied — see **Boards** |
-| `onboarding` | A framework, or a behavior that brings up the network (`behaviors/wifi_station`): what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. The platform copies a framework's verbatim into every product's details seed, so the spec names it instead of inventing a flow (before it existed, specs asked for "the device asks for…" and writers built 430-500 line wizards the framework already had). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is DATA the platform reads, so a framework's onboarding changes here, with no platform release. |
+| `onboarding` | A framework, or a behavior that brings up the network (`behaviors/wifi_station`): what the firmware ALREADY ships for first-run onboarding — today `console: { setup?, commands, api?, note? }`. A consumer of the catalog can show it beside a product's description, so a spec names the flow the framework already has instead of asking for a new one (a setup wizard the framework already ships). `check.py` fails a listed command that neither the block's sources nor the engine registers. It is data in the catalog, so a framework's onboarding changes here, with no engine release. |
 | `facts` | Any block: what it gives the owner and cannot do, as `key: "one sentence"` (snake_case keys, 400 characters at most — `check.py`). A framework's are copied into every product's seed; any block's ride its `get_template` answer, so a spec states them instead of guessing (a sleeping sensor's battery life, a framework's offline behaviour). |
 | `device_data` | Any block: the per-device values its firmware reads from the `fctry` NVS partition — `{ namespace, keys: [{ key, type: data\|file, encoding, default?, label?, required? }] }` (`engine/src/device-data.ts`). A declaration, never a value: `default` is only a non-secret pre-fill and a `file` key has none. The generator merges every block's keys, then the product's own (`generate()`'s `deviceData` input — the platform passes the keys its spec declares, under the namespace `zc_app`, which no block may use), into `device_data.csv` at the tree root: an `nvs_partition_gen` CSV with blank values, written only when there are keys. The platform builds its flash form from it and writes the entered values to `fctry` in the browser. Two blocks may share a key only by declaring it identically — anything else fails validation. |
-| `needs_internet` / `provides_internet` | A block that talks to an internet service and brings no network (`behaviors/telegram_notify`) says `needs_internet: true`; a block or framework that brings up a station says `provides_internet: true` (`behaviors/wifi_station`, matter, rainmaker, mqtt, agents, aws_iot). The validator refuses a product with a needer and no provider, and warns on a provider behavior beside a provider framework (it stands aside at run time). |
+| `needs_internet` / `provides_internet` | A block that talks to an internet service and brings no network (`behaviors/telegram_notify`) says `needs_internet: true`; a block or framework that brings up a station says `provides_internet: true` (`behaviors/wifi_station`, matter, rainmaker, mqtt, agents, aws_iot). The validator refuses a product with a needer and no provider, and warns on a provider behavior beside a framework that brings up its station in its own init (matter, rainmaker, mqtt, agents: it stands aside at run time). It refuses a provider behavior beside aws_iot alone (aws_iot defers to a station already up, so its own network setup would configure nothing), beside espnow, and beside webui alone (its own access point). `generate()` refuses a needer on a chip with Thread and no Wi-Fi (esp32h2). |
 | `singleton` | At most one instance per product (the block owns fixed C symbols or the radio). Checked by the validator. |
 | `requires_frameworks` | A block whose code lives entirely in a framework's slots (`behaviors/mqtt_republish`: `[mqtt]`) lists the frameworks it works beside, any one of them. Without one it would generate nothing, so the validator refuses the product; `check.py` checks each name is a framework. |
+| `reacts` | What the block DOES when a param it dispatches on changes, per slot family: `driver` (`driver_apply_cases`), `ble_hid`, `espnow`, `ble_mesh`, `zigbee_action` (their `*_cases` slot) → one sentence, `{{cfg.<param>}}` placeholders allowed (an unset optional one reads as its key name). `generate()` returns it as `reactions` with the params the slot dispatches on (its `case` labels or `param_id ==` tests), for the families the product consumes, so whoever writes the product code knows that writing the param is the whole action and never sends, drives or plays it a second time. `check.py` requires it for every such slot that dispatches (`case` labels, `param_id ==` or `callback_id ==`), refuses a family with no slot and a placeholder that is not a declared param. |
 | `wraps` | The SDK functions the block calls on the product's behalf (`behaviors/sntp_time`: `esp_netif_sntp_init`, …). A host's code check names the block when product code calls one while the block is not composed, so a hand-written copy of the behaviour is pointed back at the catalog. |
 | `radio` | Required on frameworks (see Chips); a non-framework block that brings up Wi-Fi itself also says `radio: true`, so the ESP32-P4 keeps its hosted radio stack. |
 
@@ -843,6 +917,20 @@ runs them.
 script-mode requirement scan, where the flag is an error). A product adds a
 source file there with no CMakeLists edit, and a new file is picked up on the
 next build; a stray copy of a file in either directory is compiled too.
+
+**A product's own component requirements go in `app_logic/product.cmake`.**
+Product code there that needs a component the generated list lacks
+(`esp_http_client`, `json`, …) sets `PRODUCT_PRIV_REQUIRES` in
+`components/app_logic/product.cmake`; the generated CMakeLists clears the
+variable, `include()`s the file `OPTIONAL`ly and appends it to `PRIV_REQUIRES` —
+outside the script-mode guard, so IDF's requirement scan sees it too. The
+engine never writes `product.cmake`, while it rewrites the CMakeLists on every
+generate, so an edit there is lost. `generate()` starts from an empty output
+directory, so keeping `product.cmake` (like any file the product added) across
+a re-generate is up to the caller that holds the product's tree. `applyCmakePrivRequires` merges block
+requirements only into a line that STARTS with `PRIV_REQUIRES` (it used to take
+the first occurrence anywhere, comments included). Tested by
+`engine/tests/product-cmake.test.mjs` (a `cmake -P` stand-in for the scan).
 
 Watch out for these common authoring pitfalls:
 1. **Cross-TU statics.** `logic_*` slots are now grouped by concern into

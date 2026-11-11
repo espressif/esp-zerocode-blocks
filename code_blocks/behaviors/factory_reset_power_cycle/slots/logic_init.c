@@ -23,11 +23,17 @@
         if ({{prefix_lc}}_pc >= {{prefix}}_PC_THRESHOLD) {
             ESP_LOGW(TAG, "{{prefix_lc}}: threshold reached — factory reset");
             nvs_close({{prefix_lc}}_pc_h);
-            app_utils_factory_reset();
+            /* Reboots on success. It RETURNS when the erase failed: the handle
+               is closed by then, so nothing more is written through it (the
+               stable-boot timer below still clears the count). */
+            if (app_utils_factory_reset() != ESP_OK) {
+                ESP_LOGE(TAG, "{{prefix_lc}}: factory reset failed — the device carries on");
+            }
+        } else {
+            nvs_set_u8({{prefix_lc}}_pc_h, {{prefix}}_PC_NVS_KEY, {{prefix_lc}}_pc);
+            nvs_commit({{prefix_lc}}_pc_h);
+            nvs_close({{prefix_lc}}_pc_h);
         }
-        nvs_set_u8({{prefix_lc}}_pc_h, {{prefix}}_PC_NVS_KEY, {{prefix_lc}}_pc);
-        nvs_commit({{prefix_lc}}_pc_h);
-        nvs_close({{prefix_lc}}_pc_h);
     }
     const esp_timer_create_args_t {{prefix_lc}}_pc_args = {
         .callback = &{{prefix_lc}}_pc_clear_cb,

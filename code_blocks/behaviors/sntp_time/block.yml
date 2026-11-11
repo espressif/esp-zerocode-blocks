@@ -32,3 +32,15 @@ driver_params:
     type: bool
     required: false
     description: Optional bus param set to true on the first successful sync (and never cleared) — gate clock-dependent logic on it
+  day_param:
+    type: u16
+    required: false
+    description: >-
+      Optional. The local date as one number (days since 2000-01-01 in the
+      tz above), published at the first sync and again at each local midnight,
+      within 30 s. A daily reset (today's high and low, a count per day, a
+      daily budget) listens for it to change; it is never published before the
+      clock is real, so no day starts at the 1970 epoch.
+
+facts:
+  new_day: "Something that resets every day — today's high and low, a count per day, a daily budget — listens for sntp_time's day_param to change (the local date, published once the clock is real and again at each local midnight); product code never computes the date itself before the clock has synced."

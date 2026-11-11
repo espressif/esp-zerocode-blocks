@@ -122,6 +122,30 @@ esp_err_t app_mqtt_set_republish_s(uint32_t seconds);
  *  every N minutes". Off by default; call it before app_mqtt_set_republish_s. */
 void app_mqtt_set_republish_only_on_schedule(bool only);
 
+/* ── Product topics ─────────────────────────────────────────────────────
+ *
+ * The product's own topics, on the framework's one connection: a second
+ * MQTT client to the same broker gets the same default client id and the two
+ * knock each other off forever. Safe from any task; never waits on the
+ * network. */
+
+/** Message callback: runs on the MQTT client's task, so it must not block.
+ *  `topic` and `payload` are NUL-terminated copies valid only during the call
+ *  (`len` is the payload's length; it may contain NULs). */
+typedef void (*app_mqtt_topic_cb_t)(const char *topic, const char *payload, int len, void *ctx);
+
+/** Publish to any topic (queued, sent in order). `len` 0 means strlen.
+ *  ESP_ERR_INVALID_STATE while not connected — nothing is kept for later:
+ *  a value that must reach the broker after a reconnect is an entity state
+ *  (app_mqtt_entity_set_state) or is published again from app_mqtt_on_connected. */
+esp_err_t app_mqtt_publish(const char *topic, const char *payload, int len, int qos, bool retain);
+
+/** Receive messages on `filter` (MQTT wildcards: '+' one level, '#' the
+ *  rest). Subscribed now if connected and again on every (re)connect.
+ *  Registering a filter again replaces its callback. ESP_ERR_NO_MEM when
+ *  APP_MQTT_MAX_TOPIC_SUBS (default 8) filters are registered. */
+esp_err_t app_mqtt_subscribe(const char *filter, int qos, app_mqtt_topic_cb_t cb, void *ctx);
+
 /** Called on every (re)connect after the framework has announced its device
  *  types and the product entities and published their state. The framework's
  *  definition is weak and empty: a product defines its own in app_logic

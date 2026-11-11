@@ -64,14 +64,14 @@
     {{prefix_lc}}_a_cfg.mode = GPIO_MODE_INPUT;
     {{prefix_lc}}_a_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
     {{prefix_lc}}_a_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    {{prefix_lc}}_a_cfg.intr_type = GPIO_INTR_POSEDGE;
+    {{prefix_lc}}_a_cfg.intr_type = GPIO_INTR_ANYEDGE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_a_cfg));
     gpio_config_t {{prefix_lc}}_b_cfg = {};
     {{prefix_lc}}_b_cfg.pin_bit_mask = 1ULL << {{prefix}}_ENC_B_GPIO;
     {{prefix_lc}}_b_cfg.mode = GPIO_MODE_INPUT;
     {{prefix_lc}}_b_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
     {{prefix_lc}}_b_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    {{prefix_lc}}_b_cfg.intr_type = GPIO_INTR_DISABLE;
+    {{prefix_lc}}_b_cfg.intr_type = GPIO_INTR_ANYEDGE;
     ESP_ERROR_CHECK(gpio_config(&{{prefix_lc}}_b_cfg));
 
     /* Another block (buttons etc.) may already have installed the shared GPIO
@@ -81,7 +81,12 @@
     if ({{prefix_lc}}_isr_err != ESP_OK && {{prefix_lc}}_isr_err != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK({{prefix_lc}}_isr_err);
     }
-    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t){{prefix}}_ENC_A_GPIO, {{prefix_lc}}_a_isr, NULL));
+    /* The resting state, so the first edge is decoded against where the
+     * knob really is. */
+    s_{{prefix_lc}}_state = (uint8_t)((gpio_get_level((gpio_num_t){{prefix}}_ENC_A_GPIO) << 1) |
+                                      gpio_get_level((gpio_num_t){{prefix}}_ENC_B_GPIO));
+    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t){{prefix}}_ENC_A_GPIO, {{prefix_lc}}_ab_isr, NULL));
+    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t){{prefix}}_ENC_B_GPIO, {{prefix_lc}}_ab_isr, NULL));
 
     const esp_timer_create_args_t {{prefix_lc}}_args = {
         .callback = &{{prefix_lc}}_poll_cb,

@@ -103,9 +103,58 @@ export interface GenerateResult {
   deviceData: DeviceDataRow[]
   /** Non-fatal, and meant to be read: an instance a `bmgr.requires` guard kept
    *  out of the board manager (it generated with its own init instead).
-   *  Present only when there is one — this object is the apply_template
-   *  result the writer reads, and an empty list on every product is noise. */
+   *  Present only when there is one — whoever composed the product reads
+   *  this result, and an empty list on every product is noise. */
   warnings?: string[]
+  /** What composed blocks already DO when a param changes — each declared
+   *  `reacts:` sentence with the params its slot dispatches on. Present only
+   *  when there is one. */
+  reactions?: Reaction[]
+}
+
+export interface Reaction {
+  block: string
+  prefix: string
+  /** The slot family: a framework id (`ble_hid`), `driver`, … */
+  on: string
+  /** The params the slot's `case` labels dispatch on, as rendered. */
+  params: string[]
+  does: string
+}
+
+/** The `reacts:` key a dispatch slot belongs to: `ble_hid_driver_cb_cases` →
+ *  `ble_hid`, `driver_apply_cases` → `driver`, `zigbee_action_cases` →
+ *  `zigbee_action`. Null for a slot that is not a dispatch. */
+export function reactsKeyOf(slot: string): string | null {
+  if (slot === 'driver_apply_cases') return 'driver'
+  const m = /^(.+?)(?:_driver_cb)?_cases$/.exec(slot)
+  return m ? m[1]! : null
+}
+
+/** The declared reactions of the rendered instances, for the slot families
+ *  this product actually consumes (`driver`, or a framework it selected). */
+export function collectReactions(rendered: RenderedInstance[], frameworks: readonly string[]): Reaction[] {
+  const out: Reaction[] = []
+  for (const r of rendered) {
+    const reacts = r.block.reacts
+    if (!reacts) continue
+    for (const [slot, text] of Object.entries(r.slots)) {
+      const key = reactsKeyOf(slot)
+      if (!key || !reacts[key] || !text.trim()) continue
+      if (key !== 'driver' && !frameworks.some((f) => key === f || key.startsWith(`${f}_`))) continue
+      // A slot dispatches with `case APP_DRIVER_PARAM_X:` or `param_id == APP_DRIVER_PARAM_X`.
+      const params = [...new Set([...text.matchAll(/\bcase\s+(APP_DRIVER_PARAM_\w+)\s*:|\bparam_id\s*==\s*(APP_DRIVER_PARAM_\w+)/g)].map((m) => (m[1] ?? m[2])!))]
+      const ctx = { cfg: r.cfg, prefix: r.prefix, prefix_lc: r.prefix.toLowerCase() }
+      // Soft: an optional param the product left unset reads as its key name
+      // ("volume_param, when set") rather than failing the whole generate.
+      const does = reacts[key]!.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr: string) => {
+        const v = lookupSoft(expr, ctx)
+        return v === undefined || v === null || v === '' ? expr.trim().replace(/^cfg\./, '') : String(v)
+      }).trim()
+      out.push({ block: r.block.id, prefix: r.prefix, on: key, params, does })
+    }
+  }
+  return out
 }
 
 /** A block with `target: <chip>` applies ONLY when generating for that chip; a
@@ -122,9 +171,9 @@ function targetMatches(block: { target?: string }, chip: string): boolean {
 export async function generate(paths: GeneratorPaths, input: GenerateInput): Promise<GenerateResult> {
   const { outDir } = input
   // A table named by its path (`partition-tables/2mb`, `.../2mb/partitions.csv`)
-  // means the bundled table of that name: writers reach for the path they see
-  // in the tree, and resolving it a second time under partition-tables/ made
-  // every such product fail on a table that exists.
+  // means the bundled table of that name: the path is what a product's author
+  // sees in the tree, and resolving it a second time under partition-tables/
+  // made every such product fail on a table that exists.
   const asGiven = input.product.partition_table
     ? { ...input.product, partition_table: normalizePartitionTableName(input.product.partition_table) }
     : { ...input.product }
@@ -183,6 +232,16 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   const instanceRendered = await renderInstances(paths, product, bmgrBoard, boardFacts, chip)
   const frameworkRendered = await renderFrameworkBlocks(paths, product, chip)
   const rendered = [...instanceRendered, ...frameworkRendered]
+  // provides_internet is a Wi-Fi station. On a chip with Thread and no Wi-Fi
+  // (esp32h2) Matter runs over Thread and wifi_station compiles out, so
+  // nothing reaches an internet service from this product.
+  const chipFeatures = CHIP_MODULES[chip]?.features ?? []
+  if (chipFeatures.includes('thread') && !chipFeatures.includes('wifi')) {
+    const needers = [...new Set(rendered.filter(r => r.block.needs_internet).map(r => r.block.id))]
+    if (needers.length > 0) {
+      throw new Error(`product '${product.id}': ${needers.join(', ')} needs internet over Wi-Fi, and ${chip} has no Wi-Fi (Matter on it runs over Thread) — pick a chip with Wi-Fi`)
+    }
+  }
   // A board product carries one extra, synthetic contributor — see
   // boardRendered(). It is deliberately NOT spliced into `rendered`: it must
   // reach main's slots, main's PRIV_REQUIRES, the merged idf_component.yml and
@@ -197,6 +256,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
 
   await fs.rm(outDir, { recursive: true, force: true })
   await copyTree(paths.baseFirmwareDir, outDir)
+  const features = await detectCatalogFeatures(paths.baseFirmwareDir)
 
   for (const r of frameworkRendered) {
     const blockComponentsDir = path.join(paths.templatesDir, 'code_blocks', r.block.id, 'components')
@@ -217,7 +277,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
 
   await writeFileMk(
     path.join(outDir, 'components/app_driver/include/app_driver_types.h'),
-    genAppDriverTypesH(rendered),
+    genAppDriverTypesH(rendered, input.product.params ?? {}),
   )
   await writeFileMk(
     path.join(outDir, 'components/app_config/include/app_config.h'),
@@ -232,26 +292,26 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasMatter) {
     await writeFileMk(
       path.join(outDir, 'components/app_matter/app_matter.cpp'),
-      genAppMatterCpp(rendered),
+      genAppMatterCpp(rendered, features),
     )
-    if (hasDeviceTypes) {
-      await writeFileMk(
-        path.join(outDir, 'components/app_matter/CMakeLists.txt'),
-        `idf_component_register(
+    // Written with or without device types: the generated app_matter.cpp
+    // needs app_utils, which an older catalog's own CMakeLists lacks.
+    await writeFileMk(
+      path.join(outDir, 'components/app_matter/CMakeLists.txt'),
+      `idf_component_register(
     SRCS "app_matter.cpp"
     INCLUDE_DIRS "include"
     REQUIRES espressif__esp_matter
-    PRIV_REQUIRES app_driver app_config
+    PRIV_REQUIRES app_driver app_config app_utils
 )
 `,
-      )
-    }
+    )
   }
   const hasRainmaker = rendered.some(r => isFramework(r, 'rainmaker'))
   if (hasRainmaker) {
     await writeFileMk(
       path.join(outDir, 'components/app_rainmaker/app_rainmaker.cpp'),
-      genAppRainmakerCpp(rendered),
+      genAppRainmakerCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -269,7 +329,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasZigbee) {
     await writeFileMk(
       path.join(outDir, 'components/app_zigbee/app_zigbee.cpp'),
-      genAppZigbeeCpp(rendered),
+      genAppZigbeeCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -313,7 +373,8 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
         `idf_component_register(
     SRCS "app_webui.cpp"
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES esp_http_server esp_wifi esp_netif esp_event nvs_flash espressif__mdns app_driver app_config
+    REQUIRES esp_http_server
+    PRIV_REQUIRES esp_wifi esp_netif esp_event nvs_flash espressif__mdns app_driver app_config
 )
 `,
       )
@@ -323,7 +384,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasEspnow) {
     await writeFileMk(
       path.join(outDir, 'components/app_espnow/app_espnow.cpp'),
-      genAppEspnowCpp(rendered),
+      genAppEspnowCpp(rendered, input.product.params ?? {}),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -414,7 +475,7 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   if (hasMqtt) {
     await writeFileMk(
       path.join(outDir, 'components/app_mqtt/app_mqtt.cpp'),
-      genAppMqttCpp(rendered),
+      genAppMqttCpp(rendered, features),
     )
     if (hasDeviceTypes) {
       await writeFileMk(
@@ -494,10 +555,19 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   }
   // app_logic's CMakeLists globs every .c/.cpp in its directory, so the
   // per-behavior files (and any file the product adds) need no SRCS edit.
+  // An older base lists its sources instead (SRCS "app_logic.cpp"): the
+  // per-behavior files are added to that list, or they are never compiled.
   // A base without one (minimal test fixtures) gets the same glob.
   const logicCmakePath = path.join(outDir, 'components/app_logic/CMakeLists.txt')
-  if (!(await fileExists(logicCmakePath))) {
-    await writeFileMk(logicCmakePath, `${componentSrcGlob('app_logic_srcs')}idf_component_register(\n    SRCS \${app_logic_srcs}\n    INCLUDE_DIRS "include"\n    PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer\n)\n`)
+  if (await fileExists(logicCmakePath)) {
+    const listed = /SRCS\s+"app_logic\.cpp"/
+    const logicCmake = await fs.readFile(logicCmakePath, 'utf-8')
+    if (listed.test(logicCmake)) {
+      const srcs = ['app_logic.cpp', ...appLogic.parts.map(p => p.name)].map(s => `"${s}"`).join(' ')
+      await writeFileMk(logicCmakePath, logicCmake.replace(listed, `SRCS ${srcs}`))
+    }
+  } else {
+    await writeFileMk(logicCmakePath, `${componentSrcGlob('app_logic_srcs')}${PRODUCT_CMAKE_HOOK}idf_component_register(\n    SRCS \${app_logic_srcs}\n    INCLUDE_DIRS "include"\n    PRIV_REQUIRES app_driver app_config app_utils nvs_flash esp_timer espressif__button driver esp_driver_gpio esp_driver_ledc esp_driver_i2s esp_driver_spi esp_driver_pcnt esp_driver_rmt esp_driver_uart esp_driver_gptimer \${PRODUCT_PRIV_REQUIRES}\n)\n`)
   }
 
   const mainPath = path.join(outDir, 'main/app_main.cpp')
@@ -752,12 +822,14 @@ export async function generate(paths: GeneratorPaths, input: GenerateInput): Pro
   await fs.writeFile(path.join(outDir, 'main/idf_component.yml'), mergedYml)
 
   const warnings = rendered.filter(r => r.bmgrFallback).map(r => r.bmgrFallback!)
+  const reactions = collectReactions(rendered, product.frameworks ?? [])
   return {
     productId: product.id,
     outDir,
     blocks: product.instances.map(i => i.block),
     deviceData: deviceData.rows,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(reactions.length > 0 ? { reactions } : {}),
   }
 }
 
@@ -871,9 +943,8 @@ async function renderInstances(
     // A `bmgr.requires` guard that fails keeps the instance OUT of the board
     // manager: it generates exactly as it does on a board-less product, with
     // its own init, and the miss is reported in GenerateResult.warnings. It
-    // used to refuse the whole composition; writers answered the refusal by
-    // resending the same yaml (ten times, one run) and then hand-wiring the
-    // relays, which is the one outcome worse than either path (2026-10-13).
+    // used to refuse the whole composition, which pushed products toward
+    // hand-wiring the part — the one outcome worse than either path.
     const guardMiss = bmgrBoard && block.bmgr?.init === 'board_manager'
       ? bmgrGuardMiss(block, cfg, `${block.id}${inst.prefix ? ` (prefix=${inst.prefix})` : ''}`, bmgrBoard)
       : null
@@ -924,8 +995,19 @@ async function renderInstances(
       }
     }
     const replaced = new Set(boardOwns ? block.bmgr?.replaces_slots ?? [] : [])
+    // An instance scoped to some frameworks gets no slot of the others: the
+    // product's frameworks it did not name are dropped by slot family.
+    const scoped = inst.frameworks
+    if (scoped) {
+      const unknown = scoped.filter((f) => !product.frameworks.includes(f))
+      if (unknown.length) {
+        throw new Error(`${inst.block} (prefix=${inst.prefix}) names frameworks: [${unknown.join(', ')}], which the product does not select (it selects [${product.frameworks.join(', ')}]).`)
+      }
+    }
+    const outOfScope = scoped ? product.frameworks.filter((f) => !scoped.includes(f)) : []
     for (const [slot, body] of Object.entries(block.slots ?? {})) {
       if (replaced.has(slot)) continue
+      if (outOfScope.some((f) => slot.startsWith(`${f}_`))) continue
       slots[slot] = substitute(body, ctx)
     }
     out.push({ block, prefix: inst.prefix, cfg, slots, replacedSlots: [...replaced], ...(guardMiss ? { bmgrFallback: guardMiss } : {}) })
@@ -945,6 +1027,17 @@ endif()
 
 `
 }
+
+/** app_logic's product-owned requirements: product.cmake beside its
+ *  CMakeLists sets PRODUCT_PRIV_REQUIRES. The engine never writes that file.
+ *  The glob re-runs CMake when it appears in a configured tree. */
+const PRODUCT_CMAKE_HOOK = `set(PRODUCT_PRIV_REQUIRES)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    file(GLOB product_cmake CONFIGURE_DEPENDS "\${CMAKE_CURRENT_LIST_DIR}/product.cmake")
+endif()
+include("\${CMAKE_CURRENT_LIST_DIR}/product.cmake" OPTIONAL)
+
+`
 
 /** CMake a framework block may ship under cmake/: included by the base
  *  CMakeLists before and after project(), only for selected frameworks. */
@@ -1029,12 +1122,68 @@ function spliceLine(text: string, marker: string, replacement: string): string {
   return text.replace(re, () => (replacement === '' ? '' : `${replacement}\n`))
 }
 
+/** What the catalog's base_firmware offers that generated code may call.
+ *  The engine is released before the catalog that goes with it, so a newer
+ *  engine meets an older catalog for a while; each flag is read from the
+ *  catalog's own headers and the generated code falls back without it. */
+export interface CatalogFeatures {
+  /** app_driver.h declares app_driver_take_refusal (param guards). */
+  takeRefusal: boolean
+  /** app_utils.h declares app_utils_factory_reset (hook + whole-NVS erase). */
+  utilsFactoryReset: boolean
+}
+
+export const CURRENT_CATALOG: CatalogFeatures = { takeRefusal: true, utilsFactoryReset: true }
+
+export async function detectCatalogFeatures(baseFirmwareDir: string): Promise<CatalogFeatures> {
+  const read = async (rel: string) => {
+    try { return await fs.readFile(path.join(baseFirmwareDir, rel), 'utf8') } catch { return null }
+  }
+  const driverH = await read('components/app_driver/include/app_driver.h')
+  const utilsH = await read('components/app_utils/include/app_utils.h')
+  return {
+    // A base without the header (a minimal fixture) is taken as current.
+    takeRefusal: driverH === null || /\bapp_driver_take_refusal\s*\(/.test(driverH),
+    utilsFactoryReset: utilsH === null || /\bapp_utils_factory_reset\s*\(/.test(utilsH),
+  }
+}
+
+/** Without param guards nothing is ever refused: a stand-in that says so. */
+function refusalShim(features: CatalogFeatures): string {
+  if (features.takeRefusal) return ''
+  return `
+/* This catalog's app_driver has no param guards, so no write is ever refused. */
+static inline bool app_driver_take_refusal(app_driver_param_id_t *id)
+{
+    (void)id;
+    return false;
+}
+`
+}
+
 // ── generated-file emitters ───────────────────────────────────────────
 
-function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; type: ValueType }> {
+function collectParamIds(rendered: RenderedInstance[], productParams: Record<string, string> = {}): Array<{ name: string; type: ValueType }> {
   const map = new Map<string, ValueType>()
   for (const r of rendered) {
-    for (const [cfgKey, valType] of Object.entries(r.block.param_refs ?? {})) {
+    for (const [paramName, valType] of Object.entries(r.block.owned_params ?? {})) {
+      const prev = map.get(paramName)
+      if (prev && prev !== valType) {
+        throw new Error(`param ${paramName}: conflicting types ${prev} vs ${valType} (block ${r.block.id})`)
+      }
+      map.set(paramName, valType)
+    }
+  }
+  for (const r of rendered) {
+    for (const [cfgKey, declared] of Object.entries(r.block.param_refs ?? {})) {
+      // A type may come from the instance's cfg (`{{cfg.value_kind}}`): a block
+      // that serves ANY param (behaviors/webui_row) declares it with the type
+      // the product chose.
+      const tmpl = /^\{\{\s*cfg\.(\w+)\s*\}\}$/.exec(String(declared))
+      const valType = (tmpl ? String(r.cfg[tmpl[1]!] ?? '') : declared) as ValueType
+      if (!(valType in VALUE_TYPE_TO_UNION_MEMBER)) {
+        throw new Error(`block ${r.block.id}: param_refs.${cfgKey} has type '${valType}' (expected one of ${Object.keys(VALUE_TYPE_TO_UNION_MEMBER).join(', ')})`)
+      }
       const paramName = String(r.cfg[cfgKey] ?? '')
       if (!paramName) {
         // An optional param (schema not `required`) left empty means "feature
@@ -1051,6 +1200,21 @@ function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; ty
       map.set(paramName, valType)
     }
   }
+  // The product's own params (template.yaml `params:`): checked like a block's.
+  for (const [paramName, declared] of Object.entries(productParams)) {
+    if (!/^APP_DRIVER_PARAM_[A-Z0-9_]+$/.test(paramName)) {
+      throw new Error(`product params: '${paramName}' is not a param name (APP_DRIVER_PARAM_<NAME>, upper case)`)
+    }
+    const valType = String(declared) as ValueType
+    if (!(valType in VALUE_TYPE_TO_UNION_MEMBER)) {
+      throw new Error(`product params: ${paramName} has type '${declared}' (expected one of ${Object.keys(VALUE_TYPE_TO_UNION_MEMBER).join(', ')})`)
+    }
+    const prev = map.get(paramName)
+    if (prev && prev !== valType) {
+      throw new Error(`param ${paramName}: the product declares ${valType}, a block declares it ${prev}`)
+    }
+    map.set(paramName, valType)
+  }
   return [...map.entries()].map(([name, type]) => ({ name, type }))
 }
 
@@ -1060,7 +1224,7 @@ function collectParamIds(rendered: RenderedInstance[]): Array<{ name: string; ty
  *  ran out on a busy product: the 9th registration logged an error and got
  *  handle 0 (= LOCAL), so its callback never ran — a persistence behavior
  *  silently stopped saving. Sized from the composition, with headroom for
- *  writer code that registers its own; never below the old 8, so a product
+ *  product code that registers its own; never below the old 8, so a product
  *  that fit keeps the same set_param stack footprint (one slot per entry is
  *  copied onto the caller's stack on every write). */
 export function solutionRegistrySize(rendered: RenderedInstance[]): number {
@@ -1071,8 +1235,8 @@ export function solutionRegistrySize(rendered: RenderedInstance[]): number {
   return Math.max(8, registrants + 4)
 }
 
-function genAppDriverTypesH(rendered: RenderedInstance[]): string {
-  const params = collectParamIds(rendered)
+function genAppDriverTypesH(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
+  const params = collectParamIds(rendered, productParams)
   const enumLines = [
     '    APP_DRIVER_PARAM_NONE = 0,  /* sentinel */',
     ...params.map(p =>
@@ -1146,6 +1310,13 @@ function genAppDriverCpp(rendered: RenderedInstance[]): string {
     fns.push(`static void zc_${name}_driver_init(void)\n{\n${indentText(unwrapInitBody(r.slots['driver_init']), 4)}\n}`)
     calls.push(`    zc_${name}_driver_init();`)
   }
+  // driver_boot_state: an output driver writes the state it left its output
+  // in onto its param, after EVERY init (its own driver_init, or the board
+  // manager's, which replaces that slot) and before any framework registers,
+  // so the param counts as written from boot instead of "never written" until
+  // product code first switches it.
+  const boot = collectSlot(rendered, 'driver_boot_state', 4)
+  const bootState = boot ? `\n    /* Boot state of the outputs above, onto their params */\n${boot}\n` : '\n'
   return `#include "app_driver.h"
 #include "app_config.h"
 
@@ -1161,7 +1332,7 @@ ${fns.join('\n\n')}
 esp_err_t app_driver_init(void)
 {
 ${calls.join('\n')}
-
+${bootState}
     ESP_LOGI(TAG, "Hardware drivers initialized");
     return ESP_OK;
 }
@@ -1177,7 +1348,81 @@ ${collectSlot(rendered, 'driver_apply_cases', 8)}
 `
 }
 
-export function genAppMatterCpp(rendered: RenderedInstance[]): string {
+/** The params frameworks/matter publishes about itself (its `owned_params`),
+ *  emitted only for the ones the framework block declares — the declaration is
+ *  what puts them in the param enum. Every write runs on the Matter thread: a
+ *  scheduled work item right after esp_matter::start() for the boot value, the
+ *  event handler afterwards, so the fabric table and the commissioning window
+ *  are read under the stack lock and in event order. */
+const MATTER_COMMISSIONED_PARAM = 'APP_DRIVER_PARAM_MATTER_COMMISSIONED'
+const MATTER_PAIRING_OPEN_PARAM = 'APP_DRIVER_PARAM_MATTER_PAIRING_OPEN'
+
+function matterStateCode(rendered: RenderedInstance[]): { statics: string; eventCases: string; afterStart: string } {
+  const owned = new Set(rendered.filter(r => isFramework(r, 'matter')).flatMap(r => Object.keys(r.block.owned_params ?? {})))
+  const commissioned = owned.has(MATTER_COMMISSIONED_PARAM)
+  const pairing = owned.has(MATTER_PAIRING_OPEN_PARAM)
+  if (!commissioned && !pairing) return { statics: '', eventCases: '', afterStart: '' }
+  const fns: string[] = []
+  const boot: string[] = []
+  const cases: string[] = []
+  if (commissioned) {
+    fns.push(`/* True while the device is on at least one fabric. Read from the fabric
+ * table, never inferred from an event: a fabric removed while others remain
+ * leaves it true, a cancelled pairing never set it. */
+static void zc_matter_publish_commissioned(void)
+{
+    app_driver_param_val_t v = {};
+    v.b = chip::Server::GetInstance().GetFabricTable().FabricCount() > 0;
+    app_driver_set_param(${MATTER_COMMISSIONED_PARAM}, v, s_handle);
+}`)
+    boot.push('    zc_matter_publish_commissioned();')
+    cases.push(`    case chip::DeviceLayer::DeviceEventType::kCommissioningComplete:
+    case chip::DeviceLayer::DeviceEventType::kFabricCommitted:
+    case chip::DeviceLayer::DeviceEventType::kFabricRemoved:
+        zc_matter_publish_commissioned();
+        break;`)
+  }
+  if (pairing) {
+    fns.push(`/* True while the device advertises itself for pairing (BLE / DNS-SD): from
+ * the window opening until a phone connects to pair, the window times out or
+ * is closed. A failed attempt that re-advertises sets it again. */
+static void zc_matter_publish_pairing_open(bool open)
+{
+    app_driver_param_val_t v = {};
+    v.b = open;
+    app_driver_set_param(${MATTER_PAIRING_OPEN_PARAM}, v, s_handle);
+}`)
+    boot.push('    zc_matter_publish_pairing_open(chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen());')
+    cases.push(`    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowOpened:
+        zc_matter_publish_pairing_open(true);
+        break;
+    case chip::DeviceLayer::DeviceEventType::kCommissioningWindowClosed:
+        zc_matter_publish_pairing_open(false);
+        break;`)
+  }
+  const statics = `${fns.join('\n\n')}
+
+static void zc_matter_publish_boot_state(intptr_t)
+{
+${boot.join('\n')}
+}
+
+`
+  const eventCases = `    switch (event->Type) {
+${cases.join('\n')}
+    default:
+        break;
+    }
+`
+  const afterStart = `    /* The boot value, on the Matter thread after everything start() queued. */
+    if (chip::DeviceLayer::PlatformMgr().ScheduleWork(zc_matter_publish_boot_state, 0) != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "Failed to schedule the Matter state read");
+    }
+`
+  return { statics, eventCases, afterStart }
+}
+
+export function genAppMatterCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // Each endpoint's create block becomes its own static function — isolating
   // its `cfg`/`ep` locals (which would collide across endpoints in one scope)
   // and removing the bare `{ }` block. The body's `return ESP_FAIL` now returns
@@ -1197,16 +1442,22 @@ export function genAppMatterCpp(rendered: RenderedInstance[]): string {
   // Defaulted slot: a `matter_last_fabric_cases` contribution replaces this code.
   // Some handler must exist — with none, a device removed from its last fabric
   // can never be commissioned again.
+  // The same reset as every other path (console, button, power cycle):
+  // app_utils_factory_reset runs the product hook, erases the WHOLE NVS
+  // partition and reboots. esp_matter::factory_reset() clears only Matter's
+  // and CHIP's namespaces, so a product's saved state (a relay restored at
+  // power-up) came back after "out-of-box".
   const lastFabricCases = collectSlot(rendered, 'matter_last_fabric_cases', 4) ||
 `    if (event->Type == chip::DeviceLayer::DeviceEventType::kFabricRemoved &&
         chip::Server::GetInstance().GetFabricTable().FabricCount() == 0) {
         ESP_LOGW(TAG, "Last fabric removed — factory reset to out-of-box state");
-        esp_matter::factory_reset();
+        ${features.utilsFactoryReset ? 'app_utils_factory_reset();' : 'esp_matter::factory_reset();'}
     }`
+  const state = matterStateCode(rendered)
   return `#include "app_matter.h"
 #include "app_driver.h"
 #include "app_config.h"
-
+${features.utilsFactoryReset ? '\n#include "app_utils.h"\n' : ''}
 #include <esp_log.h>
 #include <esp_matter.h>
 #include <app/server/Server.h>
@@ -1219,7 +1470,7 @@ using namespace esp_matter;
 using namespace chip::app::Clusters;
 
 static const char *TAG = "app_matter";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 /* "This attribute update is the driver's own echo — do not apply it back."
  * THREAD-LOCAL, because the echo and a controller write run on different
@@ -1253,7 +1504,11 @@ static esp_err_t app_attribute_update_cb(
 {
     if (type == attribute::PRE_UPDATE) {
         if (s_from_driver) return ESP_OK;
+        app_driver_take_refusal(NULL);
 ${collectSlot(rendered, 'matter_attr_cb_cases', 8)}
+        /* The param's guard refused it: reject the write, so the attribute
+         * keeps the device's real value and the controller is told it failed. */
+        if (app_driver_take_refusal(NULL)) return ESP_ERR_NOT_ALLOWED;
     }
     return ESP_OK;
 }
@@ -1270,9 +1525,9 @@ ${collectSlot(rendered, 'matter_identify_cases', 4)}
     return ESP_OK;
 }
 
-static void app_matter_event_cb(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
+${state.statics}static void app_matter_event_cb(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
 {
-${lastFabricCases}
+${state.eventCases}${lastFabricCases}
 ${collectSlot(rendered, 'matter_event_cases', 4)}
 }
 
@@ -1304,7 +1559,7 @@ esp_openthread_platform_config_t zc_openthread_platform_config(void)
 esp_err_t app_matter_init(void)
 {
     s_handle = app_driver_register_solution("matter", matter_driver_cb, NULL);
-
+${collectSlot(rendered, 'matter_init', 4)}
     node::config_t node_config;
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     if (!node) {
@@ -1327,13 +1582,13 @@ ${epCalls.join('\n')}
 #endif
 
     ESP_ERROR_CHECK(esp_matter::start(app_matter_event_cb));
-    ESP_LOGI(TAG, "Matter initialized");
+${state.afterStart}    ESP_LOGI(TAG, "Matter initialized");
     return ESP_OK;
 }
 `
 }
 
-function genAppRainmakerCpp(rendered: RenderedInstance[]): string {
+function genAppRainmakerCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // Mirror of genAppMatterCpp: each device-type instance's
   // rainmaker_device_create slot becomes its own static init function
   // (isolating locals), called in sequence from app_rainmaker_init().
@@ -1365,14 +1620,16 @@ function genAppRainmakerCpp(rendered: RenderedInstance[]): string {
 ${collectSlot(rendered, 'rainmaker_includes')}
 
 static const char *TAG = "app_rainmaker";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 
 ${collectSlot(rendered, 'rainmaker_statics')}
 
+static void rainmaker_driver_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *);
+
 /* Cloud/app write → hardware. Each device-type binding claims its own
  * (device, param) pair and returns; unclaimed writes fall through to OK. */
-static esp_err_t rainmaker_write_cb(
+static esp_err_t rainmaker_write_cases(
     const esp_rmaker_device_t *device,
     const esp_rmaker_param_t *param,
     const esp_rmaker_param_val_t val,
@@ -1386,6 +1643,26 @@ static esp_err_t rainmaker_write_cb(
     }
 ${collectSlot(rendered, 'rainmaker_write_cb_cases', 4)}
     return ESP_OK;
+}
+
+static esp_err_t rainmaker_write_cb(
+    const esp_rmaker_device_t *device,
+    const esp_rmaker_param_t *param,
+    const esp_rmaker_param_val_t val,
+    void *priv_data,
+    esp_rmaker_write_ctx_t *ctx)
+{
+    app_driver_take_refusal(NULL);
+    esp_err_t err = rainmaker_write_cases(device, param, val, priv_data, ctx);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        rainmaker_driver_cb(zc_refused, zc_now, APP_DRIVER_SOURCE_LOCAL, NULL);
+    }
+    return err;
 }
 
 /* Hardware/param bus → cloud. The registry doesn't notify the source
@@ -1460,7 +1737,14 @@ ${collectSlot(rendered, 'rainmaker_node_init', 4)}
 `
 }
 
-function genAppZigbeeCpp(rendered: RenderedInstance[]): string {
+/** frameworks/zigbee's own param: true while the device is on a Zigbee network
+ *  (joined, or rebooted onto the network it had joined), false while it looks
+ *  for one. Emitted only when the framework block declares it (owned_params). */
+const ZIGBEE_JOINED_PARAM = 'APP_DRIVER_PARAM_ZIGBEE_JOINED'
+
+function genAppZigbeeCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
+  const joined = rendered.some(r => isFramework(r, 'zigbee') && ZIGBEE_JOINED_PARAM in (r.block.owned_params ?? {}))
+  const pub = (v: boolean, pad: string) => joined ? `\n${pad}zc_zigbee_publish_joined(${v});` : ''
   // Mirror of genAppMatterCpp/genAppRainmakerCpp: each device-type instance's
   // zigbee_endpoint_create slot becomes its own static init function that adds
   // its endpoint to the shared device descriptor, called in sequence from the
@@ -1494,9 +1778,18 @@ function genAppZigbeeCpp(rendered: RenderedInstance[]): string {
 ${collectSlot(rendered, 'zigbee_includes')}
 
 static const char *TAG = "app_zigbee";
-
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
-static volatile bool s_zb_started = false;
+static volatile bool s_zb_started = false;${joined ? `
+
+/* On a Zigbee network or not, on the param bus for product code (a status
+ * light): set from the stack's own join, reboot and leave signals. */
+static void zc_zigbee_publish_joined(bool on)
+{
+    app_driver_param_val_t v = {};
+    v.b = on;
+    app_driver_set_param(${ZIGBEE_JOINED_PARAM}, v, s_handle);
+}` : ''}
 
 ${collectSlot(rendered, 'zigbee_statics')}
 
@@ -1557,8 +1850,17 @@ static void schedule_bdb_commissioning_retry(uint8_t mode_mask)
     }
 }
 
+static void zigbee_driver_cb(app_driver_param_id_t, app_driver_param_val_t, app_driver_handle_t, void *);
+/* The source zigbee_resync_cb hands zigbee_driver_cb. Never a registered
+ * solution handle (those are 1..APP_DRIVER_MAX_SOLUTIONS) nor LOCAL (0). A
+ * resync is "tell the hub the state it missed", which is right for a server
+ * endpoint (an attribute) and wrong for a client one: a remote's case turns the
+ * param into a COMMAND to every bound device, so replaying it after a reboot
+ * would switch the lights off. Controller cases skip this source. */
+#define ZB_SOURCE_RESYNC ((app_driver_handle_t)0xFF)
+
 /* Hub/controller writes → hardware. Runs ON the Zigbee task (no lock needed). */
-static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
+static void zb_attribute_handler_cases(ezb_zcl_set_attr_value_message_t *message)
 {
     if (!message) return;
     if (message->info.status != EZB_ZCL_STATUS_SUCCESS) {
@@ -1570,6 +1872,20 @@ static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
     uint16_t attr_id = message->in.attribute.id;
     (void)endpoint; (void)cluster_id; (void)attr_id;
 ${collectSlot(rendered, 'zigbee_attr_cb_cases', 4)}
+}
+
+static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message)
+{
+    app_driver_take_refusal(NULL);
+    zb_attribute_handler_cases(message);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        zigbee_driver_cb(zc_refused, zc_now, ZB_SOURCE_RESYNC, NULL);
+    }
 }
 
 static void zb_action_handler(ezb_zcl_core_action_callback_id_t callback_id, void *message)
@@ -1585,13 +1901,6 @@ ${collectSlot(rendered, 'zigbee_action_cases', 4)}
     ESP_LOGI(TAG, "Zigbee action 0x%x", callback_id);
 }
 
-/* The source zigbee_resync_cb hands zigbee_driver_cb. Never a registered
- * solution handle (those are 1..APP_DRIVER_MAX_SOLUTIONS) nor LOCAL (0). A
- * resync is "tell the hub the state it missed", which is right for a server
- * endpoint (an attribute) and wrong for a client one: a remote's case turns the
- * param into a COMMAND to every bound device, so replaying it after a reboot
- * would switch the lights off. Controller cases skip this source. */
-#define ZB_SOURCE_RESYNC ((app_driver_handle_t)0xFF)
 
 /* Hardware/param bus → ZCL attributes. Runs OFF the Zigbee task, so every
  * Zigbee call MUST be wrapped in esp_zigbee_lock_acquire/release (compiles fine
@@ -1665,10 +1974,10 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
         case EZB_BDB_SIGNAL_DEVICE_REBOOT:
             if (err_status == EZB_BDB_STATUS_SUCCESS) {
                 if (ezb_bdb_is_factory_new()) {
-                    ESP_LOGI(TAG, "Start network steering — open pairing on your Zigbee hub");
+                    ESP_LOGI(TAG, "Start network steering — open pairing on your Zigbee hub");${pub(false, '                    ')}
                     (void)bdb_start_top_level_commissioning(EZB_BDB_MODE_NETWORK_STEERING);
                 } else {
-                    ESP_LOGI(TAG, "Device rebooted on network");
+                    ESP_LOGI(TAG, "Device rebooted on network");${pub(true, '                    ')}
                     zigbee_schedule_resync();
                 }
             } else {
@@ -1678,7 +1987,7 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
             break;
         case EZB_BDB_SIGNAL_STEERING:
             if (err_status == EZB_BDB_STATUS_SUCCESS) {
-                ESP_LOGI(TAG, "Joined network successfully");
+                ESP_LOGI(TAG, "Joined network successfully");${pub(true, '                ')}
                 zigbee_schedule_resync();
             } else {
                 ESP_LOGI(TAG, "Network steering not successful (status 0x%x), retrying in 1s",
@@ -1694,10 +2003,10 @@ static bool zigbee_app_signal_handler(const ezb_app_signal_t *app_signal)
              * rejoin is the stack's own business: it rejoins by itself. */
             const ezb_zdo_signal_leave_params_t *leave = (const ezb_zdo_signal_leave_params_t *)signal_params;
             if (leave && leave->leave_type == EZB_ZDO_LEAVE_TYPE_RESET) {
-                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");
+                ESP_LOGW(TAG, "Left the Zigbee network — steering again; open pairing on your hub");${pub(false, '                ')}
                 schedule_bdb_commissioning_retry(EZB_BDB_MODE_NETWORK_STEERING);
             } else {
-                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");
+                ESP_LOGW(TAG, "Left the Zigbee network (rejoining)");${pub(false, '                ')}
             }
             break;
         }
@@ -2462,6 +2771,10 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
                     s_last_onoff = on;
                 }
                 ESP_LOGD(TAG, "OnOff status from 0x%04x: %s", src, on ? "ON" : "OFF");
+                /* Controller device types mirror what the lights report onto
+                 * their own params (written as this framework, so never sent
+                 * back out): product code reads the lights' state there. */
+${collectSlot(rendered, 'ble_mesh_onoff_status', 16)}
                 zc_ble_mesh_on_onoff_status(src, on);
                 return;
             }
@@ -2473,6 +2786,7 @@ static void generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
                 const esp_ble_mesh_gen_level_status_cb_t *st = &param->status_cb.level_status;
                 int16_t level = st->op_en ? st->target_level : st->present_level;
                 ESP_LOGD(TAG, "Level status from 0x%04x: %d", src, (int)level);
+${collectSlot(rendered, 'ble_mesh_level_status', 16)}
                 zc_ble_mesh_on_level_status(src, level);
                 return;
             }
@@ -2761,7 +3075,7 @@ export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
     )
   }
   const sharedNet = wifiShared(rendered, 'webui')
-  const body = '#include "app_webui.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <esp_mac.h>\n#include <esp_random.h>\n#include <nvs.h>\n#include <esp_http_server.h>\n#include <mdns.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_webui";\n\n/* vtype: 0 bool, 1 u8, 2 i16, 3 u16, 4 u32 (shared tag vocabulary). */\ntypedef struct {\n    const char *label;\n    const char *kind;   /* toggle | slider | number | value | binary */\n    app_driver_param_id_t param;\n    const char *param_name;\n    uint8_t vtype;\n    int32_t min;\n    int32_t max;\n    int32_t scale;      /* UI divides the raw value by this for display */\n    int32_t step;       /* number: one - or + press moves the raw value this much; set snaps to it */\n} zc_webui_entity_t;\n\nstatic const zc_webui_entity_t s_entities[] = {\n__SLOT_ENTITIES__\n};\n#define ZC_WEBUI_N (sizeof(s_entities) / sizeof(s_entities[0]))\n\n/* The whole UI: plain-ASCII vanilla JS, no external assets. DOM rebuilds on\n * each poll unless a control is focused (mid-drag). */\nstatic const char INDEX_HTML[] =\n"<!DOCTYPE html><html><head><meta name=viewport content=\'width=device-width,initial-scale=1\'>"\n"<title>ZeroCode</title><style>"\n"body{font-family:system-ui;margin:0;background:#141414;color:#eee}"\n"h1{font-size:17px;padding:14px 16px;margin:0;border-bottom:1px solid #333;color:#e0a06a}"\n".c{padding:14px 16px;border-bottom:1px solid #262626;display:flex;justify-content:space-between;align-items:center;gap:12px}"\n".v{color:#7fd4a3;font-variant-numeric:tabular-nums}"\n".on{color:#7fd4a3}.off{color:#888}"\n"input[type=range]{width:46vw}"\n"button{min-width:40px;min-height:36px;font-size:18px;margin:0 8px;background:#262626;color:#eee;border:1px solid #444;border-radius:6px}"\n"</style></head><body><h1>ZeroCode</h1><div id=root></div><script>"\n"function post(p,v){fetch(\'/api/set?param=\'+encodeURIComponent(p)+\'&value=\'+v,{method:\'POST\',headers:{\'X-ZC-Request\':\'1\'}});}"\n"function row(e){"\n"var d=document.createElement(\'div\');d.className=\'c\';"\n"var l=document.createElement(\'span\');l.textContent=e.label;d.appendChild(l);"\n"if(e.kind==\'toggle\'){var i=document.createElement(\'input\');i.type=\'checkbox\';i.checked=e.value!=e.min;"\n"i.onchange=function(){post(e.param,i.checked?e.max:e.min);};d.appendChild(i);}"\n"else if(e.kind==\'slider\'){var w=document.createElement(\'span\');"\n"var i=document.createElement(\'input\');i.type=\'range\';i.min=e.min;i.max=e.max;i.value=e.value;"\n"i.onchange=function(){post(e.param,i.value);};w.appendChild(i);d.appendChild(w);}"\n"else if(e.kind==\'number\'){var w=document.createElement(\'span\');var st=e.step>0?e.step:1;"\n"var dp=e.scale>1?Math.max(0,Math.ceil(-Math.log10(st/e.scale)-1e-9)):0;"\n"var s=document.createElement(\'span\');s.className=\'v\';"\n"function show(){s.textContent=e.scale>1?(e.value/e.scale).toFixed(dp):e.value;}"\n"function nudge(k){var b=(e.value-e.min)/st;var v=e.min+(k>0?Math.floor(b)+1:Math.ceil(b)-1)*st;v=Math.max(e.min,Math.min(e.max,v));"\n"if(v==e.value)return;e.value=v;show();post(e.param,v);}"\n"var m=document.createElement(\'button\');m.textContent=\'-\';m.onclick=function(){nudge(-1);};"\n"var p=document.createElement(\'button\');p.textContent=\'+\';p.onclick=function(){nudge(1);};"\n"show();w.appendChild(m);w.appendChild(s);w.appendChild(p);d.appendChild(w);}"\n"else if(e.kind==\'binary\'){var s=document.createElement(\'span\');"\n"s.textContent=e.value!=0?\'ACTIVE\':\'clear\';s.className=e.value!=0?\'on\':\'off\';d.appendChild(s);}"\n"else{var s=document.createElement(\'span\');s.className=\'v\';"\n"s.textContent=(e.scale>1?(e.value/e.scale).toFixed(2):e.value);d.appendChild(s);}"\n"return d;}"\n"function render(st){if(document.activeElement&&document.activeElement.tagName==\'INPUT\')return;"\n"var r=document.getElementById(\'root\');r.textContent=\'\';"\n"st.entities.forEach(function(e){r.appendChild(row(e));});}"\n"function tick(){fetch(\'/api/state\').then(function(r){return r.json();}).then(render).catch(function(){});}"\n"tick();setInterval(tick,2500);"\n"</script></body></html>";\n\nstatic int32_t entity_value(const zc_webui_entity_t *e)\n{\n    app_driver_param_val_t v = {};\n    app_driver_get_param(e->param, &v);\n    switch (e->vtype) {\n        case 0: return v.b ? 1 : 0;\n        case 1: return v.u8;\n        case 2: return v.i16;\n        case 3: return v.u16;\n        default: return (int32_t)v.u32;\n    }\n}\n\nstatic esp_err_t index_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "text/html");\n    return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);\n}\n\nstatic esp_err_t state_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "application/json");\n    httpd_resp_sendstr_chunk(req, "{\\"entities\\":[");\n    char buf[280];\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        snprintf(buf, sizeof(buf),\n                 "%s{\\"label\\":\\"%s\\",\\"kind\\":\\"%s\\",\\"param\\":\\"%s\\","\n                 "\\"min\\":%ld,\\"max\\":%ld,\\"scale\\":%ld,\\"step\\":%ld,\\"value\\":%ld}",\n                 i ? "," : "", e->label, e->kind, e->param_name,\n                 (long)e->min, (long)e->max, (long)e->scale, (long)e->step, (long)entity_value(e));\n        httpd_resp_sendstr_chunk(req, buf);\n    }\n    httpd_resp_sendstr_chunk(req, "]}");\n    httpd_resp_sendstr_chunk(req, NULL);\n    return ESP_OK;\n}\n\n/* POST only, and only with the X-ZC-Request header the page itself sends.\n * As a GET, any page the user opened anywhere could drive the device with an\n * <img src=…>; a custom header makes a cross-site request preflighted\n * (OPTIONS), which this server never answers, so only this page gets through. */\nstatic esp_err_t set_post(httpd_req_t *req)\n{\n    if (httpd_req_get_hdr_value_len(req, "X-ZC-Request") == 0) {\n        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "use the device page");\n        return ESP_FAIL;\n    }\n    char query[128] = {0};\n    char pname[64] = {0};\n    char valstr[16] = {0};\n    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||\n        httpd_query_key_value(query, "param", pname, sizeof(pname)) != ESP_OK ||\n        httpd_query_key_value(query, "value", valstr, sizeof(valstr)) != ESP_OK) {\n        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "param and value required");\n        return ESP_FAIL;\n    }\n    long raw = strtol(valstr, NULL, 10);\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        if (strcmp(e->param_name, pname) != 0) continue;\n        /* A toggle is off = min, on = max (a heat-only thermostat\'s mode is\n         * 0 Off / 4 Heat, not 0/1), so any other value means on. */\n        if (strcmp(e->kind, "toggle") == 0) raw = (raw != e->min) ? e->max : e->min;\n        if (raw < e->min) raw = e->min;\n        if (e->step > 1) raw = e->min + ((raw - e->min + e->step / 2) / e->step) * e->step;\n        if (raw > e->max) raw = e->max;\n        app_driver_param_val_t v = {};\n        switch (e->vtype) {\n            case 0: v.b = raw != 0; break;\n            case 1: v.u8 = (uint8_t)raw; break;\n            case 2: v.i16 = (int16_t)raw; break;\n            case 3: v.u16 = (uint16_t)raw; break;\n            default: v.u32 = (uint32_t)raw; break;\n        }\n        app_driver_set_param(e->param, v, APP_DRIVER_SOURCE_LOCAL);\n        httpd_resp_sendstr(req, "ok");\n        return ESP_OK;\n    }\n    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown param");\n    return ESP_FAIL;\n}\n\nstatic void webui_start_server(void)\n{\n    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();\n    cfg.lru_purge_enable = true;\n    httpd_handle_t server = NULL;\n    if (httpd_start(&server, &cfg) != ESP_OK) {\n        ESP_LOGE(TAG, "httpd start failed");\n        return;\n    }\n    const char *uris[] = { "/", "/api/state", "/api/set" };\n    esp_err_t (*handlers[])(httpd_req_t *) = { index_get, state_get, set_post };\n    const httpd_method_t methods[] = { HTTP_GET, HTTP_GET, HTTP_POST };\n    for (int i = 0; i < 3; i++) {\n        httpd_uri_t u = {};\n        u.uri = uris[i];\n        u.method = methods[i];\n        u.handler = handlers[i];\n        httpd_register_uri_handler(server, &u);\n    }\n}\n\nesp_err_t app_webui_init(void)\n{\n    uint8_t mac[6] = {0};\n    esp_read_mac(mac, ESP_MAC_WIFI_STA);\n    char host[24];\n    snprintf(host, sizeof(host), "zerocode-%02x%02x", mac[4], mac[5]);\n\n__NET_SETUP__\n\n    if (mdns_init() == ESP_OK) {\n        mdns_hostname_set(host);\n        mdns_instance_name_set("ZeroCode device");\n        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);\n    }\n\n    webui_start_server();\n__SLOT_NODE_INIT__\n\n    ESP_LOGI(TAG, "Web UI ready — http://%s.local/", host);\n    return ESP_OK;\n}\n'
+  const body = '#include "app_webui.h"\n#include "app_driver.h"\n#include "app_config.h"\n\n#include <string.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <esp_log.h>\n#include <esp_event.h>\n#include <esp_netif.h>\n#include <esp_wifi.h>\n#include <esp_mac.h>\n#include <esp_random.h>\n#include <nvs.h>\n#include <esp_http_server.h>\n#include <mdns.h>\n__SLOT_INCLUDES__\n\nstatic const char *TAG = "app_webui";\n\n/* vtype: 0 bool, 1 u8, 2 i16, 3 u16, 4 u32 (shared tag vocabulary). */\ntypedef struct {\n    const char *label;\n    const char *kind;   /* toggle | slider | number | value | binary | time (minutes since midnight) */\n    app_driver_param_id_t param;\n    const char *param_name;\n    uint8_t vtype;\n    int32_t min;\n    int32_t max;\n    int32_t scale;      /* UI divides the raw value by this for display */\n    int32_t step;       /* number: one - or + press moves the raw value this much; set snaps to it. 0 (left out) is 1 */\n} zc_webui_entity_t;\n\n/* Value-type names a row may use instead of the number (behaviors/webui_row). */\n#define ZC_WEBUI_VT_bool 0\n#define ZC_WEBUI_VT_u8   1\n#define ZC_WEBUI_VT_i16  2\n#define ZC_WEBUI_VT_u16  3\n#define ZC_WEBUI_VT_u32  4\n\nstatic const zc_webui_entity_t s_entities[] = {\n__SLOT_ENTITIES__\n};\n#define ZC_WEBUI_N (sizeof(s_entities) / sizeof(s_entities[0]))\n\n/* The whole UI: plain-ASCII vanilla JS, no external assets. DOM rebuilds on\n * each poll unless a slider or text input is focused (mid-drag or mid-edit);\n * a clicked checkbox keeps focus and must not stop the refresh. A value or\n * number never written yet ("seen":false) shows --, not 0. */\nstatic const char INDEX_HTML[] =\n"<!DOCTYPE html><html><head><meta name=viewport content=\'width=device-width,initial-scale=1\'>"\n"<title>ZeroCode</title><style>"\n"body{font-family:system-ui;margin:0;background:#141414;color:#eee}"\n"h1{font-size:17px;padding:14px 16px;margin:0;border-bottom:1px solid #333;color:#e0a06a}"\n".c{padding:14px 16px;border-bottom:1px solid #262626;display:flex;justify-content:space-between;align-items:center;gap:12px}"\n".v{color:#7fd4a3;font-variant-numeric:tabular-nums}"\n".on{color:#7fd4a3}.off{color:#888}"\n"input[type=range]{width:46vw}"\n"button{min-width:40px;min-height:36px;font-size:18px;margin:0 8px;background:#262626;color:#eee;border:1px solid #444;border-radius:6px}"\n"</style></head><body><h1>ZeroCode</h1><div id=root></div><script>"\n"function post(p,v){fetch(\'/api/set?param=\'+encodeURIComponent(p)+\'&value=\'+v,{method:\'POST\',headers:{\'X-ZC-Request\':\'1\'}});}"\n"function row(e){"\n"var d=document.createElement(\'div\');d.className=\'c\';"\n"var l=document.createElement(\'span\');l.textContent=e.label;d.appendChild(l);"\n"if(e.kind==\'toggle\'){var i=document.createElement(\'input\');i.type=\'checkbox\';i.checked=e.value!=e.min;"\n"i.onchange=function(){post(e.param,i.checked?e.max:e.min);};d.appendChild(i);}"\n"else if(e.kind==\'slider\'){var w=document.createElement(\'span\');"\n"var i=document.createElement(\'input\');i.type=\'range\';i.min=e.min;i.max=e.max;i.value=e.value;"\n"i.onchange=function(){post(e.param,i.value);};w.appendChild(i);d.appendChild(w);}"\n"else if(e.kind==\'number\'){var w=document.createElement(\'span\');var st=e.step>0?e.step:1;"\n"var dp=e.scale>1?Math.max(0,Math.ceil(-Math.log10(st/e.scale)-1e-9)):0;"\n"var s=document.createElement(\'span\');s.className=\'v\';"\n"function show(){s.textContent=e.seen===false?\'--\':e.scale>1?(e.value/e.scale).toFixed(dp):e.value;}"\n"function nudge(k){var b=(e.value-e.min)/st;var v=e.min+(k>0?Math.floor(b)+1:Math.ceil(b)-1)*st;v=Math.max(e.min,Math.min(e.max,v));"\n"if(v==e.value)return;e.value=v;show();post(e.param,v);}"\n"var m=document.createElement(\'button\');m.textContent=\'-\';m.onclick=function(){nudge(-1);};"\n"var p=document.createElement(\'button\');p.textContent=\'+\';p.onclick=function(){nudge(1);};"\n"show();w.appendChild(m);w.appendChild(s);w.appendChild(p);d.appendChild(w);}"\n"else if(e.kind==\'time\'){var i=document.createElement(\'input\');i.type=\'time\';"\n"if(e.seen!==false){var h=Math.floor(e.value/60),m=e.value%60;i.value=(h<10?\'0\':\'\')+h+\':\'+(m<10?\'0\':\'\')+m;}"\n"i.onchange=function(){var p=i.value.split(\':\');if(p.length==2)post(e.param,parseInt(p[0],10)*60+parseInt(p[1],10));};d.appendChild(i);}"\n"else if(e.kind==\'binary\'){var s=document.createElement(\'span\');"\n"s.textContent=e.value!=0?\'ACTIVE\':\'clear\';s.className=e.value!=0?\'on\':\'off\';d.appendChild(s);}"\n"else{var s=document.createElement(\'span\');s.className=\'v\';"\n"s.textContent=e.seen===false?\'--\':(e.scale>1?(e.value/e.scale).toFixed(2):e.value);d.appendChild(s);}"\n"return d;}"\n"function render(st){var a=document.activeElement;if(a&&((a.tagName==\'INPUT\'&&a.type!=\'checkbox\')||a.tagName==\'SELECT\'))return;"\n"var r=document.getElementById(\'root\');r.textContent=\'\';"\n"st.entities.forEach(function(e){r.appendChild(row(e));});}"\n"function tick(){fetch(\'/api/state\').then(function(r){return r.json();}).then(render).catch(function(){});}"\n"tick();setInterval(tick,2500);"\n"</script></body></html>";\n\nstatic int32_t entity_value(const zc_webui_entity_t *e)\n{\n    app_driver_param_val_t v = {};\n    app_driver_get_param(e->param, &v);\n    switch (e->vtype) {\n        case 0: return v.b ? 1 : 0;\n        case 1: return v.u8;\n        case 2: return v.i16;\n        case 3: return v.u16;\n        default: return (int32_t)v.u32;\n    }\n}\n\nstatic esp_err_t index_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "text/html");\n    return httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);\n}\n\nstatic esp_err_t state_get(httpd_req_t *req)\n{\n    httpd_resp_set_type(req, "application/json");\n    httpd_resp_sendstr_chunk(req, "{\\"entities\\":[");\n    char buf[320];\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        snprintf(buf, sizeof(buf),\n                 "%s{\\"label\\":\\"%s\\",\\"kind\\":\\"%s\\",\\"param\\":\\"%s\\","\n                 "\\"min\\":%ld,\\"max\\":%ld,\\"scale\\":%ld,\\"step\\":%ld,\\"value\\":%ld,\\"seen\\":%s}",\n                 i ? "," : "", e->label, e->kind, e->param_name,\n                 (long)e->min, (long)e->max, (long)e->scale, (long)e->step, (long)entity_value(e),\n                 app_driver_param_seen(e->param) ? "true" : "false");\n        httpd_resp_sendstr_chunk(req, buf);\n    }\n    httpd_resp_sendstr_chunk(req, "]}");\n    httpd_resp_sendstr_chunk(req, NULL);\n    return ESP_OK;\n}\n\n/* POST only, and only with the X-ZC-Request header the page itself sends.\n * As a GET, any page the user opened anywhere could drive the device with an\n * <img src=…>; a custom header makes a cross-site request preflighted\n * (OPTIONS), which this server never answers, so only this page gets through. */\nstatic esp_err_t set_post(httpd_req_t *req)\n{\n    if (httpd_req_get_hdr_value_len(req, "X-ZC-Request") == 0) {\n        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "use the device page");\n        return ESP_FAIL;\n    }\n    char query[128] = {0};\n    char pname[64] = {0};\n    char valstr[16] = {0};\n    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||\n        httpd_query_key_value(query, "param", pname, sizeof(pname)) != ESP_OK ||\n        httpd_query_key_value(query, "value", valstr, sizeof(valstr)) != ESP_OK) {\n        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "param and value required");\n        return ESP_FAIL;\n    }\n    long raw = strtol(valstr, NULL, 10);\n    for (size_t i = 0; i < ZC_WEBUI_N; i++) {\n        const zc_webui_entity_t *e = &s_entities[i];\n        if (strcmp(e->param_name, pname) != 0) continue;\n        /* Only the rows the page draws as controls take a write: a value or\n         * binary row is a reading (a heat relay the product logic drives),\n         * and the page never posts one. */\n        if (strcmp(e->kind, "toggle") != 0 && strcmp(e->kind, "slider") != 0 && strcmp(e->kind, "number") != 0 && strcmp(e->kind, "time") != 0) {\n            httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "read-only");\n            return ESP_FAIL;\n        }\n        /* A toggle is off = min, on = max (a heat-only thermostat\'s mode is\n         * 0 Off / 4 Heat, not 0/1), so any other value means on. */\n        if (strcmp(e->kind, "toggle") == 0) raw = (raw != e->min) ? e->max : e->min;\n        /* A time row is minutes since midnight, whatever its min and max say. */\n        const bool is_time = strcmp(e->kind, "time") == 0;\n        const long lo = is_time ? 0 : e->min;\n        const long hi = is_time ? 1439 : e->max;\n        if (raw < lo) raw = lo;\n        if (e->step > 1) raw = lo + ((raw - lo + e->step / 2) / e->step) * e->step;\n        if (raw > hi) raw = hi;\n        app_driver_param_val_t v = {};\n        switch (e->vtype) {\n            case 0: v.b = raw != 0; break;\n            case 1: v.u8 = (uint8_t)raw; break;\n            case 2: v.i16 = (int16_t)raw; break;\n            case 3: v.u16 = (uint16_t)raw; break;\n            default: v.u32 = (uint32_t)raw; break;\n        }\n        app_driver_set_param(e->param, v, APP_DRIVER_SOURCE_LOCAL);\n        httpd_resp_sendstr(req, "ok");\n        return ESP_OK;\n    }\n    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown param");\n    return ESP_FAIL;\n}\n\n/* The ONE server on port 80. Product code adds its own pages or endpoints to\n * it from app_webui_register_handlers() (app_webui.h) — a second\n * httpd_start on port 80 cannot bind. */\nstatic httpd_handle_t s_server = NULL;\n\nhttpd_handle_t app_webui_server(void)\n{\n    return s_server;\n}\n\n__attribute__((weak)) void app_webui_register_handlers(httpd_handle_t server)\n{\n    (void)server;\n}\n\nstatic void webui_start_server(void)\n{\n    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();\n    cfg.lru_purge_enable = true;\n    /* The page uses three; the rest are the product\'s. */\n    cfg.max_uri_handlers = 16;\n    httpd_handle_t server = NULL;\n    if (httpd_start(&server, &cfg) != ESP_OK) {\n        ESP_LOGE(TAG, "httpd start failed");\n        return;\n    }\n    s_server = server;\n    const char *uris[] = { "/", "/api/state", "/api/set" };\n    esp_err_t (*handlers[])(httpd_req_t *) = { index_get, state_get, set_post };\n    const httpd_method_t methods[] = { HTTP_GET, HTTP_GET, HTTP_POST };\n    for (int i = 0; i < 3; i++) {\n        httpd_uri_t u = {};\n        u.uri = uris[i];\n        u.method = methods[i];\n        u.handler = handlers[i];\n        httpd_register_uri_handler(server, &u);\n    }\n    app_webui_register_handlers(server);\n}\n\nesp_err_t app_webui_init(void)\n{\n    uint8_t mac[6] = {0};\n    esp_read_mac(mac, ESP_MAC_WIFI_STA);\n    char host[24];\n    snprintf(host, sizeof(host), "zerocode-%02x%02x", mac[4], mac[5]);\n\n__NET_SETUP__\n\n    if (mdns_init() == ESP_OK) {\n        mdns_hostname_set(host);\n        mdns_instance_name_set("ZeroCode device");\n        mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);\n    }\n\n    webui_start_server();\n__SLOT_NODE_INIT__\n\n    ESP_LOGI(TAG, "Web UI ready — http://%s.local/", host);\n    return ESP_OK;\n}\n'
   const netSetup = sharedNet ? '    /* Shared-network mode: another framework owns Wi-Fi (a station); the\n     * server just binds on it. The netif layer and the default loop are not\n     * the radio — both are idempotent, and httpd/mdns need them even when the\n     * owner is listed after us or (aws_iot) brings the radio up later. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }' : '    /* Standalone: bring up a SoftAP — the device IS the network. */\n    ESP_ERROR_CHECK(esp_netif_init());\n    esp_err_t loop_err = esp_event_loop_create_default();\n    if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {\n        ESP_ERROR_CHECK(loop_err);\n    }\n    esp_netif_create_default_wifi_ap();\n    /* A per-device password, made once and kept in NVS, printed at every\n     * boot. It used to be "zerocode" on every device — published, so anyone\n     * in range could join and drive the actuators. */\n    wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();\n    ESP_ERROR_CHECK(esp_wifi_init(&wcfg));\n    char ap_pass[11] = {0};\n    {\n        static const char alphabet[] = "abcdefghjkmnpqrstuvwxyz23456789";\n        nvs_handle_t h;\n        bool have = false;\n        if (nvs_open("zc_webui", NVS_READONLY, &h) == ESP_OK) {\n            size_t n = sizeof(ap_pass);\n            have = nvs_get_str(h, "ap_pass", ap_pass, &n) == ESP_OK && strlen(ap_pass) >= 8;\n            nvs_close(h);\n        }\n        if (!have) {\n            /* esp_random() is a true RNG only while the RF subsystem runs\n             * (ESP-IDF Random Number Generation: enabled by esp_wifi_start).\n             * So start the radio in station mode first: nothing is broadcast\n             * and nothing is joined, and there is no AP before the password\n             * exists. bootloader_random_enable()/disable() would do instead,\n             * but disable() must run before any ADC or (ESP32) I2S user is set\n             * up (bootloader_random.h) — and the drivers are initialised before\n             * this, so it would undo their setup on a first boot. */\n            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));\n            ESP_ERROR_CHECK(esp_wifi_start());\n            for (size_t i = 0; i < sizeof(ap_pass) - 1; i++) ap_pass[i] = alphabet[esp_random() % (sizeof(alphabet) - 1)];\n            ESP_ERROR_CHECK(esp_wifi_stop());\n            ap_pass[sizeof(ap_pass) - 1] = 0;\n            bool kept = false;\n            if (nvs_open("zc_webui", NVS_READWRITE, &h) == ESP_OK) {\n                kept = nvs_set_str(h, "ap_pass", ap_pass) == ESP_OK && nvs_commit(h) == ESP_OK;\n                nvs_close(h);\n            }\n            if (!kept) ESP_LOGW(TAG, "could not keep the SoftAP password in NVS — it changes at every boot");\n        }\n    }\n    wifi_config_t ap = {};\n    snprintf((char *)ap.ap.ssid, sizeof(ap.ap.ssid), "ZeroCode-%02X%02X", mac[4], mac[5]);\n    strlcpy((char *)ap.ap.password, ap_pass, sizeof(ap.ap.password));\n    ap.ap.ssid_len = 0;\n    ap.ap.channel = 1;\n    ap.ap.max_connection = 4;\n    ap.ap.authmode = WIFI_AUTH_WPA2_PSK;\n    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));\n    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));\n    ESP_ERROR_CHECK(esp_wifi_start());\n    ESP_LOGI(TAG, "SoftAP \'%s\' up, password \'%s\' — connect and open http://192.168.4.1/", (char *)ap.ap.ssid, ap_pass);'
   return body
     .replace('__SLOT_INCLUDES__', collectSlot(rendered, 'webui_includes'))
@@ -2784,7 +3098,53 @@ export function genAppWebuiCpp(rendered: RenderedInstance[]): string {
  * encryption (ESP-NOW cannot encrypt broadcast frames). Trusted spaces
  * only; pairing + per-peer LMK is v2.
  */
-function genAppEspnowCpp(rendered: RenderedInstance[]): string {
+/** Wire type codes (the shared tag vocabulary). */
+const ESPNOW_WIRE_TYPE: Record<ValueType, number> = { bool: 0, u8: 1, i16: 2, u16: 3, u32: 4 }
+
+/**
+ * After the listener device types' own cases: a param this product itself
+ * sends over ESP-NOW (a composed block's zc_espnow_send("<param>", …)), or one
+ * the product declares (template.yaml params:, which product code sends),
+ * that arrives by name lands on the bus as an EVENT (so a second identical
+ * ring still rings), with espnow's own handle as the source so it is never
+ * sent back out. Without it a product's own param, such as a ring, would be
+ * sent by one board and dropped by the other. Every other param — a relay's
+ * power, a driver's reading — is never taken from the air: frames are open
+ * broadcast, so any nearby board could otherwise drive the outputs.
+ * Framework-owned params (owned_params) never come from a peer.
+ */
+function espnowRecvFallback(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
+  const owned = new Set(rendered.flatMap(r => Object.keys(r.block.owned_params ?? {})))
+  const sent = new Set<string>(Object.keys(productParams))
+  for (const r of rendered) {
+    for (const body of Object.values(r.slots)) {
+      for (const m of body.matchAll(/\bzc_espnow_send\s*\(\s*"(APP_DRIVER_PARAM_\w+)"/g)) sent.add(m[1]!)
+    }
+  }
+  const params = collectParamIds(rendered, productParams).filter(p => sent.has(p.name) && !owned.has(p.name))
+  if (params.length === 0) return ''
+  const rows = params.map(p => `        { "${p.name}", ${p.name}, ${ESPNOW_WIRE_TYPE[p.type]} },`).join('\n')
+  const member = (t: number) => ({ 0: 'v.b = (msg.value != 0)', 1: 'v.u8 = (uint8_t)msg.value', 2: 'v.i16 = (int16_t)msg.value', 3: 'v.u16 = (uint16_t)msg.value', 4: 'v.u32 = msg.value' } as Record<number, string>)[t]
+  return `    /* Any other param of this product, by name: as an event, never re-sent. */
+    static const struct { const char *name; app_driver_param_id_t id; uint8_t type; } s_now_params[] = {
+${rows}
+    };
+    for (size_t i = 0; i < sizeof(s_now_params) / sizeof(s_now_params[0]); i++) {
+        if (s_now_params[i].type != msg.type || hash != zc_now_hash(s_now_params[i].name)) continue;
+        app_driver_param_val_t v = {};
+        switch (msg.type) {
+            case 0: ${member(0)}; break;
+            case 1: ${member(1)}; break;
+            case 2: ${member(2)}; break;
+            case 3: ${member(3)}; break;
+            default: ${member(4)}; break;
+        }
+        app_driver_fire_event(s_now_params[i].id, v, s_handle);
+        return;
+    }`
+}
+
+function genAppEspnowCpp(rendered: RenderedInstance[], productParams: Record<string, string> = {}): string {
   return `#include "app_espnow.h"
 #include "app_driver.h"
 #include "app_config.h"
@@ -3083,6 +3443,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data,
     uint32_t hash = msg.name_hash;
     (void)hash;
 ${collectSlot(rendered, 'espnow_recv_cases', 4)}
+${espnowRecvFallback(rendered, productParams)}
 }
 
 /* Hardware/param bus -> broadcasts. Broadcaster device types own the cases. */
@@ -3204,6 +3565,52 @@ ${collectSlot(rendered, 'espnow_node_init', 4)}
  * generated file owns the report map, the esp_hidd device, and dispatch.
  */
 function genAppBleHidCpp(rendered: RenderedInstance[]): string {
+  // A composed device_types/gamepad adds one gamepad report (id 3) to the map,
+  // the gamepad appearance and its own name; without it the output is the
+  // media remote's, byte for byte.
+  const pad = rendered.find(r => r.block.id === 'device_types/gamepad')
+  const padName = pad ? String(pad.cfg.device_name ?? 'ZeroCode Gamepad').replace(/[\\"]/g, '') : ''
+  const padMap = pad ? `
+    0x05, 0x01,       /* Usage Page (Generic Desktop) */
+    0x09, 0x05,       /* Usage (Game Pad) */
+    0xA1, 0x01,       /* Collection (Application) */
+    0x85, 0x03,       /*   Report ID (3) */
+    0x05, 0x09,       /*   Usage Page (Button) */
+    0x19, 0x01,       /*   Usage Minimum (Button 1) */
+    0x29, 0x10,       /*   Usage Maximum (Button 16) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x25, 0x01,       /*   Logical Maximum (1) */
+    0x75, 0x01,       /*   Report Size (1) */
+    0x95, 0x10,       /*   Report Count (16) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — buttons */
+    0x05, 0x01,       /*   Usage Page (Generic Desktop) */
+    0x09, 0x30,       /*   Usage (X) */
+    0x09, 0x31,       /*   Usage (Y) */
+    0x09, 0x32,       /*   Usage (Z) */
+    0x09, 0x35,       /*   Usage (Rz) */
+    0x15, 0x81,       /*   Logical Minimum (-127) */
+    0x25, 0x7F,       /*   Logical Maximum (127) */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x04,       /*   Report Count (4) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — two sticks */
+    0xC0,             /* End Collection */` : ''
+  const padSend = pad ? `
+/* The gamepad's whole state, report id 3: button n is bit n-1 of buttons,
+ * and the two sticks' axes -127..127 (0 = centred). A state, not a press:
+ * send it when anything changed; it is dropped while no host is connected. */
+void zc_ble_hid_send_gamepad(uint16_t buttons, int8_t x, int8_t y, int8_t z, int8_t rz)
+{
+    if (!s_host_connected || s_hid_dev == NULL) {
+        ESP_LOGD(TAG, "no host connected — dropping gamepad state");
+        return;
+    }
+    uint8_t report[6] = { (uint8_t)(buttons & 0xff), (uint8_t)(buttons >> 8),
+                          (uint8_t)x, (uint8_t)y, (uint8_t)z, (uint8_t)rz };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 3, report, sizeof(report));
+}
+` : ''
+  const appearance = pad ? '0x03C4 /* gamepad */' : '0x03C0 /* generic HID */'
+  const devName = pad ? padName : 'ZeroCode Remote'
   return `#include "app_ble_hid.h"
 #include "ble_hid_gap.h"
 #include "app_driver.h"
@@ -3223,7 +3630,9 @@ static volatile bool s_host_connected = false;
 
 /* Consumer Control, report id 1: one 16-bit usage array. Press = usage,
  * release = 0. Covers play/pause, volume, mute, next/prev — everything a
- * media remote sends. */
+ * media remote sends. Keyboard, report id 2: the standard 8-byte input
+ * (modifiers, reserved, six keycodes) — arrows, page up/down, space, letters:
+ * a presentation clicker, a page turner. */
 static const uint8_t s_report_map[] = {
     0x05, 0x0C,       /* Usage Page (Consumer) */
     0x09, 0x01,       /* Usage (Consumer Control) */
@@ -3237,6 +3646,29 @@ static const uint8_t s_report_map[] = {
     0x95, 0x01,       /*   Report Count (1) */
     0x81, 0x00,       /*   Input (Data, Array) */
     0xC0,             /* End Collection */
+    0x05, 0x01,       /* Usage Page (Generic Desktop) */
+    0x09, 0x06,       /* Usage (Keyboard) */
+    0xA1, 0x01,       /* Collection (Application) */
+    0x85, 0x02,       /*   Report ID (2) */
+    0x05, 0x07,       /*   Usage Page (Keyboard/Keypad) */
+    0x19, 0xE0,       /*   Usage Minimum (Left Control) */
+    0x29, 0xE7,       /*   Usage Maximum (Right GUI) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x25, 0x01,       /*   Logical Maximum (1) */
+    0x75, 0x01,       /*   Report Size (1) */
+    0x95, 0x08,       /*   Report Count (8) */
+    0x81, 0x02,       /*   Input (Data, Var, Abs) — modifiers */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x01,       /*   Report Count (1) */
+    0x81, 0x01,       /*   Input (Const) — reserved */
+    0x75, 0x08,       /*   Report Size (8) */
+    0x95, 0x06,       /*   Report Count (6) */
+    0x15, 0x00,       /*   Logical Minimum (0) */
+    0x26, 0xFF, 0x00, /*   Logical Maximum (255): two bytes, as one byte 0xFF is -1 */
+    0x19, 0x00,       /*   Usage Minimum (0) */
+    0x29, 0xFF,       /*   Usage Maximum (255) */
+    0x81, 0x00,       /*   Input (Data, Array) — keys */
+    0xC0,             /* End Collection */${padMap}
 };
 
 ${collectSlot(rendered, 'ble_hid_statics')}
@@ -3255,7 +3687,23 @@ void zc_ble_hid_send_consumer(uint16_t usage)
     esp_hidd_dev_input_set(s_hid_dev, 0, 1, release, 2);
 }
 
-/* Hardware/param bus -> HID reports. Device types own the cases. */
+/* A keyboard key, press + release: a USB HID Keyboard Page keycode (0x4F right
+ * arrow, 0x50 left, 0x4B page up, 0x4E page down, 0x2C space) with modifier
+ * bits (0x02 left shift). Dropped when no host is connected, like a consumer
+ * usage. */
+void zc_ble_hid_send_key(uint8_t keycode, uint8_t modifiers)
+{
+    if (!s_host_connected || s_hid_dev == NULL) {
+        ESP_LOGD(TAG, "no host connected — dropping key 0x%02x", keycode);
+        return;
+    }
+    uint8_t report[8] = { modifiers, 0, keycode, 0, 0, 0, 0, 0 };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 2, report, 8);
+    uint8_t release[8] = { 0 };
+    esp_hidd_dev_input_set(s_hid_dev, 0, 2, release, 8);
+}
+
+${padSend}/* Hardware/param bus -> HID reports. Device types own the cases. */
 static void ble_hid_driver_cb(
     app_driver_param_id_t param_id,
     app_driver_param_val_t val,
@@ -3303,7 +3751,7 @@ esp_err_t app_ble_hid_init(void)
     s_handle = app_driver_register_solution("ble_hid", ble_hid_driver_cb, NULL);
 
     ESP_ERROR_CHECK(ble_hid_gap_stack_init());
-    ESP_ERROR_CHECK(ble_hid_gap_adv_init(0x03C0 /* generic HID */, "ZeroCode Remote"));
+    ESP_ERROR_CHECK(ble_hid_gap_adv_init(${appearance}, "${devName}"));
 
     static esp_hid_raw_report_map_t report_maps[] = {
         { .data = s_report_map, .len = sizeof(s_report_map) },
@@ -3312,7 +3760,7 @@ esp_err_t app_ble_hid_init(void)
     hid_config.vendor_id = 0x16A8;
     hid_config.product_id = 0x2C0D;
     hid_config.version = 0x0100;
-    hid_config.device_name = "ZeroCode Remote";
+    hid_config.device_name = "${devName}";
     hid_config.manufacturer_name = "ZeroCode AI";
     hid_config.serial_number = "0";
     hid_config.report_maps = report_maps;
@@ -3432,6 +3880,16 @@ static app_driver_handle_t s_handle = 0;
 /* Assigned by the panel driver block's display_node_init slot. */
 static lv_display_t *s_disp = NULL;
 
+/* Weak: product code defines app_display_on_touch() (app_display.h) to act on
+ * any touch — wake a dimmed backlight, switch views. */
+extern "C" __attribute__((weak)) void app_display_on_touch(void) {}
+
+static void zc_display_touch_cb(lv_event_t *e)
+{
+    (void)e;
+    app_display_on_touch();
+}
+
 ${collectSlot(rendered, 'display_statics')}
 
 /* Hardware/param bus -> widgets. Runs OFF the LVGL task, so the whole
@@ -3484,6 +3942,18 @@ ${collectSlot(rendered, 'display_node_init', 4)}
         return;
     }
 
+    /* Every touch, wherever it lands, reaches app_display_on_touch(): the
+     * hook sits on the input device, which LVGL tells before any object, so a
+     * full-screen object of the product's own cannot swallow it. */
+    if (lvgl_port_lock(0)) {
+        for (lv_indev_t *in = lv_indev_get_next(NULL); in != NULL; in = lv_indev_get_next(in)) {
+            if (lv_indev_get_type(in) == LV_INDEV_TYPE_POINTER) {
+                lv_indev_add_event_cb(in, zc_display_touch_cb, LV_EVENT_PRESSED, NULL);
+            }
+        }
+        lvgl_port_unlock();
+    }
+
 ${cardCalls.length ? `    /* One scrollable column of device cards, built under the LVGL lock. */
     if (lvgl_port_lock(0)) {
         lv_obj_t *col = lv_obj_create(lv_display_get_screen_active(s_disp));
@@ -3494,10 +3964,9 @@ ${cardCalls.length ? `    /* One scrollable column of device cards, built under 
          * never on the screen. Without bubbling, a screen-level input handler
          * (the obvious place to hook backlight wake, screensaver dismiss, an
          * activity timer) is registered successfully and then never fires.
-         * That is silent and survives review: on touch-room-panel-msmrkexj the
-         * panel dimmed to 10% after 2 minutes and never woke, while both gates
-         * asserted wake-on-touch worked. Bubble input events up so the screen
-         * really does see them. */
+         * That is silent and survives review: a panel that dims after a few
+         * minutes then never wakes on a touch. Bubble input events up so the
+         * screen really does see them. */
         lv_obj_add_flag(col, LV_OBJ_FLAG_EVENT_BUBBLE);
 ${cardCalls.join('\n')}
         lvgl_port_unlock();
@@ -3536,7 +4005,7 @@ esp_err_t app_display_init(void)
  * console (mqtt-wifi / mqtt-broker) and persist in NVS. An unconfigured
  * boot idles and logs — it must never block app_main.
  */
-export function genAppMqttCpp(rendered: RenderedInstance[]): string {
+export function genAppMqttCpp(rendered: RenderedInstance[], features: CatalogFeatures = CURRENT_CATALOG): string {
   // SHARED-NETWORK MODE: when a Wi-Fi-owning transport (Matter / RainMaker)
   // is co-selected, app_mqtt must NOT own Wi-Fi — no esp_wifi init, no
   // credentials, no mqtt-wifi console command. It waits for the transport's
@@ -3580,8 +4049,24 @@ export function genAppMqttCpp(rendered: RenderedInstance[]): string {
 #include <mqtt_client.h>
 ${collectSlot(rendered, 'mqtt_includes')}
 
-static const char *TAG = "app_mqtt";
+/* The product API this file defines, declared as app_mqtt.h declares it: an
+ * older app_mqtt.h has none of it, and C linkage must not depend on which. */
+extern "C" {
+typedef void (*app_mqtt_command_cb_t)(const char *object_id, const char *payload, void *ctx);
+typedef void (*app_mqtt_topic_cb_t)(const char *topic, const char *payload, int len, void *ctx);
+esp_err_t app_mqtt_entity_add(const char *component, const char *object_id, const char *name,
+                              const char *extra_json);
+esp_err_t app_mqtt_entity_set_state(const char *object_id, const char *state);
+esp_err_t app_mqtt_entity_on_command(const char *object_id, app_mqtt_command_cb_t cb, void *ctx);
+esp_err_t app_mqtt_set_republish_s(uint32_t seconds);
+void app_mqtt_set_republish_only_on_schedule(bool only);
+esp_err_t app_mqtt_publish(const char *topic, const char *payload, int len, int qos, bool retain);
+esp_err_t app_mqtt_subscribe(const char *filter, int qos, app_mqtt_topic_cb_t cb, void *ctx);
+void app_mqtt_on_connected(void);
+}
 
+static const char *TAG = "app_mqtt";
+${refusalShim(features)}
 static app_driver_handle_t s_handle = 0;
 static esp_mqtt_client_handle_t s_client = NULL;
 static volatile bool s_connected = false;
@@ -4229,6 +4714,100 @@ static void zc_entities_dispatch(const char *topic, int tlen, const char *data, 
     free(payload);
 }
 
+/* ── Product topics ───────────────────────────────────────────────────
+ * The product's own topics on THIS connection: a second client beside this
+ * one (same broker, the same default client id from the MAC) made the broker
+ * drop each in turn to accept the other, and the connection flapped forever. */
+#ifndef APP_MQTT_MAX_TOPIC_SUBS
+#define APP_MQTT_MAX_TOPIC_SUBS 8
+#endif
+typedef struct {
+    char *filter;
+    int qos;
+    app_mqtt_topic_cb_t cb;
+    void *ctx;
+} zc_topic_sub_t;
+static zc_topic_sub_t s_topic_subs[APP_MQTT_MAX_TOPIC_SUBS];
+
+/* MQTT filter match: '+' is one level, a trailing '#' the rest. */
+static bool zc_topic_matches(const char *filter, const char *topic, int tlen)
+{
+    int t = 0;
+    for (const char *f = filter; *f; ) {
+        if (*f == '#') return true;
+        if (*f == '+') {
+            while (t < tlen && topic[t] != '/') t++;
+            f++;
+            continue;
+        }
+        if (t >= tlen || topic[t] != *f) return false;
+        t++; f++;
+    }
+    return t == tlen;
+}
+
+esp_err_t app_mqtt_publish(const char *topic, const char *payload, int len, int qos, bool retain)
+{
+    if (topic == NULL || topic[0] == 0 || payload == NULL) return ESP_ERR_INVALID_ARG;
+    if (!s_connected) return ESP_ERR_INVALID_STATE;
+    return zc_mqtt_publish(topic, payload, len, qos, retain) < 0 ? ESP_FAIL : ESP_OK;
+}
+
+esp_err_t app_mqtt_subscribe(const char *filter, int qos, app_mqtt_topic_cb_t cb, void *ctx)
+{
+    if (filter == NULL || filter[0] == 0 || cb == NULL) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+    int slot = -1;
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        if (s_topic_subs[i].filter && strcmp(s_topic_subs[i].filter, filter) == 0) { slot = i; break; }
+        if (slot < 0 && s_topic_subs[i].filter == NULL) slot = i;
+    }
+    if (slot < 0) { xSemaphoreGive(zc_ent_lock()); return ESP_ERR_NO_MEM; }
+    if (s_topic_subs[slot].filter == NULL) {
+        s_topic_subs[slot].filter = strdup(filter);
+        if (s_topic_subs[slot].filter == NULL) { xSemaphoreGive(zc_ent_lock()); return ESP_ERR_NO_MEM; }
+    }
+    s_topic_subs[slot].qos = qos;
+    s_topic_subs[slot].cb = cb;
+    s_topic_subs[slot].ctx = ctx;
+    bool now = s_connected;
+    xSemaphoreGive(zc_ent_lock());
+    /* Connected: subscribe now. Otherwise the next connect does it. */
+    if (now) zc_mqtt_subscribe(filter, qos);
+    return ESP_OK;
+}
+
+/* Every (re)connect: the broker forgot the subscriptions of a clean session. */
+static void zc_topics_on_connected(void)
+{
+    xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        if (s_topic_subs[i].filter) zc_mqtt_subscribe(s_topic_subs[i].filter, s_topic_subs[i].qos);
+    }
+    xSemaphoreGive(zc_ent_lock());
+}
+
+static void zc_topics_dispatch(const char *topic, int tlen, const char *data, int dlen)
+{
+    for (int i = 0; i < APP_MQTT_MAX_TOPIC_SUBS; i++) {
+        xSemaphoreTake(zc_ent_lock(), portMAX_DELAY);
+        const char *filter = s_topic_subs[i].filter;
+        bool hit = filter && zc_topic_matches(filter, topic, tlen);
+        app_mqtt_topic_cb_t cb = hit ? s_topic_subs[i].cb : NULL;
+        void *ctx = s_topic_subs[i].ctx;
+        xSemaphoreGive(zc_ent_lock());
+        if (cb == NULL) continue;
+        char *t = (char *)malloc((size_t)tlen + 1);
+        char *d = (char *)malloc((size_t)dlen + 1);
+        if (t && d) {
+            memcpy(t, topic, tlen); t[tlen] = 0;
+            memcpy(d, data, dlen); d[dlen] = 0;
+            cb(t, d, dlen, ctx);
+        }
+        free(t); free(d);
+    }
+}
+
 /* Weak: a product defines its own to publish more on every (re)connect. */
 __attribute__((weak)) void app_mqtt_on_connected(void)
 {
@@ -4257,6 +4836,10 @@ static void mqtt_driver_cb(
     (void)ctx;
     (void)val;
     if (!s_connected || s_client == NULL) return;
+    /* Watches: a param several device types react to (a sensor's status
+     * shared by its temperature and humidity entities) is an \`if\`, not a
+     * \`case\` — two identical case labels would not compile. */
+${collectSlot(rendered, 'mqtt_driver_cb_watch', 4)}
     switch (param_id) {
 ${collectSlot(rendered, 'mqtt_driver_cb_cases', 4)}
     default:
@@ -4268,11 +4851,26 @@ ${devFns.join('\n\n')}
 
 /* Command topics -> hardware. Runs on the MQTT task; payloads are not
  * NUL-terminated, so every case gets (topic, tlen, data, dlen). */
-static void mqtt_handle_data(const char *topic, int tlen, const char *data, int dlen)
+static void mqtt_handle_data_cases(const char *topic, int tlen, const char *data, int dlen)
 {
     (void)topic; (void)tlen; (void)data; (void)dlen;
 ${collectSlot(rendered, 'mqtt_command_cases', 4)}
     zc_entities_dispatch(topic, tlen, data, dlen);
+    zc_topics_dispatch(topic, tlen, data, dlen);
+}
+
+static void mqtt_handle_data(const char *topic, int tlen, const char *data, int dlen)
+{
+    app_driver_take_refusal(NULL);
+    mqtt_handle_data_cases(topic, tlen, data, dlen);
+    /* A command the param's guard refused was echoed as done by its case:
+     * report the real value after it (app_driver_take_refusal). */
+    app_driver_param_id_t zc_refused;
+    if (app_driver_take_refusal(&zc_refused) && app_driver_param_seen(zc_refused)) {
+        app_driver_param_val_t zc_now = {};
+        app_driver_get_param(zc_refused, &zc_now);
+        mqtt_driver_cb(zc_refused, zc_now, APP_DRIVER_SOURCE_LOCAL, NULL);
+    }
 }
 
 static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -4287,6 +4885,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t event_i
             zc_mqtt_publish(s_status_topic, "online", 0, 1, true);
 ${devCalls.join('\n')}
             zc_entities_on_connected();
+            zc_topics_on_connected();
             app_mqtt_on_connected();
             mqtt_on_event(1);
             break;
@@ -4699,10 +5298,13 @@ static model_iface_data_t *s_mn_data = NULL;
 
 ${collectSlot(rendered, 'audio_statics')}
 
-/* Recognized phrase -> hardware. Device types own the cases. */
-static void audio_apply_command(int phrase_id)
+/* Recognized command -> hardware. Device types own the cases, keyed by the
+ * command id each phrase was registered with (esp_mn_commands_add) — not
+ * MultiNet's phrase_id, which is the phrase's index in its list and differs
+ * once a second device or a synonym phrase is registered. */
+static void audio_apply_command(int command_id)
 {
-    switch (phrase_id) {
+    switch (command_id) {
 ${collectSlot(rendered, 'audio_command_cases', 4)}
     default:
         break;
@@ -4710,7 +5312,7 @@ ${collectSlot(rendered, 'audio_command_cases', 4)}
     /* Reached only when no case claimed the phrase — every device-type case
      * returns. A phrase registered with no matching case means the block's
      * audio_commands_register and audio_command_cases disagree. */
-    ESP_LOGW(TAG, "phrase %d recognized but no device type claims it", phrase_id);
+    ESP_LOGW(TAG, "command %d recognized but no device type claims it", command_id);
 }
 
 /* Listening-state transitions. Behavior blocks hook these via
@@ -4786,8 +5388,8 @@ static void audio_detect_task(void *arg)
         if (st == ESP_MN_STATE_DETECTED) {
             esp_mn_results_t *mn = s_mn->get_results(s_mn_data);
             if (mn && mn->num > 0) {
-                ESP_LOGI(TAG, "command phrase %d", mn->phrase_id[0]);
-                audio_apply_command(mn->phrase_id[0]);
+                ESP_LOGI(TAG, "command %d (phrase %d)", mn->command_id[0], mn->phrase_id[0]);
+                audio_apply_command(mn->command_id[0]);
             }
         } else if (st == ESP_MN_STATE_TIMEOUT) {
             ESP_LOGI(TAG, "no command heard — sleeping until next wake word");
@@ -4967,6 +5569,13 @@ extern "C" {
  * Returns NULL on failure. */
 button_handle_t app_button_get_or_create(int gpio_num, int active_level, int long_press_ms);
 
+/* The factory-reset hold armed on a registry button (behaviors/
+ * factory_reset_long_press records it), so a control button on the same pin
+ * can toggle on any press released before it instead of on the click alone.
+ * app_button_reset_hold_ms() is 0 for a button with no reset hold. */
+void app_button_set_reset_hold(button_handle_t handle, int hold_ms);
+int app_button_reset_hold_ms(button_handle_t handle);
+
 #ifdef __cplusplus
 }
 #endif
@@ -4982,6 +5591,7 @@ static const char *TAG = "button_registry";
 typedef struct {
     int gpio_num;
     button_handle_t handle;
+    int reset_hold_ms;
 } app_button_entry_t;
 
 static app_button_entry_t s_buttons[APP_BUTTON_REGISTRY_MAX];
@@ -5015,9 +5625,28 @@ button_handle_t app_button_get_or_create(int gpio_num, int active_level, int lon
     }
     s_buttons[s_button_count].gpio_num = gpio_num;
     s_buttons[s_button_count].handle = handle;
+    s_buttons[s_button_count].reset_hold_ms = 0;
     s_button_count++;
     ESP_LOGI(TAG, "created shared button device on GPIO %d", gpio_num);
     return handle;
+}
+
+void app_button_set_reset_hold(button_handle_t handle, int hold_ms)
+{
+    for (int i = 0; i < s_button_count; i++) {
+        if (s_buttons[i].handle == handle) {
+            s_buttons[i].reset_hold_ms = hold_ms;
+            return;
+        }
+    }
+}
+
+int app_button_reset_hold_ms(button_handle_t handle)
+{
+    for (int i = 0; i < s_button_count; i++) {
+        if (s_buttons[i].handle == handle) return s_buttons[i].reset_hold_ms;
+    }
+    return 0;
 }
 `
 
@@ -5050,7 +5679,7 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
   // Group behaviors that emit app_logic code by category, preserving order.
   const groups = new Map<string, RenderedInstance[]>()
   for (const r of rendered) {
-    if (!(r.slots['logic_statics'] ?? '').trim() && !(r.slots['logic_init'] ?? '').trim()) continue
+    if (!(r.slots['logic_statics'] ?? '').trim() && !(r.slots['logic_init'] ?? '').trim() && !(r.slots['logic_start'] ?? '').trim()) continue
     const cat = logicCategory(r.block)
     if (!groups.has(cat)) groups.set(cat, [])
     groups.get(cat)!.push(r)
@@ -5058,6 +5687,7 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
   const parts: Array<{ name: string; content: string }> = []
   const calls: string[] = []
   const decls: string[] = []
+  const startCalls: string[] = []
   for (const [cat, members] of groups) {
     const lines = [
       `#include "app_logic.h"`,
@@ -5068,13 +5698,15 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
     if (includes) lines.push(includes)
     lines.push('')
     const innerCalls: string[] = []
+    const innerStarts: string[] = []
     const used = new Set<string>()
     let usesTag = false
     const bodyLines: string[] = []
     for (const r of members) {
       const statics = (r.slots['logic_statics'] ?? '').trim()
       const initRaw = (r.slots['logic_init'] ?? '').trim()
-      usesTag = usesTag || /\bTAG\b/.test(`${statics} ${initRaw}`)
+      const startRaw = (r.slots['logic_start'] ?? '').trim()
+      usesTag = usesTag || /\bTAG\b/.test(`${statics} ${initRaw} ${startRaw}`)
       const slug = (r.prefix || r.block.id.split('/').pop() || 'b').toLowerCase().replace(/[^a-z0-9_]/g, '_')
       let name = slug
       for (let n = 2; used.has(name); n++) name = `${slug}_${n}`
@@ -5085,13 +5717,22 @@ export function genAppLogic(rendered: RenderedInstance[]): AppLogicOutput {
         bodyLines.push(`static void zc_${name}_init(void)`, '{', indentText(unwrapInitBody(r.slots['logic_init']), 4), '}', '')
         innerCalls.push(`    zc_${name}_init();`)
       }
+      if (startRaw) {
+        bodyLines.push(`static void zc_${name}_start(void)`, '{', indentText(unwrapInitBody(r.slots['logic_start']), 4), '}', '')
+        innerStarts.push(`    zc_${name}_start();`)
+      }
     }
     if (usesTag) lines.push(`static const char *TAG = "${cat}";`, '')
     lines.push(...bodyLines)
     lines.push(`void ${cat}_logic_init(void)`, '{', ...innerCalls, '}', '')
-    parts.push({ name: `${cat}.cpp`, content: lines.join('\n') })
     calls.push(`    ${cat}_logic_init();`)
     decls.push(`void ${cat}_logic_init(void);`)
+    if (innerStarts.length > 0) {
+      lines.push(`void ${cat}_logic_start(void)`, '{', ...innerStarts, '}', '')
+      startCalls.push(`    ${cat}_logic_start();`)
+      decls.push(`void ${cat}_logic_start(void);`)
+    }
+    parts.push({ name: `${cat}.cpp`, content: lines.join('\n') })
   }
   // Shared button registry: when any block creates an iot_button device, emit
   // one extra part (gets the deduped logic includes + auto-added to SRCS like
@@ -5127,6 +5768,13 @@ ${calls.join('\n')}
 
     ESP_LOGI(TAG, "Composed behaviors initialized");
     return ESP_OK;
+}
+
+/* After app_logic_init(): what the composed behaviors do once the product's
+ * own logic is up and every saved value is restored (logic_start slots). */
+esp_err_t zc_behaviors_start(void)
+{
+${startCalls.map(c => `${c}\n`).join('')}    return ESP_OK;
 }
 `,
   })
@@ -5180,7 +5828,7 @@ async function applyCmakePrivRequires(outDir: string, rendered: RenderedInstance
     }
     const extrasList = [...set].join(' ')
     const updated = body.replace(
-      /(PRIV_REQUIRES\s+)([^\n)]*)/,
+      /^(\s*PRIV_REQUIRES\s+)([^\n)]*)/m,
       (_match, prefix: string, existing: string) => {
         const have = new Set(existing.trim().split(/\s+/).filter(Boolean))
         for (const e of set) have.add(e)
@@ -5662,7 +6310,7 @@ function substituteValue(node: unknown, ctx: Record<string, unknown>): unknown {
  *  build, not quietly produce a tree that looks like the block never had a
  *  mapping. */
 /** The first failed `bmgr.requires` guard of `block` for this instance's
- *  `cfg`, as the message the writer sees — or null when every guard holds.
+ *  `cfg`, as the message the product's author sees — or null when every guard holds.
  *  A malformed guard (no cfg/equals/reason, or a cfg the block does not
  *  declare) is a block-author error and throws, as it always did. */
 export function bmgrGuardMiss(block: Block, cfg: Record<string, unknown>, where: string, bmgrBoard: string): string | null {

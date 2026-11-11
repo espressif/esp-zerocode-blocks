@@ -40,7 +40,7 @@ test('zigbee resync never replays a controller command', async () => {
     assert.match(body, /zigbee_driver_cb\([^;]*ZB_SOURCE_RESYNC, NULL\)/, 'resync passes its own source')
     assert.match(body, /if \(!app_driver_param_seen\(/, 'resync skips params never written')
     // every command a controller case sends is guarded against the replay
-    const cb = src.slice(src.indexOf('static void zigbee_driver_cb'))
+    const cb = src.slice(src.indexOf('static void zigbee_driver_cb(\n'))
     const cbBody = cb.slice(0, cb.indexOf('\n}\n'))
     const guards = cbBody.match(/^\s*if \(param_id == .*\{$/gm) ?? []
     assert.ok(guards.length >= 2, 'controller cases rendered')

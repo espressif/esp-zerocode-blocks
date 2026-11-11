@@ -133,12 +133,25 @@ int main(void)
                 if (q.key[j][0] && strcmp(q.key[j], q.key[l]) == 0) { CHECK(false); j = q.n; break; }
     }
 
+    /* A send answer: delivered, retried, held for the owner, or dropped so it
+       cannot block every message behind it. */
+    CHECK(tg_send_verdict(200, "", 0) == TG_SENT);
+    CHECK(tg_send_verdict(429, "", 0) == TG_RETRY);
+    CHECK(tg_send_verdict(401, "", 50) == TG_WAIT_OWNER);
+    CHECK(tg_send_verdict(403, "{\"description\":\"Forbidden: bot was blocked by the user\"}", 50) == TG_WAIT_OWNER);
+    CHECK(tg_send_verdict(400, "{\"description\":\"Bad Request: chat not found\"}", 50) == TG_WAIT_OWNER);
+    CHECK(tg_send_verdict(400, "{\"description\":\"Bad Request: message is too long\"}", 0) == TG_DROP);
+    CHECK(tg_send_verdict(413, "", 0) == TG_DROP);
+    CHECK(tg_send_verdict(500, "", 0) == TG_RETRY);
+    CHECK(tg_send_verdict(502, "", TG_MAX_SERVER_FAILS - 2) == TG_RETRY);
+    CHECK(tg_send_verdict(502, "", TG_MAX_SERVER_FAILS - 1) == TG_DROP);
+
     if (fails == 0) printf("ok\n");
     return fails == 0 ? 0 : 1;
 }
 `
 
-test('the keyed queue replaces, drops keyed first and keeps the one-off', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
+test('the keyed queue replaces, drops keyed first and keeps the one-off; a refused message is dropped, never retried forever', { skip: !haveCxx && 'no host C++ compiler' }, (t) => {
   const src = readFileSync(SLOT, 'utf-8')
   const m = src.match(/\/\* tg-queue: begin \*\/\n([\s\S]*?)\/\* tg-queue: end \*\//)
   assert.ok(m, 'tg-queue markers in logic_statics.c')

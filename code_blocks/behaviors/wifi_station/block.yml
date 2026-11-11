@@ -5,7 +5,9 @@ description: >-
   reconnects with backoff after every drop. Compose it
   under any block that needs the internet (behaviors/telegram_notify) when no
   framework brings up Wi-Fi. Beside one that does (matter, rainmaker, mqtt,
-  agents, aws_iot) it stands aside at run time and is not needed.
+  agents) it stands aside at run time and is not needed; beside aws_iot alone,
+  espnow, or a web UI that is its own access point (webui alone) the product
+  is refused.
 
 # RUNTIME OWNERSHIP. It runs after every framework's init, so if esp_wifi is
 # already initialised somebody else owns the radio: it logs that and does
@@ -41,7 +43,7 @@ onboarding:
     commands:
       - "wifi-set <ssid> [password]"
       - "wifi-status"
-    note: "Beside a framework that brings up Wi-Fi (matter, rainmaker, mqtt, agents, aws_iot) the network is onboarded through that framework; wifi-setup still stores a network but does not join it."
+    note: "Beside a framework that brings up Wi-Fi (matter, rainmaker, mqtt, agents) the network is onboarded through that framework; wifi-setup still stores a network but does not join it. aws_iot onboards its own network (aws-setup), so it is never composed beside it."
 
 console_commands:
   - "wifi-setup"

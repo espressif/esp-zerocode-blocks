@@ -9,9 +9,36 @@ params:
     type: int
     default: 0
     description: 0 = active-low (pull-up), 1 = active-high
+  toggle_before_reset:
+    type: bool
+    default: true
+    description: >-
+      With a factory-reset hold on the same pin (behaviors/factory_reset_long_press,
+      e.g. 10 s): any press released before the hold toggles the param exactly
+      once, at its release (a short click at the end of the click), and a press
+      that reaches the reset does not. Without it a press held past the
+      button's long-press time (1.5-2 s) toggled nothing. A double press is
+      never a toggle. No effect without a reset hold on the pin (the click
+      toggles, as before); false keeps the click-only toggle beside a hold.
 
 driver_params:
   target_param:
     type: bool
     required: true
     description: Driver param ID this button toggles (must be boolean)
+  press_param:
+    type: u8
+    required: false
+    description: >-
+      Optional. A driver param FIRED with value 1 on every press, at the
+      moment it goes down, whatever the gesture becomes — an event, so two
+      presses are two notifications (a ring, a count, scene_button's
+      position_param).
+
+facts:
+  wake_press: "A press that wakes the device from deep sleep counts: when this pin woke it (ext1 or the deep-sleep GPIO wakeup) and the button is already released at boot, that press is delivered once, as a click, after app_logic_init() and every restored value — product code never re-reads the pin after boot to guess what woke it."
+  every_press: "Something that should happen on EVERY press — a ring, a count — is press_param: it fires once per press as the button goes down, so a quick second press or a hold is never lost."
+  toggle_until_reset: "With behaviors/factory_reset_long_press on the same pin, any press released before its hold toggles once and a press that reaches the hold resets without toggling (toggle_before_reset, on by default) — \"press to toggle, hold N s to reset\" needs no button code of the product's own."
+
+cmake_priv_requires:
+  app_logic: [esp_driver_gpio]

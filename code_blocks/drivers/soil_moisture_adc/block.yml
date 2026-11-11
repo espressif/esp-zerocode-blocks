@@ -71,6 +71,7 @@ console_commands:
   - "soil-cal show|dry|wet|reset [probe]"
 
 facts:
+  adc_unit_shared: "The ADC unit belongs to the block, which publishes the reading on its param; product code reads that param (or sets poll_interval_ms for a faster cadence) and never calls adc_oneshot_new_unit on the same unit — the second claim fails."
   calibration: "The moisture percent is a straight line between a dry reading (probe in air) and a wet reading (probe in water), so it is a relative wetness for that probe, not a laboratory volumetric water content; the firmware starts from typical values and each probe should be calibrated once."
   calibrating: "The owner calibrates over the USB serial console with no rebuild: with the probe in dry air type soil-cal dry, with it in a glass of water type soil-cal wet; soil-cal show prints the raw reading, both points and the percent, and soil-cal reset returns to the built-in points (with several probes, each command takes the probe's name)."
   calibration_kept: "The calibration is saved on the device, so it survives reboots and power cuts, and a factory reset clears it back to the built-in points."

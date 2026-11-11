@@ -22,6 +22,14 @@ __attribute__((weak)) void app_factory_reset_hook(void)
 {
 }
 
+__attribute__((weak)) void app_factory_reset_hold_started(void)
+{
+}
+
+__attribute__((weak)) void app_factory_reset_hold_cancelled(void)
+{
+}
+
 esp_err_t app_utils_factory_reset(void)
 {
     ESP_LOGW("factory_reset", "factory reset: product hook, then erasing NVS");

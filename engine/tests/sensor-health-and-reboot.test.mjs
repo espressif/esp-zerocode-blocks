@@ -171,6 +171,13 @@ static esp_err_t nvs_get_u8(nvs_handle_t, const char *, uint8_t *v) { if (!g_nvs
 static esp_err_t nvs_set_u8(nvs_handle_t, const char *, uint8_t v) { g_nvs_has = true; g_nvs_val = v; return ESP_OK; }
 static esp_err_t nvs_commit(nvs_handle_t) { return ESP_OK; }
 static void nvs_close(nvs_handle_t) {}
+typedef int portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(m) (void)(m)
+#define portEXIT_CRITICAL(m) (void)(m)
+/* The bus's poll task: the block writes NVS from it, once a second here. */
+static void (*g_poll_cb)(void *) = NULL;
+static esp_err_t app_driver_poll_every(void (*cb)(void *), void *, uint32_t) { g_poll_cb = cb; return ESP_OK; }
 `
 
 function cycProgram(resume) {
@@ -192,6 +199,7 @@ static void seconds(int n, uint16_t level)
         app_driver_param_val_t v = { .u16 = level };
         app_driver_set_param(PARAM_ACTIVITY, v, 0);
         g_timer_cb(NULL);
+        if (g_poll_cb) g_poll_cb(NULL);
     }
 }
 

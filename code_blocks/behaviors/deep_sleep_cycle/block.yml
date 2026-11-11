@@ -19,9 +19,9 @@ description: >-
 # each sleep the pin is armed for the level it is NOT at now: a closed contact
 # arms "wake on open", an open one "wake on close". A change while going to
 # sleep therefore wakes it at once instead of being lost. Only RTC/LP pins can
-# wake a chip (e.g. 0-5 on the C3, 0-7 on the C6, 0-21 on the S3); a pin that
-# cannot is logged at boot, and if no pin could be armed it wakes hourly so it
-# is never asleep for good. The pin is read here and published by an input
+# wake a chip: 0, 2, 4, 12-15, 25-27, 32-39 on the ESP32, 0-5 on the C3, 0-6 on
+# the C5, 0-7 on the C6 and S31, 7-14 on the H2, 0-21 on the S3, 0-15 on the P4.
+# Any other wake pin stops the build. The pin is read here and published by an input
 # driver (drivers/gpio_input_sensor) on the same GPIO, with the same pull.
 #
 # PULL-UP CURRENT. A contact closed against a pull-up conducts the whole time
@@ -62,7 +62,8 @@ params:
     default: -1
     description: >-
       Pin whose change wakes the device (the contact's GPIO); -1 for none
-      (heartbeat only). Must be an RTC/LP pin the chip can wake from.
+      (heartbeat only). Must be an RTC/LP pin the chip can wake from (listed
+      above); any other pin stops the build.
   wake_gpio_2:
     type: int
     default: -1

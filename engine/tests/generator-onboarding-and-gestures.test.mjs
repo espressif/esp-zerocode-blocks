@@ -121,8 +121,8 @@ test('aws_iot ships a guided Wi-Fi aws-setup over a public setter, and its ident
   assert.match(read('components/app_aws_iot/CMakeLists.txt'), /"zc_aws_config\.cpp"/)
   // The last will: a {thing} template substituted at EACH connect and passed
   // to MQTT_Connect; plus the
-  // retained publish its "online" counterpart needs. Three of three writers
-  // that reached it hand-added a will to this component before it existed.
+  // retained publish its "online" counterpart needs (before it existed, a
+  // product hand-added a will to this component).
   assert.match(header, /esp_err_t app_aws_iot_set_will\(const char \*topic, const char \*payload, uint8_t qos, bool retain\);/)
   assert.match(header, /esp_err_t app_aws_iot_publish_retained\(/)
   const agent = read('components/app_aws_iot/zc_aws_agent.cpp')
@@ -178,7 +178,7 @@ test('board_button: double click, long press and a factory-reset hold, on the bo
   assert.match(control, /iot_button_set_param\(btn_btn, BUTTON_SHORT_PRESS_TIME_MS, \(void \*\)\(intptr_t\)350\)/)
   assert.match(control, /btn_lp\.long_press\.press_time = 2000;/)
   assert.match(control, /btn_fr\.long_press\.press_time = 6000;[\s\S]*btn_factory_reset_cb/)
-  assert.match(control, /factory reset"\);\s*app_utils_factory_reset\(\);/)
+  assert.match(control, /factory reset"\);\s*if \(app_utils_factory_reset\(\) != ESP_OK\)/)
   // still NO pin and no second device on the board's line
   assert.ok(!/app_button_get_or_create|gpio_config/.test(code(control)))
 })
@@ -204,7 +204,9 @@ test('board_button with no target param leaves every gesture to the product', as
   const control = read('components/app_logic/control.cpp')
   assert.ok(!control.includes('#define KEY_SINGLE_CLICK_TOGGLES'))
   assert.ok(!/app_driver_set_param/.test(control.slice(control.indexOf('key_board_button_cb'))), 'a click toggles nothing')
-  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    key_on_single_click\(\);/)
+  assert.match(control, /static void key_click\(void\)\n\{\n    key_on_single_click\(\);\n\}/)
+  assert.match(control, /#define KEY_TOGGLE_BEFORE_RESET 0\n/, 'no target: the click is the click, nothing waits for the press end')
+  assert.match(control, /static void key_board_button_cb\(void \*arg, void \*usr_data\)\n\{\n    \(void\)arg; \(void\)usr_data;\n    if \(KEY_TOGGLE_BEFORE_RESET\) return;[^\n]*\n    key_click\(\);/)
 })
 
 /* ── the board's own LED: colour ─────────────────────────────────────── */
