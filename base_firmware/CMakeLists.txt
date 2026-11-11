@@ -34,6 +34,14 @@ add_compile_options(-fpermissive)
 # an agent's own idiomatic code from hard-failing a build.
 add_compile_options(-Wno-error=missing-field-initializers)
 
+# format-truncation is demoted for the same reason: it comes from GCC's value
+# ranges at -Os, so it fires on an snprintf into a buffer GCC cannot prove is
+# large enough — usually correct code, and invisible to a clang-based check
+# before the build. It stays a warning in the build log. The other optimizer
+# diagnostics (maybe-uninitialized, stringop-truncation) stay errors: they
+# point at real defects often enough to stop a build.
+add_compile_options(-Wno-error=format-truncation)
+
 # Third-party source fetched by git_clone (and any repo the platform pre-installs)
 # lives in ../third_party/<name>, a SIBLING of this firmware tree. It is a
 # sibling on purpose: apply_template deletes and recreates the firmware dir, so
