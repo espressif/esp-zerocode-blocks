@@ -257,6 +257,42 @@ test('a board naming its panel something else is still found, and called by that
   assert.ok(!cpp.includes('lvgl_port_add_touch'), 'a touch the board does not declare is not invented')
 })
 
+/* ── panels that need 2-pixel-aligned draw windows ───────────────────── */
+
+test('a co5300 panel gets the even-area rounder, or its text renders slanted', async (t) => {
+  const { paths, outDir } = scaffold(t, { boardDevices: PANEL_AND_TOUCH })
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  const cpp = appDisplay(outDir)
+  assert.match(cpp, /static void board_lcd_round_to_even\(lv_area_t \*area\)/)
+  assert.match(cpp, /board_disp_cfg\.rounder_cb = board_lcd_round_to_even;/)
+  // Wired before the display is added: lvgl_port_add_disp copies the config.
+  assert.ok(cpp.indexOf('rounder_cb') < cpp.indexOf('lvgl_port_add_disp'))
+})
+
+test('the panel name is matched without regard to case', async (t) => {
+  const { paths, outDir } = scaffold(t, {
+    boardDevices: ['devices:', '  - name: display_lcd', '    type: display_lcd', '    chip: CO5300', ''].join('\n'),
+  })
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  assert.match(appDisplay(outDir), /board_disp_cfg\.rounder_cb = board_lcd_round_to_even;/)
+})
+
+test('a panel that takes any window gets no rounder', async (t) => {
+  const { paths, outDir } = scaffold(t, {
+    boardDevices: [
+      'devices:',
+      '  - name: display_lcd',
+      '    type: display_lcd',
+      '    chip: st77916',
+      '',
+    ].join('\n'),
+  })
+  await generate(paths, { product: product(), board: boardFile('demo_board'), chip: 'esp32s3', outDir })
+  const cpp = appDisplay(outDir)
+  assert.match(cpp, /lvgl_port_add_disp\(&board_disp_cfg\)/)
+  assert.ok(!cpp.includes('round_to_even'), 'no rounder for a panel that does not need one')
+})
+
 /* ── nothing provides a panel ────────────────────────────────────────── */
 
 test('a display product with no panel at all fails GENERATION, not the bench', async (t) => {

@@ -46,7 +46,7 @@ cmake_priv_requires:
 bmgr:
   init: board_manager
   provided_by: display_lcd
-  replaces_slots: [display_node_init, display_includes, config_defines]
+  replaces_slots: [display_node_init, display_includes, display_statics, config_defines]
 
 params:
   spi_host:

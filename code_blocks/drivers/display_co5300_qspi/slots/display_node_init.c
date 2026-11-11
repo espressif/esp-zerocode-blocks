@@ -54,6 +54,7 @@
     {{prefix_lc}}_disp_cfg.color_format = LV_COLOR_FORMAT_RGB565;
     {{prefix_lc}}_disp_cfg.flags.buff_dma = 1;
     {{prefix_lc}}_disp_cfg.flags.swap_bytes = 1;
+    {{prefix_lc}}_disp_cfg.rounder_cb = {{prefix_lc}}_round_to_even;
     s_disp = lvgl_port_add_disp(&{{prefix_lc}}_disp_cfg);
     ESP_LOGI(TAG, "CO5300 {{prefix_lc}}: %dx%d on QSPI host %d",
              {{prefix}}_LCD_HRES, {{prefix}}_LCD_VRES, {{prefix}}_LCD_SPI_HOST);
