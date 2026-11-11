@@ -11,6 +11,14 @@ cmake_priv_requires:
 
 params:
   poll_interval_ms: { type: int, default: 5000 }
+  rescan_interval_ms:
+    type: int
+    default: 10000
+    description: "While no probe is bound (none found at boot, or dropped after a run of failed reads), the bus is searched again this often (rounded to whole polls), so a probe plugged in or recovering later reports without a reboot"
+  rebind_after_failures:
+    type: int
+    default: 3
+    description: "Consecutive failed reads after which the probe handle is released and the bus searched again on the next poll"
   bus_handle_fn:
     type: string
     required: true
@@ -25,3 +33,7 @@ driver_params:
     type: bool
     required: false
     description: "Optional sensor-health bool: true after a successful read, false after a failed one (or no probe). Without it a dead probe keeps its last reading on the bus."
+
+facts:
+  probe_late_or_lost: "A probe missing at boot, or one that stops answering for rebind_after_failures reads, is searched for again every rescan_interval_ms (10 s by default), so it reports again without a reboot; until it does, no temperature is published (the last reading stays) and status_param, if wired, reads false."
+  sensor_health: "Every good read writes the temperature, but an unchanged one is not notified, so a steady 12.0 °C looks like a dead probe: wire status_param (true after a good read, false after a failed one or no probe) or ask app_driver_param_written_us(temp_param), never treat an unchanged value as stale."

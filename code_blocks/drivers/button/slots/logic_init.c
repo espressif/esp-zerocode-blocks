@@ -7,6 +7,9 @@
         ESP_LOGE(TAG, "Failed to create button {{prefix_lc}}");
     } else {
         iot_button_register_cb(s_{{prefix_lc}}_button, BUTTON_SINGLE_CLICK, NULL, {{prefix_lc}}_button_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_button, BUTTON_PRESS_DOWN, NULL, {{prefix_lc}}_press_down_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_button, BUTTON_PRESS_UP,   NULL, {{prefix_lc}}_press_up_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_button, BUTTON_PRESS_END,  NULL, {{prefix_lc}}_press_end_cb, NULL);
         ESP_LOGI(TAG, "Button {{prefix_lc}} initialized (GPIO %d)", {{prefix}}_BUTTON_GPIO);
     }
 }

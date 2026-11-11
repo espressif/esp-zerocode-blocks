@@ -2,6 +2,10 @@
 #define ZC_PROV_OWN_ADDR    0x0001
 #define ZC_PROV_GROUP_ADDR  {{cfg.group_addr}}
 #define ZC_PROV_MAX_NODES   {{cfg.max_nodes}}
+#include "sdkconfig.h"
+#if ZC_PROV_MAX_NODES < 1 || ZC_PROV_MAX_NODES > CONFIG_BLE_MESH_MAX_PROV_NODES
+#error "ble_mesh_provisioner: max_nodes must be 1..CONFIG_BLE_MESH_MAX_PROV_NODES (the stack cannot hold more provisioned nodes)"
+#endif
 #define ZC_PROV_APP_KEY_HEX "{{cfg.app_key}}"
 #define ZC_PROV_MSG_TTL     7
 #define ZC_PROV_MAX_RETRIES 3

@@ -94,6 +94,16 @@ def expand_manifest(block_dir: pathlib.Path) -> str:
             lines[insert_at:insert_at] = moved
         else:
             lines.extend(['params:'] + moved)
+    # A block that also declares its own param_refs (a param whose type is
+    # chosen by a cfg value) gets ONE section: the driver_params refs join it.
+    # Appending a second section made the YAML invalid and the block vanished.
+    prb = _section_bounds(lines, 'param_refs') if refs else None
+    if prb:
+        at = prb[1]
+        while at > prb[0] + 1 and not lines[at - 1].strip():
+            at -= 1
+        lines[at:at] = [f'  {n}: {t}' for n, t in refs.items()]
+        refs = {}
     body = '\n'.join(lines)
     body = re.sub(r'\n{3,}', '\n\n', body).rstrip('\n') + '\n'
 

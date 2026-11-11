@@ -7,6 +7,7 @@ chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
 # connection is the point. On the ESP32-P4 the radio is a companion chip over
 # ESP-Hosted; a product with no radio framework gets no hosted stack at all.
 radio: true
+provides_internet: true
 
 # This is a "framework" block. The generator processes product.frameworks:
 # [rainmaker, ...] by loading it, copying its components/ subtree into the
@@ -31,4 +32,6 @@ facts:
   in_the_app: "Each part of the product (light, plug, sensor…) appears as its own tile named after its label, renameable in the app; switches, remotes and scene buttons have no RainMaker form and do not appear."
   offline: "The app reaches the device only through the RainMaker cloud (no local control, schedules or scenes), so app control needs internet, while the device's own buttons and rules keep working offline."
   time: "Once online, the device knows the real time of day."
+  restored_state: "A device's on/off shown in the app is restored and applied again at power-up, so the last command repeats after a power cut; a momentary action from the app (a door-opener press, a feed) is a setting tile of the product's own instead, which is never replayed."
+  own_settings: "The product's own settings and readings — a mode switch, a limit, a time of day for a schedule (shown as HH:MM text) — can each appear in the app as a tile of their own; a value set there is kept by the product, and nothing set in the app is replayed by itself at the next power-up."
   reset: "A wrong Wi-Fi password during setup sends the device back to waiting for setup after 3 tries; the framework adds no reset, so moving to another Wi-Fi or account needs a reset added to the product (a button or a power-cycle pattern)."

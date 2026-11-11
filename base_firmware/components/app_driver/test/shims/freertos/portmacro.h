@@ -5,8 +5,20 @@
  */
 
 #pragma once
-/* Host-test shim: single-threaded test, critical sections are no-ops. */
-typedef int portMUX_TYPE;
+/* Host-test shim: a critical section is a real (recursive) lock, so tests that
+ * write from several std::threads exercise the bus's locking for real. */
+#include <mutex>
+struct portMUX_TYPE {
+    std::recursive_mutex m;
+    portMUX_TYPE(int) {}
+};
 #define portMUX_INITIALIZER_UNLOCKED 0
-#define portENTER_CRITICAL(mux) ((void)(mux))
-#define portEXIT_CRITICAL(mux)  ((void)(mux))
+#define portENTER_CRITICAL(mux) ((mux)->m.lock())
+#define portEXIT_CRITICAL(mux)  ((mux)->m.unlock())
+#define portMAX_DELAY 0xffffffffu
+#define pdTRUE  1
+#define pdFALSE 0
+#define pdPASS  1
+typedef int BaseType_t;
+typedef unsigned int UBaseType_t;
+typedef unsigned int TickType_t;

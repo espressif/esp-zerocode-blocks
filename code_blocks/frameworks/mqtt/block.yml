@@ -7,6 +7,7 @@ chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
 # connection is the point. On the ESP32-P4 the radio is a companion chip over
 # ESP-Hosted; a product with no radio framework gets no hosted stack at all.
 radio: true
+provides_internet: true
 
 # This is a "framework" block. The generator processes product.frameworks:
 # [mqtt] by loading it, copying its components/ subtree into the output, and
@@ -39,6 +40,21 @@ radio: true
 #     zerocode/<node>/<instance>/state    device state (retained)
 #     zerocode/<node>/<instance>/set      commands to the device
 #
+# PUBLISH WITH zc_mqtt_publish(topic, data, len, qos, retain), never
+# esp_mqtt_client_publish: it only queues, and one task sends the queue in
+# order. mqtt_driver_cb_cases run on whatever task changed the param (often
+# the esp_timer task), which must not wait on a stalled broker link.
+#
+# REPUBLISH: app_mqtt_set_republish_s (app_mqtt.h, behaviors/mqtt_republish)
+# re-sends the last retained message on every state topic on a schedule, from
+# the framework's own task. Off unless set. app_mqtt_set_republish_only_on_schedule
+# holds state changes for that schedule (first value and reconnects excepted).
+#
+# PRODUCT ENTITIES: app_mqtt_entity_add / _set_state / _on_command and the
+# weak app_mqtt_on_connected hook (app_mqtt.h) let product code add Home
+# Assistant entities no device type provides, on the same device, under
+# zerocode/<node>/product/<object_id>/{state,set}.
+#
 # NO {{ }} IN DISCOVERY PAYLOADS: Home Assistant value_template syntax is
 # jinja ({{ value }}), which collides with THIS template engine — a literal
 # {{ in a slot file throws at generation. Publish plain values instead;
@@ -63,9 +79,13 @@ onboarding:
 # What the framework gives the owner and cannot do, in words a spec can
 # promise. Copied into every product's seed.
 facts:
+  own_topics: "The product's own topics (not Home Assistant entities) go through app_mqtt_publish / app_mqtt_subscribe (app_mqtt.h) on the framework's one connection; a second MQTT client to the same broker takes the same default client id and the broker drops the two in turn, forever."
   in_the_app: "Home Assistant finds it by itself and shows one device, named \"ZeroCode\" plus the board's 12-character hardware address, with one entity per device type, named by the label the spec gives it."
   entity_kinds: "Each catalog device type appears in Home Assistant as a light, switch, fan, cover, lock, climate, sensor, binary sensor, number or select; a dimmer remote or scene button appears only as triggers for automations, with no state of its own."
   not_announced: "A device type with no MQTT binding (doorbell, chime, light sensor, pressure sensor, heat pump, extractor hood and a few controller types) does not appear in Home Assistant."
   offline: "When it loses power, Wi-Fi or the broker, Home Assistant marks it unavailable only once the broker's keep-alive gives up on it, not the moment it drops; a device that sleeps looks exactly like one that lost power, unless it signs off before sleeping, as behaviors/deep_sleep_cycle does."
   reconnect: "It reconnects to Wi-Fi and the broker by itself, marks itself available again and re-sends each entity's current state, so changes made while it was offline arrive as the latest value, not one by one."
+  product_entities: "Product code can add its own Home Assistant entities on the device (sensor, binary sensor, switch, number, button, select…) with app_mqtt_entity_add, app_mqtt_entity_set_state (a state set first is kept until the add) and app_mqtt_entity_on_command (app_mqtt.h), re-announced on every reconnect; an entity a device type already announces must not be added again, or Home Assistant shows it twice."
+  topics: "The framework names every topic itself (zerocode/<node>/… for state and commands, Home Assistant discovery under homeassistant/…), so a spec describes each entity by name and kind, never by topic string; product entities use zerocode/<node>/product/<object_id>/state and …/set."
+  republish: "A state is sent when it changes, so a sensor polled every few seconds sends every change; for 'report every N minutes' compose behaviors/mqtt_republish with republish_s = N x 60 and only_on_schedule: true, which sends every entity's current state on that schedule and not on each change, and product code never re-sends a value. A sensor's poll interval is how often it is read, a separate setting."
   reset: "A factory reset erases the Wi-Fi and broker settings, so setup runs again, but the device keeps its name and entities in Home Assistant because they come from its hardware address."

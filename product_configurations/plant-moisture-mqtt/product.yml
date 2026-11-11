@@ -3,9 +3,10 @@ name: Plant Moisture Monitor (MQTT)
 description: >-
   Wi-Fi soil moisture monitor for a plant pot — a capacitive probe read on an
   ADC pin, reported to Home Assistant over plain MQTT as a Moisture sensor in
-  percent, discovered automatically the moment the node connects. Configure
-  Wi-Fi + broker over the serial console.
-keywords: [mqtt, home assistant, soil, moisture, plant, capacitive, sensor]
+  percent, plus a float switch in the watering reservoir reported as a
+  "Reservoir empty" problem sensor, both discovered automatically the moment
+  the node connects. Configure Wi-Fi + broker over the serial console.
+keywords: [mqtt, home assistant, soil, moisture, plant, capacitive, sensor, reservoir, float switch]
 
 # Onboarding is the serial console (mqtt-wifi <ssid> <pass>, then
 # mqtt-broker <uri> [user] [pass]) persisted in NVS. The probe is calibrated
@@ -32,6 +33,34 @@ instances:
     cfg:
       label: Soil Moisture
       value_param: APP_DRIVER_PARAM_SOIL_MOISTURE
+
+  # ── Reservoir float switch to GND on GPIO5: closed (low) = empty ──
+  # Its own flag, so a generic binary sensor with class problem (Problem/OK);
+  # water_leak_detector or rain_sensor would read Wet/Dry in Home Assistant.
+  - block: drivers/gpio_input_sensor
+    prefix: RESERVOIR
+    cfg:
+      gpio: 5
+      active_level: 0
+      pull: pullup
+      poll_interval_ms: 500
+      debounce_ms: 200
+      target_param: APP_DRIVER_PARAM_RESERVOIR_EMPTY
+
+  - block: device_types/generic_binary_sensor
+    prefix: RESERVOIR_EMPTY
+    cfg:
+      label: Reservoir empty
+      device_class: problem
+      on_text: Empty
+      off_text: OK
+      value_param: APP_DRIVER_PARAM_RESERVOIR_EMPTY
+
+  # ── A fresh reading every 10 minutes, even while the soil is steady ──
+  - block: behaviors/mqtt_republish
+    prefix: REPORT
+    cfg:
+      republish_s: 600
 
   # ── Status LED: solid = broker connected, breathe = lost ──────────
   - block: drivers/status_led

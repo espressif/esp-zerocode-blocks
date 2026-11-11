@@ -5,6 +5,33 @@
 #if {{prefix}}_DSC_WAKE_GPIO < 0 && {{prefix}}_DSC_HEARTBEAT_MIN <= 0
 #error "deep_sleep_cycle {{prefix}}: no wake source — set wake_gpio or heartbeat_minutes"
 #endif
+/* The pins each chip can wake from deep sleep (its RTC/LP IOs, as ESP-IDF's
+ * rtc_io_channel.h / SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK list them). Any
+ * other pin is refused by every wake API, so the device would sleep through the
+ * contact: that is a wiring mistake, stopped here rather than found in use. */
+#if CONFIG_IDF_TARGET_ESP32
+#define {{prefix}}_DSC_WAKEABLE 0xFF0E00F015ULL /* 0,2,4,12-15,25-27,32-39 */
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define {{prefix}}_DSC_WAKEABLE 0x3FULL         /* 0-5 */
+#elif CONFIG_IDF_TARGET_ESP32C5
+#define {{prefix}}_DSC_WAKEABLE 0x7FULL         /* 0-6 */
+#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32S31
+#define {{prefix}}_DSC_WAKEABLE 0xFFULL         /* 0-7 */
+#elif CONFIG_IDF_TARGET_ESP32H2
+#define {{prefix}}_DSC_WAKEABLE 0x7F80ULL       /* 7-14 */
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define {{prefix}}_DSC_WAKEABLE 0x3FFFFFULL     /* 0-21 */
+#elif CONFIG_IDF_TARGET_ESP32P4
+#define {{prefix}}_DSC_WAKEABLE 0xFFFFULL       /* 0-15 */
+#endif
+#ifdef {{prefix}}_DSC_WAKEABLE
+#if {{prefix}}_DSC_WAKE_GPIO >= 0 && !((1ULL << {{prefix}}_DSC_WAKE_GPIO) & {{prefix}}_DSC_WAKEABLE)
+#error "deep_sleep_cycle {{prefix}}: wake_gpio cannot wake this chip from deep sleep — move the contact to one of its RTC/LP pins (see block.yml)"
+#endif
+#if {{prefix}}_DSC_WAKE_GPIO_2 >= 0 && !((1ULL << {{prefix}}_DSC_WAKE_GPIO_2) & {{prefix}}_DSC_WAKEABLE)
+#error "deep_sleep_cycle {{prefix}}: wake_gpio_2 cannot wake this chip from deep sleep — move the contact to one of its RTC/LP pins (see block.yml)"
+#endif
+#endif
 
 /* Defined by this block's mqtt_* slots in an MQTT product; null otherwise. */
 extern "C" int {{prefix_lc}}_dsc_net_state(void) __attribute__((weak));

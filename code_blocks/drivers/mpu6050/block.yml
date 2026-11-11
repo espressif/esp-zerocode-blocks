@@ -21,8 +21,8 @@ description: >-
 # poll re-probes WHO_AM_I and rewrites the configuration, so the block heals
 # without a reboot instead of reading zeros forever.
 #
-# The poll runs on the shared esp_timer task and never blocks there: one 6-byte
-# read per tick, nothing else.
+# The poll runs on the bus poll task (app_driver_poll_every), which serves
+# every other poll too: one 6-byte read per tick, nothing else.
 
 cmake_priv_requires:
   app_driver: [esp_driver_i2c, esp_timer]

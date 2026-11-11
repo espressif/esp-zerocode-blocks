@@ -24,7 +24,11 @@ typedef struct {
     int32_t dry, wet;            /* in use (an aligned word: the poll reads it whole) */
     uint32_t set;                /* ZC_SOIL_CAL_*_SET: which points the owner set */
     bool (*read_raw)(int samples, int32_t *out);
-    void (*poll)(void);
+    /* Ask for a poll now. It runs on the esp_timer task like every periodic
+     * poll, so the param is only ever written by that one task: a reading
+     * published from the console task could reach listeners after a newer
+     * poll's (the bus notifies outside its lock) and leave a stale value. */
+    void (*poll_soon)(void);
 } zc_soil_probe_t;
 
 typedef struct {
@@ -190,7 +194,7 @@ static int zc_soil_cal_cmd(int argc, char **argv)
     if (err != ESP_OK) {
         printf("%s: could not save to flash (%s) - in use until the next reboot\n", p->name, esp_err_to_name(err));
     }
-    p->poll();  /* publish the new percent now, not at the next poll */
+    p->poll_soon();  /* publish the new percent now, not at the next poll */
     zc_soil_cal_print(p);
     return err == ESP_OK ? 0 : 1;
 }
@@ -238,12 +242,17 @@ static bool {{prefix_lc}}_soil_read_raw(int samples, int32_t *out)
 }
 
 static void {{prefix_lc}}_soil_poll(void);
+static void {{prefix_lc}}_soil_poll_soon(void);
 
 static zc_soil_probe_t s_{{prefix_lc}}_soil_probe = {
     "{{prefix_lc}}", {{prefix}}_SOIL_DRY_RAW, {{prefix}}_SOIL_WET_RAW,
     {{prefix}}_SOIL_DRY_RAW, {{prefix}}_SOIL_WET_RAW, 0,
-    &{{prefix_lc}}_soil_read_raw, &{{prefix_lc}}_soil_poll,
+    &{{prefix_lc}}_soil_read_raw, &{{prefix_lc}}_soil_poll_soon,
 };
+
+/* One-shot twin of the periodic poll timer, for soil-cal: both dispatch on the
+ * esp_timer task, so polls never overlap and readings publish in order. */
+static esp_timer_handle_t s_{{prefix_lc}}_soil_now = NULL;
 
 static void {{prefix_lc}}_soil_poll(void)
 {
@@ -267,4 +276,11 @@ static void {{prefix_lc}}_soil_poll(void)
 static void {{prefix_lc}}_soil_poll_cb(void *arg)
 {
     {{prefix_lc}}_soil_poll();
+}
+
+static void {{prefix_lc}}_soil_poll_soon(void)
+{
+    if (s_{{prefix_lc}}_soil_now == NULL) return;  /* the next periodic poll publishes it */
+    esp_timer_stop(s_{{prefix_lc}}_soil_now);       /* already pending: start it again */
+    esp_timer_start_once(s_{{prefix_lc}}_soil_now, 0);
 }

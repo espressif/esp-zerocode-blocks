@@ -1,4 +1,4 @@
-description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. The device's AWS identity (endpoint, thing name, certificate, key, optional root CA) is device data the flash page asks for; Wi-Fi is onboarded over the console with a guided `aws-setup` (or `aws-wifi`, or app_aws_iot_set_wifi for a custom flow). A presence topic is app_aws_iot_set_will (an MQTT last will whose topic may contain {thing}) plus app_aws_iot_publish_retained for its \"online\". Connectivity only: what gets published is the application's business."
+description: "AWS IoT Core connectivity — brings up the network and holds one mutual-TLS MQTT session to your own AWS account, which any task can publish and subscribe on. The device's AWS identity (endpoint, thing name, certificate, key, optional root CA) is device data written with the firmware; Wi-Fi is onboarded over the console with a guided `aws-setup` (or `aws-wifi`, or app_aws_iot_set_wifi for a custom flow). A presence topic is app_aws_iot_set_will (an MQTT last will whose topic may contain {thing}) plus app_aws_iot_publish_retained for its \"online\". Connectivity only: what gets published is the application's business."
 # Chips this framework has been BUILT for (a real ESP-IDF build of a product
 # using it). CI skips the framework on any other chip; the platform's
 # registry must agree — see CLAUDE.md § Chips.
@@ -11,6 +11,7 @@ description: "AWS IoT Core connectivity — brings up the network and holds one 
 chips: [esp32, esp32c3, esp32c5, esp32c6, esp32s3, esp32s31]
 # Needs a radio? true — an internet connection is the entire point.
 radio: true
+provides_internet: true
 
 # THIS BLOCK IS A PIPE, NOT A DEVICE MODEL.
 #
@@ -20,8 +21,8 @@ radio: true
 # connectivity, and is deliberately somebody else's block.
 #
 # JSON IS ON THE PATH, THOUGH. Every AWS IoT payload is JSON, and when this
-# block shipped no library for it every writer added one — cJSON, 24 times in
-# six weeks — which is now deprecated upstream (unmaintained, open security
+# block shipped no library for it, products added one themselves — usually
+# cJSON, which is now deprecated upstream (unmaintained, open security
 # reports). idf_component.yml therefore carries espressif/json_parser (read:
 # json_parse_start / json_obj_get_*) and espressif/json_generator (write into
 # a caller-owned buffer: json_gen_str_start / json_gen_obj_set_*), both RFC
@@ -55,8 +56,8 @@ radio: true
 # it must be the environment and not -D.
 #
 # ONBOARDING: THE IDENTITY AT FLASH TIME, WI-FI OVER THE CONSOLE. An AWS IoT
-# thing has no commissioning protocol. The platform's flash page asks for the
-# keys under device_data: below and writes them into the fctry partition
+# thing has no commissioning protocol. The keys under device_data: below are
+# written with the firmware into the fctry partition
 # (namespace "zc_aws"); the framework reads them once, at init, and nothing on
 # the device changes them — a new identity is a reflash with device data. Wi-Fi
 # is the console's, persisted in the default NVS partition (namespace "zc_aws"):
@@ -105,9 +106,9 @@ onboarding:
       - "aws-inject <topic> <payload> (testing: delivers the message to the device's own subscribers as if the broker sent it; works offline. Type the JSON as it is, with no quotes around it: aws-inject <topic> {\"power\":\"on\"}. It says how many subscribers it reached.)"
     api: "app_aws_iot_set_wifi, app_aws_iot_configured, app_aws_iot_owns_wifi (app_aws_iot.h); app_console_read_line (app_console.h)"
     note: "Beside Matter or RainMaker, Wi-Fi is onboarded through them: aws-wifi and the setup's Wi-Fi step do not apply."
-  flash: "The flash page asks for the endpoint, thing name, certificate, private key and optional root CA and writes them to the device with the firmware. There is no console command or setter for them: a new identity is a reflash with device data. Wi-Fi comes from aws-setup / aws-wifi (or the transport that owns it)."
+  flash: "The endpoint, thing name, certificate, private key and optional root CA are device data, written to the device with the firmware. There is no console command or setter for them: a new identity is a reflash with device data. Wi-Fi comes from aws-setup / aws-wifi (or the transport that owns it)."
 
-# The per-device identity the flash page asks for, written into the fctry
+# The per-device identity, written with the firmware into the fctry
 # partition under zc_aws (see ONBOARDING above). The PEMs are stored as the
 # file's bytes with no NUL; the loader adds one.
 device_data:
@@ -141,7 +142,7 @@ device_data:
 # What the framework gives the owner and cannot do, in words a spec can
 # promise. Copied into every product's seed.
 facts:
-  aws_account: "In their own AWS account the owner creates an IoT thing, a certificate with its private key (activated and attached to the thing) and an IoT policy attached to the certificate; the certificate and key files are entered on the flash page."
+  aws_account: "In their own AWS account the owner creates an IoT thing, a certificate with its private key (activated and attached to the thing) and an IoT policy attached to the certificate; the certificate and key files become the device data written with the firmware."
   policy: "The policy must let the device connect with its thing name as its ID, publish to every topic the product sends on (plus retain-publish for any it keeps on the broker), and subscribe to and receive on every topic it listens to; AWS drops the connection the moment the device publishes outside the policy."
   endpoint: "The endpoint is the owner's own AWS IoT device data endpoint on port 8883 (or 443); Amazon's root certificate is built in, so a root CA file is needed only for a private endpoint."
   topics: "The framework only connects: it sends and listens on no topics by itself, so the spec names every topic the product uses, and those are exactly the topics the policy must allow."

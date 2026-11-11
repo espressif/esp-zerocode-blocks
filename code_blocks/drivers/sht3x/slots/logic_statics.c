@@ -34,6 +34,17 @@ static esp_err_t {{prefix_lc}}_i2c_attach(void)
     return {{prefix_lc}}_err;
 }
 
+/* Sensirion CRC-8 over one 2-byte word: polynomial 0x31, init 0xFF (datasheet). */
+static uint8_t {{prefix_lc}}_sht3_crc8(const uint8_t *w)
+{
+    uint8_t crc = 0xFF;
+    for (int i = 0; i < 2; i++) {
+        crc ^= w[i];
+        for (int b = 0; b < 8; b++) crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static esp_err_t {{prefix_lc}}_sht3_read(int16_t *t_x100, int16_t *rh_x100)
 {
     /* 0x2400 = single shot, high repeatability, NO clock stretching. The
@@ -54,6 +65,8 @@ static esp_err_t {{prefix_lc}}_sht3_read(int16_t *t_x100, int16_t *rh_x100)
     uint8_t buf[6] = {0};
     err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) return err;
+    /* A corrupted frame publishes as a real reading unless the CRC says no. */
+    if ({{prefix_lc}}_sht3_crc8(&buf[0]) != buf[2] || {{prefix_lc}}_sht3_crc8(&buf[3]) != buf[5]) return ESP_ERR_INVALID_CRC;
     uint16_t t_raw = ((uint16_t)buf[0] << 8) | buf[1];
     uint16_t h_raw = ((uint16_t)buf[3] << 8) | buf[4];
     int32_t t = -4500 + (int32_t)((17500LL * (int32_t)t_raw) / 65535);

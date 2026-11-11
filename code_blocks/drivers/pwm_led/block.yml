@@ -27,3 +27,6 @@ driver_params:
     type: u8
     default: APP_DRIVER_PARAM_BRIGHTNESS
     description: Driver param ID for brightness (0–254)
+
+reacts:
+  driver: "A change of {{cfg.power_param}} or {{cfg.brightness_param}} (0-254) sets the LED PWM duty to brightness when on and to 0 when off; product code writes the params and never drives the LED pin or LEDC channel itself."

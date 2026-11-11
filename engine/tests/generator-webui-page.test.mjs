@@ -50,12 +50,12 @@ function el(tag) {
 }
 
 /** Run the page once against `state`; returns the root and the POSTed URLs. */
-async function runPage(script, state) {
+async function runPage(script, state, activeElement = null) {
   const posts = []
   const root = el('div')
   root.__defineSetter__('textContent', function () { this.children = [] })
   const ctx = {
-    document: { activeElement: null, createElement: el, getElementById: () => root },
+    document: { activeElement, createElement: el, getElementById: () => root },
     fetch: (url, opts) => {
       if (opts && opts.method === 'POST') { posts.push(url); return Promise.resolve({}) }
       return Promise.resolve({ json: () => state })
@@ -81,7 +81,7 @@ const STATE = {
 test('thermostat rows: reading, target as a number in 0.5 °C steps over 5-35 °C, heat-only mode toggle, heating state', () => {
   const cpp = generate(CFG)
   assert.match(cpp, /\{ "Thermostat target \(°C\)", "number", APP_DRIVER_PARAM_HEAT_SETPOINT, "APP_DRIVER_PARAM_HEAT_SETPOINT", 2, 500, 3500, 100, 50 \}/)
-  assert.match(cpp, /\{ "Thermostat heating mode", "toggle", APP_DRIVER_PARAM_SYSTEM_MODE, "APP_DRIVER_PARAM_SYSTEM_MODE", 1, 0, 4, 1, 1 \}/)
+  assert.match(cpp, /\{ "Thermostat heating mode", "toggle", APP_DRIVER_PARAM_SYSTEM_MODE, "APP_DRIVER_PARAM_SYSTEM_MODE", 1, 0, 4, 1 \}/)
   assert.match(cpp, /"binary", APP_DRIVER_PARAM_HEAT_RELAY/)
   assert.match(cpp, /int32_t step;/)
   assert.doesNotMatch(generate({ ...CFG, heating_param: '' }), /heating now/)
@@ -116,6 +116,40 @@ test('a toggle posts its max for on and its min for off (heat-only mode: 4 / 0)'
 test('the server makes any non-min toggle value its max and snaps a stepped value', () => {
   const cpp = generate(CFG)
   assert.match(cpp, /if \(strcmp\(e->kind, "toggle"\) == 0\) raw = \(raw != e->min\) \? e->max : e->min;/)
-  assert.match(cpp, /if \(e->step > 1\) raw = e->min \+ \(\(raw - e->min \+ e->step \/ 2\) \/ e->step\) \* e->step;/)
+  assert.match(cpp, /if \(e->step > 1\) raw = lo \+ \(\(raw - lo \+ e->step \/ 2\) \/ e->step\) \* e->step;/)
   assert.match(cpp, /\\"step\\":%ld/)
+})
+
+test('a focused checkbox does not stop the refresh; a focused slider does', async () => {
+  const script = pageScript(generate(CFG))
+  const box = { tagName: 'INPUT', type: 'checkbox' }
+  assert.equal((await runPage(script, structuredClone(STATE), box)).root.children.length, 4)
+  const range = { tagName: 'INPUT', type: 'range' }
+  assert.equal((await runPage(script, structuredClone(STATE), range)).root.children.length, 0)
+})
+
+test('a reading or target never written yet shows --, not 0', async () => {
+  const cpp = generate(CFG)
+  assert.match(cpp, /\\"seen\\":%s\}/)
+  assert.match(cpp, /app_driver_param_seen\(e->param\) \? "true" : "false"/)
+  const unseen = structuredClone(STATE)
+  unseen.entities[0] = { ...unseen.entities[0], value: 0, seen: false }
+  unseen.entities[1] = { ...unseen.entities[1], value: 0, seen: false }
+  const { root } = await runPage(pageScript(cpp), unseen)
+  assert.equal(find(root, 'Thermostat temperature (°C)').children[1].textContent, '--')
+  assert.equal(find(root, 'Thermostat target (°C)').children[1].children[1].textContent, '--')
+  const seen = structuredClone(STATE)
+  seen.entities[0] = { ...seen.entities[0], value: 0, seen: true }
+  const r2 = await runPage(pageScript(cpp), seen)
+  assert.equal(find(r2.root, 'Thermostat temperature (°C)').children[1].textContent, '0.00')
+  assert.equal(find(r2.root, 'Thermostat target (°C)').children[1].children[1].textContent, '21.4')
+})
+
+test('the server refuses a write to a read-only row (value, binary) before it touches the bus', () => {
+  const cpp = generate(CFG)
+  const body = cpp.slice(cpp.indexOf('static esp_err_t set_post'), cpp.indexOf('static void webui_start_server'))
+  const guard = body.indexOf('if (strcmp(e->kind, "toggle") != 0 && strcmp(e->kind, "slider") != 0 && strcmp(e->kind, "number") != 0 && strcmp(e->kind, "time") != 0) {')
+  assert.ok(guard > 0, 'read-only guard in set_post')
+  assert.match(body.slice(guard, guard + 300), /HTTPD_403_FORBIDDEN, "read-only"\);\s*return ESP_FAIL;/)
+  assert.ok(guard > body.indexOf('strcmp(e->param_name, pname)') && guard < body.indexOf('app_driver_set_param'))
 })

@@ -32,6 +32,20 @@ KINDS = {'behaviors', 'device_types', 'drivers', 'partition-tables',
 errors: list[str] = []
 
 
+# Slot families whose dispatch SENDS something off the device or DRIVES an
+# output — the ones product code would otherwise wire a second time. Reporting
+# families (mqtt/matter/zigbee state, display widgets) are not listed.
+REACTS_REQUIRED = {'driver', 'ble_hid', 'espnow', 'ble_mesh', 'zigbee_action'}
+
+
+def reacts_family(slot: str):
+    """The reacts: key of a dispatch slot (engine reactsKeyOf)."""
+    if slot == 'driver_apply_cases':
+        return 'driver'
+    m = re.match(r'^(.+?)(?:_driver_cb)?_cases$', slot)
+    return m.group(1) if m else None
+
+
 def err(where: str, msg: str) -> None:
     errors.append(f'{where}: {msg}')
 
@@ -62,6 +76,17 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
             err(bid, 'target: must be a chip name (e.g. esp32h2)')
         else:
             block_targets[bid] = tgt
+    # `requires_frameworks: [fw, …]` — the block works only beside one of
+    # them (the engine's validator refuses a product without); each must be a
+    # framework folder.
+    rf = d.get('requires_frameworks')
+    if rf is not None:
+        if not (isinstance(rf, list) and rf and all(isinstance(f, str) for f in rf)):
+            err(bid, 'requires_frameworks: must be a non-empty list of framework names')
+        else:
+            for f in rf:
+                if not (ROOT / 'code_blocks' / 'frameworks' / f / 'block.yml').is_file():
+                    err(bid, f'requires_frameworks names "{f}", which is not a framework')
     for name, spec in (d.get('driver_params') or {}).items():
         if not isinstance(spec, dict) or 'type' not in spec:
             err(bid, f'driver_param "{name}" needs a type')
@@ -176,6 +201,52 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                  f'instance configured this port" is convention only — the product '
                  f'builds and the device is silent. See CLAUDE.md → Shared buses.')
 
+    # ── A SLOT THAT SENDS OR DRIVES ON A PARAM CHANGE SAYS WHAT IT DOES. ──
+    # `reacts.<family>` is one sentence (cfg placeholders allowed) that
+    # generate() returns with the params the slot dispatches on.
+    # Without it, product code wires the same input a second time and the
+    # action happens twice.
+    reacts = d.get('reacts') or {}
+    if not isinstance(reacts, dict) or any(not isinstance(v, str) or not v.strip() for v in reacts.values()):
+        err(bid, 'reacts: must map a slot family to one non-empty sentence')
+        reacts = {}
+    for n in sorted(slot_names):
+        fam = reacts_family(n)
+        if fam not in REACTS_REQUIRED:
+            continue
+        if not re.search(r'\bcase\s+[^:]+:|\b(?:param_id|callback_id)\s*==', slot_text[n]):
+            continue
+        if fam not in reacts:
+            err(bid, f'slots/{n} acts on a param change but the block has no reacts.{fam}: '
+                     f'say in one sentence what it sends or drives (cfg placeholders allowed) — '
+                     f'generate() returns it with the params, so product code does not wire the input twice.')
+    for fam in reacts:
+        if not any(reacts_family(n) == fam for n in slot_names):
+            err(bid, f'reacts.{fam} names no slot of this block')
+    declared = set((d.get('params') or {}).keys()) | set((d.get('driver_params') or {}).keys())
+    for fam, text in reacts.items():
+        for ph in re.findall(r'\{\{\s*([^}]+?)\s*\}\}', text):
+            if ph in ('prefix', 'prefix_lc'):
+                continue
+            if not ph.startswith('cfg.') or ph[4:] not in declared:
+                err(bid, f'reacts.{fam} uses {{{{{ph}}}}}, which is not a declared param (params:/driver_params:)')
+
+    # ── A FACTORY RESET GOES THROUGH app_utils_factory_reset(). ───────────
+    # It runs the product's app_factory_reset_hook() before erasing; a block
+    # that erases NVS itself skips the hook, and a second "factory_reset"
+    # console command silently replaces the base console's (esp_console keeps
+    # the last registration of a name).
+    for n in sorted(slot_names):
+        code = re.sub(r'/\*.*?\*/|//[^\n]*', '', slot_text[n], flags=re.S)
+        if re.search(r'\bnvs_flash_erase\s*\(\s*\)', code):
+            err(bid, f'slots/{n} calls nvs_flash_erase() directly: a factory reset is '
+                     f'app_utils_factory_reset() (app_utils.h), which runs the product\'s '
+                     f'app_factory_reset_hook() first.')
+        if re.search(r'"factory_reset"', code):
+            err(bid, f'slots/{n} names a "factory_reset" command: the base console already '
+                     f'registers it, and a second registration replaces the first. A product '
+                     f'that clears more defines app_factory_reset_hook() instead.')
+
     # ── A MATTER ENDPOINT WITH NO WIRING MUST SAY SO. ──────────────────────
     # 24 of the 53 device_types create a Matter endpoint and wire no
     # attributes: the device appears on the fabric but reflects and accepts
@@ -279,14 +350,14 @@ for bj in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
                 # Resolves to an empty port and matches the wrong thing.
                 err(bid, f'{key} names port_param "{pp}", which is not in params')
 
-INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include'}
+INSTANCE_KEYS = {'block', 'prefix', 'cfg', 'include', 'frameworks'}
 # Blocks that publish NOTHING on the param bus although their driver_params
 # say otherwise. A ready-made product composing one reports no reading, ever,
 # and no build or gate notices: seven catalog products shipped
 # drivers/i2c_temp_humidity as their only temperature/humidity source. A
 # real-sensor block (sht4x, sht3x, aht21, ds18b20) behind peripherals/i2c_bus
-# is the replacement. The block itself stays — a writer may still use it as a
-# scaffold — but a catalog product may not.
+# is the replacement. The block itself stays — product code may still use it
+# as a scaffold — but a catalog product may not.
 NOT_IN_PRODUCTS = {
     'drivers/i2c_temp_humidity': 'peripherals/i2c_bus + drivers/sht4x (or sht3x / aht21)',
 }
@@ -378,13 +449,12 @@ if not build_chips:
 for bid, tgt in sorted(block_targets.items()):
     if tgt not in build_chips:
         err(bid, f'target "{tgt}" is not a supported chip (chips.txt)')
-# FETCH SOURCES: a block may only fetch from the origins the platform's clone
-# allowlist names (esp-zerocode-ai shared/src/security/idf-manifest.ts). The
-# host enforces that on idf_component.yml `git:` entries and on the agent's
-# git_clone tool; a `git ...` inside a block's CMakeLists.txt is the one path
-# neither sees, so it is checked here. Prefer a baked checkout over a fetch at
-# all (esp-zerocode-ai infra/preload-repos.json) — a cloud build should open no
-# socket — but a fallback fetch for local builds must still stay on the list.
+# FETCH SOURCES: a block may only fetch from the origins listed below, the
+# same allowlist a hosted build enforces on idf_component.yml `git:` entries;
+# a `git ...` inside a block's CMakeLists.txt is the one path that check does
+# not see, so it is checked here. Prefer a checkout baked into the build image
+# over a fetch at all — a hosted build should open no socket — but a fallback
+# fetch for local builds must still stay on the list.
 FETCH_ALLOWLIST = (
     'https://github.com/espressif/',
     'https://github.com/espressif-components/',
@@ -439,22 +509,20 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
             if mf is not None and not (isinstance(mf, int) and mf > 0):
                 err(fid, 'early_build.min_flash_mb must be a positive integer')
 
-# ONBOARDING: what a framework says its firmware already ships for first-run
-# onboarding is copied into every product's seed by the platform, so the spec
-# and the writer take it as fact. A command listed there that nothing registers
+# ONBOARDING: what a block (a framework, or a behavior that brings up the
+# network) says its firmware already ships for first-run onboarding is read by
+# consumers of the catalog as fact (a spec names it). A command listed there that nothing registers
 # is a spec the firmware cannot meet — so each listed command name must appear
 # as a registered string literal in the block's own sources or in the engine
 # (frameworks like mqtt and agents are generated there).
 _ENGINE_SRC = (ROOT / 'engine' / 'src' / 'generator.ts').read_text()
-for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
-    by = bd / 'block.yml'
-    if not by.is_file():
-        continue
+for by in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
+    bd = by.parent
     fw = yaml.safe_load(by.read_text()) or {}
     onb = fw.get('onboarding')
     if onb is None:
         continue
-    fid = f'frameworks/{bd.name}'
+    fid = bd.relative_to(ROOT / 'code_blocks').as_posix()
     con = onb.get('console') if isinstance(onb, dict) else None
     if not isinstance(onb, dict) or (con is not None and not isinstance(con, dict)):
         err(fid, 'onboarding: must be a mapping (e.g. `onboarding: { console: {...} }`)')
@@ -631,6 +699,13 @@ for manifest in sorted([*ROOT.glob('code_blocks/**/idf_component.yml'), *ROOT.gl
         if key in deprecated and owner not in deprecated[key]:
             err(rel.as_posix(), f'depends on {key}, which is deprecated (base_firmware/deprecated_components.yml) — use its replacements, or list {owner} under allowed_in with the reason')
 
+
+# MQTT PUBLISHES: an mqtt_* slot publishes with zc_mqtt_publish, which only
+# queues. esp_mqtt_client_publish blocks its caller on the network, and these
+# slots run on whatever task changed the param (often the esp_timer task).
+for slot in sorted(ROOT.glob('code_blocks/*/*/slots/mqtt_*')):
+    if 'esp_mqtt_client_publish' in slot.read_text():
+        err(slot.relative_to(ROOT).as_posix(), 'calls esp_mqtt_client_publish; use zc_mqtt_publish (same arguments without the client), which never blocks')
 
 # assembly must succeed (proves the authoring→consumption transform is valid)
 r = subprocess.run([sys.executable, str(ROOT / 'scripts/assemble_blocks.py'), '--check'],

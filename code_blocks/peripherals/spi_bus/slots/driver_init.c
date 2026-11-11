@@ -17,8 +17,11 @@
          * block with a panel on the same host — the double-init i2c_bus's
          * adopt-first rule exists to avoid. */
         ESP_LOGW(TAG, "SPI bus {{prefix_lc}}: host %d already initialized elsewhere — using it as configured there", {{prefix}}_SPI_HOST);
+    } else if ({{prefix_lc}}_err != ESP_OK) {
+        /* Degraded, not fatal (no DMA channel, a bad pin): devices on this
+           host fail to attach and say so, instead of a boot loop. */
+        ESP_LOGE(TAG, "SPI bus {{prefix_lc}}: host %d not started (%s)", {{prefix}}_SPI_HOST, esp_err_to_name({{prefix_lc}}_err));
     } else {
-        ESP_ERROR_CHECK({{prefix_lc}}_err);
         ESP_LOGI(TAG, "SPI bus {{prefix_lc}}: host=%d MOSI=%d MISO=%d SCLK=%d", {{prefix}}_SPI_HOST, {{prefix}}_SPI_MOSI_GPIO, {{prefix}}_SPI_MISO_GPIO, {{prefix}}_SPI_SCLK_GPIO);
     }
 }
