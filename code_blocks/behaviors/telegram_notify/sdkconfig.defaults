@@ -1,0 +1,4 @@
+# api.telegram.org negotiates AES-GCM; a framework trimming mbedTLS must not
+# remove it.
+CONFIG_MBEDTLS_GCM_C="y"
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE="y"

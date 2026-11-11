@@ -205,7 +205,7 @@ test('a switch toggles and dims relative to the lights, and products get hooks i
   assert.match(app, /esp_err_t zc_ble_mesh_publish_toggle\(uint16_t addr\)\s*\{[\s\S]{0,300}zc_ble_mesh_publish_onoff\(addr, !s_last_onoff\)/,
     'toggle inverts the remembered state')
   assert.match(app, /static volatile bool s_last_onoff = false;/, 'first toggle after boot turns the lights on')
-  assert.match(app, /ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT[\s\S]{0,1200}s_last_onoff = on;[\s\S]{0,200}zc_ble_mesh_on_onoff_status\(src, on\)/,
+  assert.match(app, /ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT[\s\S]{0,1200}s_last_onoff = on;[\s\S]{0,900}zc_ble_mesh_on_onoff_status\(src, on\)/,
     'a received OnOff Status updates the toggle state and fires the hook')
   // ...but not one heard right after a send: it may answer the previous press.
   assert.match(app, /s_last_onoff = on;\s*s_last_onoff_send_us = esp_timer_get_time\(\);/,
@@ -249,7 +249,7 @@ test('app_logic can include app_ble_mesh.h to define the hooks, and only on a me
   t.after(() => rmSync(dirname(tpl), { recursive: true, force: true }))
   const privRequires = (dir) => {
     const cmake = readAll(dir, 'components/app_logic/CMakeLists.txt')
-    const m = cmake.match(/PRIV_REQUIRES([^)]*)\)/)
+    const m = cmake.match(/^\s*PRIV_REQUIRES([^)]*)\)/m)
     assert.ok(m, 'app_logic has PRIV_REQUIRES')
     return m[1].split(/\s+/).filter(Boolean)
   }

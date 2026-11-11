@@ -139,8 +139,7 @@ export function normalizeChipTarget(chip: string, fallback = 'esp32c3'): string 
   // list, but it swallows digits that are not part of the family token: the
   // spec agent emits strings like "esp32c3 4mb" and "ESP32-C2 16MB", which
   // greedy turns into "esp32c34" and "esp32c216". An explicit list cannot do
-  // that, so it wins despite needing an edit per new part. Mirrors the copy in
-  // the monorepo's shared/src/hardware/modules.ts — keep the two in step.
+  // that, so it wins despite needing an edit per new part.
   const m = s.match(/esp32(c61|h21|s31|c2|c3|c5|c6|h2|h4|p4|s2|s3)?/)
   if (!m) return fallback
   return 'esp32' + (m[1] ?? '')

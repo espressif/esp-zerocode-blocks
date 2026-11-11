@@ -17,6 +17,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 esp_err_t app_audio_init(void);
 
 /**
@@ -31,3 +35,7 @@ esp_err_t app_audio_init(void);
  * count actually produced (< samples signals a read error).
  */
 size_t zc_audio_mic_read(int16_t *dest, size_t samples);
+
+#ifdef __cplusplus
+}
+#endif

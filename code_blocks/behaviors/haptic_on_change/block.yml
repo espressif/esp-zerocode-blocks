@@ -23,7 +23,12 @@ driver_params:
   watch_param:
     type: bool
     required: true
-    description: the param whose changes made at the device deserve feedback
+    description: >-
+      the param whose changes made at the device deserve feedback. Feedback
+      follows CHANGES of it: a state param (a toggled power) buzzes on every
+      toggle; a param written again with the value it already holds is not a
+      change and does not buzz — to buzz on every press, watch a param the
+      button fires as an event (drivers/button press_param).
   trigger_param:
     type: u8
     required: true

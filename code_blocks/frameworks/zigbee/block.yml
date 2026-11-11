@@ -31,3 +31,19 @@ radio: true
 # helper (see the app_zigbee scaffold / the OTA-endpoint pattern).
 
 # Pin esp-zigbee-lib ~2.0.0. That is the only Zigbee component the app declares.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+# The framework's own state on the param bus, for product code (a status
+# light): true while the device is on a Zigbee network.
+owned_params:
+  APP_DRIVER_PARAM_ZIGBEE_JOINED: bool
+
+facts:
+  reporting: "How often a reading is sent is decided by the hub: when it pairs the device it sets each reading's reporting (Home Assistant ZHA sends a temperature at most every 30 s and at least every 15 min, or on a 0.5 °C change), and that replaces the device's own setting. A spec should not promise its own fixed reporting interval over Zigbee; the hub's settings are where it is changed."
+  role: "It always joins as a mains-powered router that relays for other Zigbee devices (up to 10 can join through it); it cannot be a battery or sleepy end device and cannot start a network of its own, so it needs an existing Zigbee hub."
+  pairing: "Until it is in a network the device keeps looking for one, so the person only opens pairing on the hub; no install code is needed."
+  reconnect: "After a power cut it rejoins the same network by itself and sends its current state to the hub."
+  joined_state: "Whether the device is on a Zigbee network is known to the product (a status light can show 'looking for a hub' vs 'joined'); it means joined to a network, not that the hub is answering right now — a router cannot tell when the hub is switched off."
+  reset: "When removed from the hub it starts looking for a network again at once; the framework adds no reset button."
+  remotes: "A switch, dimmer remote or scene button controls only the devices it has been bound to; binding is started from the hub's app or with the device's zb-bind console command, and each of those parts is bound on its own, so one dimmer remote that does both on/off and dimming is bound once."

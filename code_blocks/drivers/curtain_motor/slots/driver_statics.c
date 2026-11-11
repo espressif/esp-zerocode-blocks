@@ -6,6 +6,14 @@ static int s_{{prefix_lc}}_dir = 0;
 static int64_t s_{{prefix_lc}}_started_us = 0;
 static portMUX_TYPE s_{{prefix_lc}}_mux = portMUX_INITIALIZER_UNLOCKED;
 
+/* Where the curtain is, for current_param (0xFFFF = unknown). */
+static void {{prefix_lc}}_report_current(uint16_t pos)
+{
+{{#if cfg.current_param}}    app_driver_param_val_t v = { .u16 = pos };
+    app_driver_set_param({{cfg.current_param}}, v, APP_DRIVER_SOURCE_LOCAL);
+{{/if}}    (void)pos;
+}
+
 static void {{prefix_lc}}_motor_off(void)
 {
     gpio_set_level((gpio_num_t){{prefix}}_UP_GPIO, 0);
@@ -46,10 +54,15 @@ static void {{prefix_lc}}_limit_poll_cb(void *arg)
         ESP_LOGI(TAG, "Curtain {{prefix_lc}}: %s limit reached, motor off", dir > 0 ? "upper" : "lower");
         /* Report where the curtain IS. The re-apply this causes finds the
            limit already asserted and does not start the motor. */
-        app_driver_param_val_t end = { .u16 = (uint16_t)(dir > 0 ? 10000 : 0) };
-        app_driver_set_param({{cfg.position_param}}, end, APP_DRIVER_SOURCE_LOCAL);
+        uint16_t end = (uint16_t)(dir > 0 ? 10000 : 0);
+        {{prefix_lc}}_report_current(end);
+#if !{{prefix}}_HAS_CURRENT
+        app_driver_param_val_t endv = { .u16 = end };
+        app_driver_set_param({{cfg.position_param}}, endv, APP_DRIVER_SOURCE_LOCAL);
+#endif
     } else if (timed_out) {
-        /* Position is unknown, so nothing is published. */
+        /* Position is unknown: current_param says so; position_param is left. */
+        {{prefix_lc}}_report_current(0xFFFF);
         ESP_LOGE(TAG, "Curtain {{prefix_lc}}: no %s limit after %d ms — motor stopped; check the limit switch",
                  dir > 0 ? "upper" : "lower", {{prefix}}_MAX_RUN_MS);
     }

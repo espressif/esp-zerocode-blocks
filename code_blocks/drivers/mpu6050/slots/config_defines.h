@@ -4,6 +4,7 @@
 #define {{prefix}}_IMU_POLL_MS   {{cfg.poll_interval_ms}}
 #define {{prefix}}_IMU_THRESH_MG {{cfg.motion_threshold_mg}}
 #define {{prefix}}_IMU_HOLD_MS   {{cfg.motion_hold_ms}}
+#define {{prefix}}_IMU_ACT_WINDOW_MS {{cfg.activity_window_ms}}
 /* MPU6050-family registers (accelerometer path). */
 #define {{prefix}}_IMU_REG_SMPLRT_DIV   0x19
 #define {{prefix}}_IMU_REG_CONFIG       0x1A

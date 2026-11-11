@@ -20,3 +20,6 @@ driver_params:
     type: i16
     required: true
     description: i16 absolute target step (advanced/retreated by app code)
+
+reacts:
+  driver: "A change of {{cfg.position_param}} sets the absolute target step and the block's timer half-steps the four coils toward it, de-energizing them on arrival; product code writes the param and never drives the coil pins itself."

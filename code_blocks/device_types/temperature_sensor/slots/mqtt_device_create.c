@@ -14,7 +14,7 @@
              "\"stat_t\":\"%s\",\"avty_t\":\"%s\","
              "\"dev_cla\":\"temperature\",\"unit_of_meas\":\"°C\",\"stat_cla\":\"measurement\"}",
              s_node_id, s_node_id, s_node_id, s_{{prefix_lc}}_state_topic, s_status_topic);
-    esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+    zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
 
     app_driver_param_val_t init = {};
     app_driver_get_param({{cfg.value_param}}, &init);
@@ -23,8 +23,11 @@
     /* A retained seed is a reading the broker keeps: only publish one once
      * the sensor has produced it — the zero the bus holds before that is not a
      * measurement. The normal publish path takes over on the first real value. */
-    if (app_driver_param_seen({{cfg.value_param}})) {
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_state_topic, buf, 0, 1, true);
+    /* A sensor marked invalid seeds "None" (unknown), not a stale value. */
+    if (!{{prefix_lc}}_reading_valid()) {
+        zc_mqtt_publish(s_{{prefix_lc}}_state_topic, "None", 0, 1, true);
+    } else if (app_driver_param_seen({{cfg.value_param}})) {
+        zc_mqtt_publish(s_{{prefix_lc}}_state_topic, buf, 0, 1, true);
     }
     ESP_LOGI(TAG, "{{prefix_lc}}: HA temperature sensor '{{cfg.label}}' announced");
 }

@@ -48,6 +48,14 @@ static uint32_t s_{{prefix_lc}}_bh_failures = 0;
 
 static void {{prefix_lc}}_bh_poll_cb(void *arg)
 {
+    /* The first poll runs right after the arm at start: wait out the first
+       conversion (up to 180 ms in high-resolution mode) on the poll task, or
+       the register still holds 0 and 0 lux is published until the next poll. */
+    static bool s_{{prefix_lc}}_bh_first = true;
+    if (s_{{prefix_lc}}_bh_first) {
+        s_{{prefix_lc}}_bh_first = false;
+        vTaskDelay(pdMS_TO_TICKS(180) + 1);
+    }
     uint8_t buf[2] = {0};
     esp_err_t err = i2c_master_receive(s_{{prefix_lc}}_i2c_dev, buf, sizeof(buf), 50);
     if (err != ESP_OK) {

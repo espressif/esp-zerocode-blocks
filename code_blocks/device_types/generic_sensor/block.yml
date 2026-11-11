@@ -1,0 +1,67 @@
+description: "Generic Sensor device type (a product's own numeric reading shown as its own entity: \"Days since watered\", \"Water level\", \"Cycle count\") (MQTT: Home Assistant sensor with a chosen unit, device_class and state_class; RainMaker: esp.device.other; web page; display)"
+device_types:
+  rainmaker: esp.device.other
+# No Matter binding: Matter has no device type for an arbitrary reading — each
+# measurement cluster names its quantity (temperature, humidity, pressure…),
+# and borrowing one mislabels the value in every controller. No Zigbee binding
+# for the same reason (ZCL measurement clusters are per quantity). A Matter or
+# Zigbee product gets no entity for it.
+
+# Framework SDK deps come from the framework blocks — this block contributes
+# only bindings.
+
+params:
+  label:
+    type: string
+    default: Reading
+    description: User-visible entity name (Home Assistant entity name / RainMaker device name / web and display row; must be unique per node)
+  scale:
+    type: int
+    default: 1
+    enum: ["1", "10", "100", "1000"]
+    description: The param holds the value times this (10 = one decimal, 100 = two); every binding divides by it
+  unit:
+    type: string
+    default: ""
+    description: Unit shown after the value (Home Assistant unit_of_measurement, e.g. "%", "°C", "L", "h"); empty = none
+  device_class:
+    type: string
+    default: ""
+    enum: ["", apparent_power, aqi, area, atmospheric_pressure, battery, blood_glucose_concentration, carbon_dioxide, carbon_monoxide, current, data_rate, data_size, distance, duration, energy, energy_distance, energy_storage, frequency, gas, humidity, illuminance, irradiance, moisture, monetary, nitrogen_dioxide, nitrogen_monoxide, nitrous_oxide, ozone, ph, pm1, pm10, pm25, pm4, power, power_factor, precipitation, precipitation_intensity, pressure, reactive_energy, reactive_power, signal_strength, sound_pressure, speed, sulphur_dioxide, temperature, volatile_organic_compounds, volatile_organic_compounds_parts, voltage, volume, volume_flow_rate, volume_storage, water, weight, wind_direction, wind_speed]
+    description: >-
+      Home Assistant sensor device_class; empty = none (a plain number with its
+      unit). Home Assistant accepts only the units that class allows, so leave it
+      empty for a quantity none of them describes.
+  state_class:
+    type: string
+    default: measurement
+    enum: [measurement, measurement_angle, total, total_increasing]
+    description: Home Assistant state_class (measurement keeps long-term statistics; total_increasing for a counter that only grows)
+
+driver_params:
+  value_param:
+    type: i16
+    required: true
+    description: Driver param ID this entity mirrors (int16, the value times cfg.scale). Usually written by the product's own logic with app_driver_set_param.
+  status_param:
+    type: bool
+    required: false
+    shared: true
+    default: ""
+    description: >-
+      (Optional) the reading is valid (true) or not (false) — the driver's
+      status_param (aht21, bh1750, dht22, ds18b20, hcsr04 publish one). When
+      false, Home Assistant shows the sensor as unknown instead of the last
+      value. Empty disables.
+
+facts:
+  unavailable: "With status_param wired to the driver's status, a sensor that stops answering shows as unknown in Home Assistant instead of its last reading, and its value comes back by itself when the sensor does; product code never publishes a placeholder value."
+  use_it_for: "Use it for a product's own numeric reading that no specific device type describes (days since watered, a counter, a computed level); it shows as one entity under the label the spec gives it, with the unit the spec names."
+  home_assistant: "Over MQTT, Home Assistant discovers it as a sensor with its unit, device_class and state_class; it stays unknown until the product first sets the value."
+  range: "The value is a whole number from -32768 to 32767 divided by its scale (1, 10, 100 or 1000), so two decimals reach -327.68 to 327.67."
+  web_page: "On the web page it is a reading row with its unit in the name."
+  display: "On the display it is a card with its name, the value and its unit."
+  rainmaker: "In the RainMaker app it is a read-only device with one number."
+  no_matter_zigbee: "Matter and Zigbee have no binding: a Matter or Zigbee product shows no entity for it."
+
+# Voice-absent: read-only telemetry — there are no commands to issue, and with no TTS path the device cannot answer a question about a reading either.

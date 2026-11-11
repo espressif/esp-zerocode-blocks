@@ -1,4 +1,4 @@
-description: Quadrature rotary encoder — PCNT where the chip has it, GPIO-ISR fallback elsewhere; emits delta on each detent
+description: Quadrature rotary encoder — PCNT where the chip has it, a GPIO-ISR quadrature state machine elsewhere; emits delta on each detent
 
 # Reads a quadrature encoder. On chips with the PCNT peripheral the pulse
 # counter does the decoding; on chips without it (ESP32-C2/C3) a GPIO-ISR
@@ -6,11 +6,12 @@ description: Quadrature rotary encoder — PCNT where the chip has it, GPIO-ISR 
 # so the encoder WORKS ON EVERY CHIP — before 2026-09-01 the no-PCNT branch
 # compiled the feature out silently, and a bedside-lamp product shipped with a
 # dead knob that passed every gate. Every 50 ms accumulated detents are
-# reported. The PCNT path decodes full x4 quadrature (both edges of both
-# channels, 4 counts per cycle) and carries a partial detent over to the next
-# poll; `pulses_per_detent` is counts per click there — 4 for the common
-# one-cycle-per-click EC11, 2 for a half-cycle-per-click part. The fallback
-# counts one A rising edge per click and ignores it. Wire to a u8 param to track absolute position
+# reported. BOTH paths decode full x4 quadrature (both edges of both channels,
+# 4 counts per cycle) and carry a partial detent over to the next poll;
+# `pulses_per_detent` is counts per click — 4 for the common
+# one-cycle-per-click EC11, 2 for a half-cycle-per-click part. The fallback is
+# a Gray-code state machine on any-edge interrupts of A and B: a bounce moves
+# between two neighbouring states and cancels out, so it needs no time window. Wire to a u8 param to track absolute position
 # (wrapping 0-254), or override the callback in app code to issue Matter binding
 # commands (LevelControl::Step) on each detent.
 
@@ -21,7 +22,7 @@ params:
     type: int
     default: 4
     description: >-
-      x4 quadrature counts per click (PCNT path) — 4 for a one-cycle-per-click
+      x4 quadrature counts per click — 4 for a one-cycle-per-click
       encoder such as the EC11, 2 for a half-cycle-per-click one
 
 driver_params:

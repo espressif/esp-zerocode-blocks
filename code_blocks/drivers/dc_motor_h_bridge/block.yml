@@ -19,3 +19,6 @@ driver_params:
     type: i16
     required: true
     description: i16 speed (-1000 reverse-full to +1000 forward-full)
+
+reacts:
+  driver: "A change of {{cfg.speed_param}} sets the H-bridge direction pins (in1 high forward, in2 high reverse, both low at 0) and the PWM duty to |speed|/1000; product code writes the param and never drives the motor pins or PWM itself."

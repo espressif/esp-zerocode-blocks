@@ -1,0 +1,47 @@
+id: battery-door-sensor
+name: Battery Door Sensor
+description: >-
+  Battery door/window sensor for Home Assistant over MQTT. A reed switch wakes
+  it from deep sleep when the door opens or closes; it reports the new state,
+  re-sends it every hour, and sleeps again within seconds. Configure Wi-Fi and
+  the broker over the serial console after power-up.
+keywords: [battery, door, window, contact, reed, magnet, deep sleep, low power, mqtt, home assistant]
+
+# Reed switch to GND on GPIO 4 with a pull-up: closed (magnet near, door shut)
+# reads low. GPIO 4 can wake every chip this builds for except the H2.
+# No LEDs on purpose: each one drains the battery while the chip sleeps.
+frameworks: [mqtt]
+
+instances:
+  - block: drivers/gpio_input_sensor
+    prefix: REED
+    cfg:
+      gpio: 4
+      pull: pullup
+      active_level: 0
+      poll_interval_ms: 100
+      target_param: APP_DRIVER_PARAM_CONTACT
+
+  - block: device_types/contact_sensor
+    prefix: DOOR
+    cfg:
+      label: Door
+      state_param: APP_DRIVER_PARAM_CONTACT
+
+  - block: behaviors/deep_sleep_cycle
+    prefix: SLEEP
+    cfg:
+      wake_gpio: 4
+      wake_pull: pullup
+      heartbeat_minutes: 60
+      state_param: APP_DRIVER_PARAM_CONTACT
+
+# Every wake is a boot: a counter in NVS would be written on each one.
+exclude:
+  - behaviors/boot_count
+
+ci_chips: [esp32c6, esp32c3, esp32]
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Battery Door Sensor

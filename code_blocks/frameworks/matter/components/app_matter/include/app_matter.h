@@ -14,8 +14,16 @@
 
 #include <esp_err.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Initialize the Matter protocol solution.
  * Base stub returns ESP_OK (no-op). Templates replace with real init.
  */
 esp_err_t app_matter_init(void);
+
+#ifdef __cplusplus
+}
+#endif

@@ -24,7 +24,7 @@ test('a small product keeps the old registry size', () => {
   assert.equal(gen.solutionRegistrySize([fw('matter'), relay, persist(1)]), 8)
 })
 
-test('every registrant gets a slot, with headroom for writer code', () => {
+test('every registrant gets a slot, with headroom for product code', () => {
   const rendered = [fw('matter'), fw('mqtt'), relay, ...[1, 2, 3, 4, 5, 6, 7].map(persist)]
   // 2 frameworks + 7 behaviors = 9 registrants, more than the old fixed 8
   assert.equal(gen.solutionRegistrySize(rendered), 13)

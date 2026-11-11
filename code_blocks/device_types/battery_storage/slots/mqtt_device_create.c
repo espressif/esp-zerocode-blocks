@@ -13,14 +13,14 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_power_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.power_param}}, &init);
         char buf[24]; app_driver_param_val_t val = init;
         snprintf(buf, sizeof(buf), "%d", (int)val.i16);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_power_topic, buf, 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_power_topic, buf, 0, 1, true);
     }
     snprintf(s_{{prefix_lc}}_energy_topic, sizeof(s_{{prefix_lc}}_energy_topic),
              "zerocode/%s/{{prefix_lc}}/energy", s_node_id);
@@ -36,13 +36,13 @@
                  s_node_id,
                  s_node_id,
                  s_{{prefix_lc}}_energy_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.energy_param}}, &init);
         char buf[24]; app_driver_param_val_t val = init;
         snprintf(buf, sizeof(buf), "%u", (unsigned)val.u32);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_energy_topic, buf, 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_energy_topic, buf, 0, 1, true);
     }
 }

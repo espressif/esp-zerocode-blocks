@@ -13,11 +13,15 @@ instances:
       upper_limit_gpio: 6
       lower_limit_gpio: 7
       position_param: APP_DRIVER_PARAM_LIFT_POSITION
+      current_param: APP_DRIVER_PARAM_LIFT_CURRENT
+      stop_param: APP_DRIVER_PARAM_LIFT_STOP
 
   - block: device_types/window_covering
     prefix: SHADE
     cfg:
       position_param: APP_DRIVER_PARAM_LIFT_POSITION
+      current_param: APP_DRIVER_PARAM_LIFT_CURRENT
+      stop_param: APP_DRIVER_PARAM_LIFT_STOP
 
   - include: baseline-connectivity
 

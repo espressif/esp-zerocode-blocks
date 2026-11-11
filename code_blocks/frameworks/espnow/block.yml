@@ -37,9 +37,8 @@ radio: true
 #
 # esp_now ships with ESP-IDF: no managed components. Every Wi-Fi chip.
 
-# What the firmware already ships for pairing. The platform copies this into
-# every espnow product's seed, so the spec names these commands instead of
-# describing a pairing flow the writer would then build again.
+# What the firmware already ships for pairing, so a spec names these commands
+# instead of describing a pairing flow that would then be built again.
 onboarding:
   console:
     commands:
@@ -48,3 +47,15 @@ onboarding:
       - "espnow-forget — forget every paired device, back to the open broadcast kit"
     api: "zc_espnow_pair_start, zc_espnow_pairing, zc_espnow_peer_count, zc_espnow_forget_peers (app_espnow.h); behaviors/espnow_pair_trigger binds the pairing window to a button"
     note: "Unpaired devices are an open kit: broadcast, unencrypted, for a trusted space. Paired devices talk only to each other, and the pairing is kept across reboots."
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  role: "Devices talk to each other directly over the radio and never join a Wi-Fi network, so there is no internet, phone app, web page or network time."
+  what_talks: "In the catalog a dimmer remote sends on/off and a brightness level, a scene button sends a scene number, and a light, dimmable light or smart plug obeys on/off (a dimmable light also brightness)."
+  own_signals: "Boards built from the same product share its own signals too: a press, ring or reading one board sends (through a scene button, a dimmer remote, or a template.yaml param product code sends) arrives on the other as the same signal, every time, so its own behaviour (a chime, a light) can react. No other param, such as a relay's output, is taken from the air."
+  state_not_toggle: "A remote sends the on/off state and level it holds itself, never \"toggle\" or \"brighter\", so a light changed some other way can disagree with the remote until the remote is used again."
+  missed_messages: "A message goes out once, when the control changes: a device that is off or out of range then misses it and is not told later, and the sender never learns whether it arrived."
+  limits: "A device remembers at most 8 paired devices, and messages are not encrypted, paired or not."
+  one_channel: "Every device uses the same fixed radio channel and group, so two unpaired kits in range of each other control each other's devices; only pairing keeps them apart."
+  reset: "A factory reset forgets every paired device and returns it to the open kit."

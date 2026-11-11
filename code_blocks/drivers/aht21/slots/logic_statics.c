@@ -63,11 +63,10 @@ static uint8_t {{prefix_lc}}_aht_crc8(const uint8_t *d, int n)
     return crc;
 }
 
-/* The measurement is SPLIT across two timer callbacks: the poll sends the
- * trigger, and a one-shot timer reads the result ~80 ms later. Waiting the
- * conversion out inside the poll callback (vTaskDelay(80)) stalled every other
- * esp_timer user in the product — button scanning, LED patterns, other
- * sensors — for 80 ms every poll. */
+/* The poll runs on the bus's poll task (app_driver_poll_every), where waiting
+ * the ~80 ms conversion out is fine; on the shared esp_timer task it stalled
+ * every other timer user in the product (button scanning, LED patterns, other
+ * sensors) for 80 ms every poll. */
 static esp_err_t {{prefix_lc}}_aht_trigger(void)
 {
     uint8_t trig[3] = { 0xAC, 0x33, 0x00 };
@@ -95,26 +94,20 @@ static esp_err_t {{prefix_lc}}_aht_fetch(int16_t *t_x100, int16_t *rh_x100)
 
 static uint32_t s_{{prefix_lc}}_aht_failures = 0;
 
-static esp_timer_handle_t s_{{prefix_lc}}_aht_read_timer = NULL;
-
 static void {{prefix_lc}}_aht_report(esp_err_t err, int16_t t, int16_t h);
-
-/* One-shot, ~80 ms after the trigger: fetch and report. */
-static void {{prefix_lc}}_aht_read_cb(void *arg)
-{
-    int16_t t = 0, h = 0;
-    esp_err_t err = {{prefix_lc}}_aht_fetch(&t, &h);
-    {{prefix_lc}}_aht_report(err, t, h);
-}
 
 static void {{prefix_lc}}_aht_poll_cb(void *arg)
 {
+    (void)arg;
+    int16_t t = 0, h = 0;
     esp_err_t err = {{prefix_lc}}_aht_trigger();
-    if (err == ESP_OK && s_{{prefix_lc}}_aht_read_timer) {
-        err = esp_timer_start_once(s_{{prefix_lc}}_aht_read_timer, 80 * 1000ULL);
-        if (err == ESP_OK) return;   /* the read callback reports */
+    if (err == ESP_OK) {
+        /* +1 tick: vTaskDelay(n) ends at the n-th tick boundary, so 80 ms
+           could be up to a tick short of the conversion. */
+        vTaskDelay(pdMS_TO_TICKS(80) + 1);
+        err = {{prefix_lc}}_aht_fetch(&t, &h);
     }
-    {{prefix_lc}}_aht_report(err, 0, 0);
+    {{prefix_lc}}_aht_report(err, t, h);
 }
 
 static void {{prefix_lc}}_aht_report(esp_err_t err, int16_t t, int16_t h)
