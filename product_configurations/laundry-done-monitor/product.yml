@@ -1,0 +1,127 @@
+id: laundry-done-monitor
+name: Laundry Done Monitor
+description: >-
+  Tells you when the washer and the dryer have finished. An accelerometer on
+  the washer and a vibration switch on the dryer each feed a cycle monitor;
+  a lamp per machine lights when its cycle is done and goes out when the next
+  one starts. State is readable over the console.
+keywords: [laundry, washer, dryer, washing machine, cycle, done, finished, vibration, accelerometer, sw-420, monitor]
+
+# One device, two machines, one of each vibration source, so a single build
+# covers drivers/mpu6050's activity output, drivers/vibration_switch and
+# behaviors/cycle_done_detector.
+#
+# Framework-less on purpose: the detector's running/done booleans bind to any
+# device type (a contact or occupancy sensor, an MQTT entity) the same way they
+# bind to the lamps here. Pins are for the RISC-V parts (GPIO 6/7 are flash
+# pins on the classic esp32).
+frameworks: []
+
+instances:
+  # ── Washer: MPU6050 on the shared I2C bus (bus first: init order) ──
+  - block: peripherals/i2c_bus
+    prefix: BUS
+    cfg:
+      port: 0
+      sda_gpio: 4
+      scl_gpio: 5
+      freq_hz: 400000
+
+  - block: drivers/mpu6050
+    prefix: WASHER_IMU
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x68
+      motion_param: APP_DRIVER_PARAM_WASHER_MOTION
+      activity_param: APP_DRIVER_PARAM_WASHER_ACTIVITY
+
+  - block: behaviors/cycle_done_detector
+    prefix: WASHER
+    cfg:
+      activity_param: APP_DRIVER_PARAM_WASHER_ACTIVITY
+      running_param: APP_DRIVER_PARAM_WASHER_RUNNING
+      done_param: APP_DRIVER_PARAM_WASHER_DONE
+      nvs_key: washer_run
+
+  # ── Dryer: SW-420 module, no long pauses in a dryer cycle ──
+  - block: drivers/vibration_switch
+    prefix: DRYER_VIB
+    cfg:
+      gpio: 3
+      activity_param: APP_DRIVER_PARAM_DRYER_ACTIVITY
+
+  - block: behaviors/cycle_done_detector
+    prefix: DRYER
+    cfg:
+      activity_param: APP_DRIVER_PARAM_DRYER_ACTIVITY
+      running_param: APP_DRIVER_PARAM_DRYER_RUNNING
+      done_param: APP_DRIVER_PARAM_DRYER_DONE
+      quiet_minutes: 5
+      nvs_key: dryer_run
+
+  # ── A "done" lamp per machine ──
+  - block: drivers/relay
+    prefix: WASHER_LAMP
+    cfg:
+      gpio: 6
+      param_id: APP_DRIVER_PARAM_WASHER_DONE
+
+  - block: drivers/relay
+    prefix: DRYER_LAMP
+    cfg:
+      gpio: 7
+      param_id: APP_DRIVER_PARAM_DRYER_DONE
+
+  # ── Console readout ──
+  - block: behaviors/console_param_get
+    prefix: GET_WASHER_ACTIVITY
+    cfg:
+      command_name: washer-activity
+      target_param: APP_DRIVER_PARAM_WASHER_ACTIVITY
+      value_kind: u16
+  - block: behaviors/console_param_get
+    prefix: GET_WASHER_RUNNING
+    cfg:
+      command_name: washer-running
+      target_param: APP_DRIVER_PARAM_WASHER_RUNNING
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_WASHER_MOVING
+    cfg:
+      command_name: washer-moving
+      target_param: APP_DRIVER_PARAM_WASHER_MOTION
+      value_kind: bool
+  - block: behaviors/console_param_get
+    prefix: GET_DRYER_ACTIVITY
+    cfg:
+      command_name: dryer-activity
+      target_param: APP_DRIVER_PARAM_DRYER_ACTIVITY
+      value_kind: u16
+  - block: behaviors/console_param_get
+    prefix: GET_DRYER_RUNNING
+    cfg:
+      command_name: dryer-running
+      target_param: APP_DRIVER_PARAM_DRYER_RUNNING
+      value_kind: bool
+
+  # ── Status LED ──
+  - block: drivers/status_led
+    prefix: STATUS_LED
+    cfg:
+      gpio: 10
+      active_level: 1
+
+  - block: behaviors/blink_pattern
+    prefix: STATUS
+    cfg:
+      gpio: 10
+      active_level: 1
+      pattern_param: APP_DRIVER_PARAM_LED_PATTERN
+
+  - include: console-diagnostics
+
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Laundry Done Monitor

@@ -45,3 +45,6 @@ driver_params:
       identify_blink, blink_pattern) push values here; this driver is the sole
       consumer that drives the LED. Leave empty to disable param-driven patterns
       (solid on/off via the helper still works).
+
+reacts:
+  driver: "A change of {{cfg.pattern_param}} sets the LED's pattern (0 off, 1 solid, 2 slow blink, 3 fast blink, 4 heartbeat) through the block's one led_indicator handle; product code writes the param and never drives the LED pin itself."

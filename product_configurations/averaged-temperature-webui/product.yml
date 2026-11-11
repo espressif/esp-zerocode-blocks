@@ -1,0 +1,56 @@
+id: averaged-temperature-webui
+name: Averaged Temperature (Web UI)
+description: >-
+  A DS18B20 probe whose raw reading and its 5-minute average both show on the
+  device's own web page — the catalog example of behaviors/sensor_filter.
+keywords: [temperature, ds18b20, average, median, smoothing, filter, web ui]
+
+frameworks: [webui]
+
+instances:
+  - block: peripherals/onewire_bus
+    prefix: OW
+    cfg:
+      gpio: 4
+
+  - block: drivers/ds18b20
+    prefix: PROBE
+    cfg:
+      bus_handle_fn: ow_onewire_handle
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+
+  - block: behaviors/sensor_filter
+    prefix: AVG
+    cfg:
+      source_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      output_param: APP_DRIVER_PARAM_AVG_TEMP
+      value_kind: i16
+      mode: average
+      samples: 10
+      sample_ms: 30000
+      stale_after_ms: 120000
+
+  - block: behaviors/webui_row
+    prefix: ROW_NOW
+    cfg:
+      label: Temperature now
+      kind: value
+      param: APP_DRIVER_PARAM_LOCAL_TEMP
+      value_kind: i16
+      scale: 100
+
+  - block: behaviors/webui_row
+    prefix: ROW_AVG
+    cfg:
+      label: 5-minute average
+      kind: value
+      param: APP_DRIVER_PARAM_AVG_TEMP
+      value_kind: i16
+      scale: 100
+
+  - include: console-diagnostics
+  - include: diagnostics-core
+
+product_metadata:
+  vendor_name: ZeroCode AI
+  product_name: ZeroCode Averaged Temperature

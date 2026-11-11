@@ -1,7 +1,8 @@
 description: >-
   MPU6050-family accelerometer (MPU6050, MPU6500, MPU6886, MPU9250) over I2C —
-  publishes a motion flag, and optionally the vibration level and which way up
-  it is. Depends on peripherals/i2c_bus (or a board that owns the bus).
+  publishes a motion flag, and optionally the vibration level, a windowed
+  vibration activity (mg RMS, for behaviors/cycle_done_detector) and which way
+  up it is. Depends on peripherals/i2c_bus (or a board that owns the bus).
 
 # WHAT THIS PUBLISHES, and why not raw axes: the driver param bus carries
 # scalars, and three raw axes at 100 Hz is a firehose no device type can bind
@@ -20,8 +21,8 @@ description: >-
 # poll re-probes WHO_AM_I and rewrites the configuration, so the block heals
 # without a reboot instead of reading zeros forever.
 #
-# The poll runs on the shared esp_timer task and never blocks there: one 6-byte
-# read per tick, nothing else.
+# The poll runs on the bus poll task (app_driver_poll_every), which serves
+# every other poll too: one 6-byte read per tick, nothing else.
 
 cmake_priv_requires:
   app_driver: [esp_driver_i2c, esp_timer]
@@ -47,6 +48,12 @@ params:
     description: >-
       How far total acceleration must deviate from 1 g before a sample counts as
       motion, in milli-g. Below ~60 the sensor's own noise trips it.
+  activity_window_ms:
+    type: int
+    default: 2000
+    description: >-
+      activity_param window: one value per window. 2000 ms covers several
+      drum revolutions at wash speed.
   motion_hold_ms:
     type: int
     default: 2000
@@ -63,6 +70,13 @@ driver_params:
       Optional — the vibration level in milli-g: a smoothed average of how far
       each sample's total acceleration is from 1 g (so orientation and gravity
       do not count). Published when it changes by 5 mg or more. Omit to skip.
+  activity_param:
+    type: u16
+    description: >-
+      Optional — vibration activity in mg RMS over activity_window_ms: how
+      much the acceleration varied around its mean on all three axes. ~5 at
+      rest, tens while a washer agitates, hundreds on a spin. The input for
+      behaviors/cycle_done_detector. Omit to skip.
   orientation_param:
     type: u8
     description: >-

@@ -12,6 +12,9 @@
         iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_SINGLE_CLICK,    NULL, {{prefix_lc}}_single_click_cb, NULL);
         iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_DOUBLE_CLICK,    NULL, {{prefix_lc}}_double_click_cb, NULL);
         iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_LONG_PRESS_START, &{{prefix_lc}}_lp_args, {{prefix_lc}}_long_press_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_PRESS_DOWN, NULL, {{prefix_lc}}_press_down_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_PRESS_UP,   NULL, {{prefix_lc}}_press_up_cb, NULL);
+        iot_button_register_cb(s_{{prefix_lc}}_btn, BUTTON_PRESS_END,  NULL, {{prefix_lc}}_press_end_cb, NULL);
         ESP_LOGI(TAG, "Multi-event button {{prefix_lc}} initialized (GPIO %d)", {{prefix}}_BUTTON_GPIO);
     }
 }

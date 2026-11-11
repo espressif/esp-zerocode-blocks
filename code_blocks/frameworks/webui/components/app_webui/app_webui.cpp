@@ -15,6 +15,11 @@
 
 static const char *TAG = "app_webui";
 
+httpd_handle_t app_webui_server(void)
+{
+    return NULL;
+}
+
 esp_err_t app_webui_init(void)
 {
     ESP_LOGI(TAG, "Web UI framework: stub (not active)");

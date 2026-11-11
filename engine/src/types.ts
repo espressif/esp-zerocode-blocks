@@ -3,12 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Internal types for the template/block system. Mirrors the YAML shapes
- * under firmware/templates/{code_blocks,product_configurations}.
- *
- * The agent-facing types live in `@esp-zerocode-ai/ai` (TemplateSummary,
- * ProductConfigurationDetail, CodeBlockDetail). These are the structural
- * counterparts used during loading + generation.
+ * Types for the template/block system: the YAML shapes under
+ * code_blocks/ and product_configurations/, as used during loading and
+ * generation.
  */
 
 export type ValueType = 'bool' | 'u8' | 'i16' | 'u16' | 'u32'
@@ -56,8 +53,7 @@ export const DIR_TO_BLOCK_KIND: Record<string, BlockKind> = Object.fromEntries(
  *  outside them is NOT handed to the board manager — it keeps the block's own
  *  init, exactly as on a board-less product, and `reason` is reported
  *  verbatim in `GenerateResult.warnings`. (It used to fail the whole
- *  generation; writers answered that by resending the same yaml and then
- *  hand-wiring the part.) The mapping hands a physical line to code the block
+ *  generation, which pushed products toward hand-wiring the part.) The mapping hands a physical line to code the block
  *  author did not write, and the failure mode of getting it wrong is hardware
  *  doing something at boot (see the active-low note on drivers/relay) — so the
  *  block's own init is the safe side to fall to, but never silently: a mapping
@@ -219,7 +215,24 @@ export interface Block {
   matter_wiring_note?: string
   idf_components?: Record<string, string | Record<string, unknown>>
   params?: Record<string, BlockParam>
-  param_refs?: Record<string, ValueType>
+  /** cfg key holding a param id → its value type, or `{{cfg.<key>}}` when the
+   *  instance picks the type (behaviors/webui_row: `{{cfg.value_kind}}`). */
+  param_refs?: Record<string, ValueType | `{{cfg.${string}}}`>
+  /** Params the block ITSELF writes under a fixed name, with no cfg behind
+   *  them (frameworks/matter: `APP_DRIVER_PARAM_MATTER_COMMISSIONED: bool`).
+   *  Every product composing the block gets them in its param enum, so product
+   *  code and other blocks' cfg can name them. */
+  owned_params?: Record<string, ValueType>
+  /** What the block DOES when a param it reacts to changes, per slot family:
+   *  the key names the slot (`ble_hid` → its `ble_hid_driver_cb_cases`,
+   *  `driver` → `driver_apply_cases`, `zigbee_action` → `zigbee_action_cases`),
+   *  the value is one sentence rendered with the instance's cfg. Returned in
+   *  GenerateResult.reactions, so product code knows an input is already
+   *  wired to an action before it wires it a second time — a key sent from
+   *  product code beside the block's own is sent twice. check.py requires it
+   *  for every slot family
+   *  that SENDS or DRIVES something (REACTS_REQUIRED there). */
+  reacts?: Record<string, string>
   cmake_priv_requires?: Record<string, string[]>
   sdkconfig?: Record<string, string>
   /** Marks a `sdkconfig_fragment` block as a CHIP's per-chip base rather than a
@@ -232,10 +245,11 @@ export interface Block {
    *  by CI to pick which framework x chip cells to compile; the platform's
    *  framework registry is kept in step with it. */
   chips?: string[]
-  /** FRAMEWORK blocks only: whether the framework needs a radio (a transport,
-   *  a mesh, a BLE link, the internet) or is entirely on-device (a screen, a
-   *  speaker, a microphone). The generator drops the ESP32-P4's hosted radio
-   *  stack from a tree whose frameworks all say false. */
+  /** Whether the block needs a radio (a transport, a mesh, a BLE link, the
+   *  internet). Required on FRAMEWORK blocks, where false means entirely
+   *  on-device (a screen, a speaker, a microphone); a behavior that brings up
+   *  Wi-Fi itself says true. The generator drops the ESP32-P4's hosted radio
+   *  stack from a tree in which no block says true. */
   radio?: boolean
   /** FRAMEWORK blocks only: what a product's first build needs before its own
    *  blocks exist (see earlyBuildComposition). */
@@ -246,6 +260,19 @@ export interface Block {
   /** Per-device values this block's firmware reads from the `fctry` NVS
    *  partition — see DeviceDataDecl. */
   device_data?: DeviceDataDecl
+  /** The block reaches the internet (an HTTPS API) and brings no network of
+   *  its own: a product composing it needs a block or framework that
+   *  `provides_internet`. */
+  needs_internet?: boolean
+  /** The block (or framework) brings up an internet-capable station. */
+  provides_internet?: boolean
+  /** At most one instance per product (it owns fixed C symbols or one
+   *  radio). */
+  singleton?: boolean
+  /** The block works only beside one of these frameworks: its code is all in
+   *  that framework's slots, so without it the block generates nothing and
+   *  the product is silently without it. */
+  requires_frameworks?: string[]
   slots?: Record<string, string>
 }
 
@@ -287,6 +314,11 @@ export interface Instance {
   block: string
   prefix: string
   cfg: Record<string, unknown>
+  /** Only these of the product's frameworks get this instance (absent = all).
+   *  A hub that SHOWS a light on its screen composes device_types/light with
+   *  `frameworks: [display]`: it is a card, not a light of its own that MQTT
+   *  should announce to Home Assistant. */
+  frameworks?: string[]
 }
 
 /** A framework's early-build needs. */
@@ -322,6 +354,10 @@ export interface Product {
   sdkconfig_fragments?: string[]
   extra_sdkconfig?: Record<string, string>
   product_metadata?: { vendor_name?: string; product_name?: string }
+  /** The product's own params, name → value type (`APP_DRIVER_PARAM_SETPOINT_F: i16`):
+   *  state the product's code keeps on the bus with no block declaring it. They
+   *  join the param enum like any block's, so nobody redefines it by hand. */
+  params?: Record<string, string>
 }
 
 /* ── the board: a property of an INSTANCE, never of the catalog ───────────
@@ -426,6 +462,6 @@ export interface RenderedInstance {
   /** Set when the instance has a bmgr mapping but one of its `bmgr.requires`
    *  guards failed: the board manager does NOT take it over — it keeps its own
    *  init (the shape the guard exists to protect) and the generator reports
-   *  this in `warnings`. The text is the guard's reason, for the writer. */
+   *  this in `warnings`. The text is the guard's reason, for the product's author. */
   bmgrFallback?: string
 }

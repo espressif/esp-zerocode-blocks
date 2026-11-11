@@ -9,5 +9,5 @@ static void {{prefix_lc}}_publish_mode(uint8_t mode)
     if (mode >= ZC_{{prefix_lc}}_MODE_COUNT) return;
     char name[16];
     snprintf(name, sizeof(name), "Mode %u", (unsigned)mode + 1);
-    esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_state_topic, name, 0, 1, true);
+    zc_mqtt_publish(s_{{prefix_lc}}_state_topic, name, 0, 1, true);
 }

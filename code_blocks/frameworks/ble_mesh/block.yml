@@ -116,3 +116,14 @@ radio: true
 # something else, wrong for two independently controllable outputs. Multiple
 # elements is the extension when a product needs it, and it belongs in the
 # framework rather than in a device type.
+
+# What the framework gives the owner and cannot do, in words a spec can
+# promise. Copied into every product's seed.
+facts:
+  pairing: "The device is added from any BLE Mesh app with no PIN or code, or automatically by the one device in a kit set up as the network's provisioner."
+  app_setup: "When added from a phone app, the person must also, in that app, give it the network's app key and put the lights and switches into a group; until then a switch sends nothing. A kit provisioner does this by itself."
+  addressing: "A switch sends to the group the app assigns it, or to the default group 0xC000 when none is set; a kit provisioner puts every device in 0xC000."
+  messages: "Only on/off and brightness exist: lights can be switched and dimmed, a switch's toggle sends the opposite of the lights' last reported state, and there is no colour, scene or schedule."
+  one_output: "Each device has a single controllable output; two independently switched outputs in one device are not possible."
+  reset: "The device remembers its network through power loss; leaving (from the app or with the console command mesh reset) puts it straight back to waiting to be added, with no restart."
+  role: "Every device relays messages for the others and lets a phone reach the mesh through it; there is no internet or cloud."

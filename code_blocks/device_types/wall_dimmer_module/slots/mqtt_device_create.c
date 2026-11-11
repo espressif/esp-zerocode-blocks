@@ -22,17 +22,17 @@
                  s_{{prefix_lc}}_cmd_topic,
                  s_{{prefix_lc}}_bri_state_topic,
                  s_{{prefix_lc}}_bri_cmd_topic);
-        esp_mqtt_client_publish(s_client, disc_topic, cfg_json, 0, 1, true);
+        zc_mqtt_publish(disc_topic, cfg_json, 0, 1, true);
     }
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_cmd_topic, 1);
     esp_mqtt_client_subscribe(s_client, s_{{prefix_lc}}_bri_cmd_topic, 1);
     {
         app_driver_param_val_t init = {};
         app_driver_get_param({{cfg.power_param}}, &init);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_state_topic,
-                                init.b ? "ON" : "OFF", 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_state_topic,
+                        init.b ? "ON" : "OFF", 0, 1, true);
         app_driver_get_param({{cfg.brightness_param}}, &init);
         char buf[8]; snprintf(buf, sizeof(buf), "%u", (unsigned)init.u8);
-        esp_mqtt_client_publish(s_client, s_{{prefix_lc}}_bri_state_topic, buf, 0, 1, true);
+        zc_mqtt_publish(s_{{prefix_lc}}_bri_state_topic, buf, 0, 1, true);
     }
 }

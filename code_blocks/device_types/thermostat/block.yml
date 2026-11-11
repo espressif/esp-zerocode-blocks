@@ -58,3 +58,11 @@ driver_params:
     type: u8
     required: true
     description: Driver param ID for SystemMode (uint8 — 0=Off, 4=Heat). The Matter endpoint is heat-only (Heating feature, ControlSequenceOfOperation=HeatingOnly), so Cool (3) is refused by Matter.
+  heating_param:
+    type: bool
+    required: false
+    default: ""
+    description: (Optional) param ID for whether the heat source is running right now (bool — the heat relay's param, which product logic drives from LOCAL_TEMP vs HEAT_SETPOINT under SYSTEM_MODE). Shown read-only on the webui page, and over MQTT as the Home Assistant climate entity's action (heating / idle / off); empty leaves both out.
+
+facts:
+  mqtt_heating_action: "With heating_param set to the heat output's param, Home Assistant's climate entity shows whether the heater is running (action heating / idle / off), and the web page shows a heating-now row; a product does not add its own heating-now sensor or entity for it."

@@ -41,3 +41,6 @@ driver_params:
     description: >-
       event param: app_driver_fire_event a non-zero value to buzz once per call
       (set_param would be deduped after the first buzz; nothing clears it)
+
+reacts:
+  driver: "A non-zero fire of {{cfg.trigger_param}} drives the motor pin to its active level for pulse_ms and then turns it off by itself (a new fire restarts the window); product code fires the event and never drives the pin or schedules the off itself."

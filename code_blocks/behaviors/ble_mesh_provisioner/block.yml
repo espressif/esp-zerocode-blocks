@@ -38,5 +38,5 @@ params:
     default: 8
     description: >-
       How many provisioned nodes this device tracks while configuring them.
-      Must not exceed the stack's own ceiling (CONFIG_BLE_MESH_MAX_PROV_NODES,
-      set to 20 by this block's sdkconfig.defaults).
+      1 up to the stack's own ceiling (CONFIG_BLE_MESH_MAX_PROV_NODES, set to
+      20 by this block's sdkconfig.defaults); outside that the build stops.

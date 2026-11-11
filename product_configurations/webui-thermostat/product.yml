@@ -1,0 +1,79 @@
+id: webui-thermostat
+name: Web UI Thermostat
+description: >-
+  A heating thermostat with its own control page and Home Assistant over
+  MQTT: the page shows the room temperature, sets the target temperature
+  with - and +, switches heating on or off and shows whether the heat is
+  running; HA discovers the same thermostat as a climate entity.
+keywords: [thermostat, heating, web ui, mqtt, home assistant, climate]
+
+# COMBO: frameworks: [webui, mqtt]. mqtt owns Wi-Fi (station, onboarded on
+# the console), so webui serves on that network at zerocode-<id>.local
+# instead of starting a SoftAP. The heat relay's param is handed to the
+# thermostat as heating_param, so the page shows "heating now"; the logic
+# that drives the relay from LOCAL_TEMP vs HEAT_SETPOINT is product code.
+frameworks: [webui, mqtt]
+
+instances:
+  - block: peripherals/i2c_bus
+    prefix: TS_BUS
+    cfg:
+      port: 0
+      sda_gpio: 6
+      scl_gpio: 7
+      freq_hz: 100000
+
+  - block: drivers/sht4x
+    prefix: TS
+    cfg:
+      i2c_port: 0
+      i2c_address: 0x44
+      poll_interval_ms: 5000
+      temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      humidity_param: APP_DRIVER_PARAM_LOCAL_HUM
+
+  - block: drivers/relay
+    prefix: HEAT
+    cfg:
+      gpio: 10
+      param_id: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - block: device_types/thermostat
+    prefix: THERMO
+    cfg:
+      label: Thermostat
+      local_temp_param: APP_DRIVER_PARAM_LOCAL_TEMP
+      heat_setpoint_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      system_mode_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      heating_param: APP_DRIVER_PARAM_HEAT_RELAY
+
+  - block: device_types/humidity_sensor
+    prefix: ROOM_HUM
+    cfg:
+      label: Room Humidity
+      value_param: APP_DRIVER_PARAM_LOCAL_HUM
+
+  - block: behaviors/nvs_persist_i16
+    prefix: PERSIST_HEATSP
+    cfg:
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      nvs_namespace: app
+      nvs_key: heatsp
+
+  - block: behaviors/nvs_persist_u8
+    prefix: PERSIST_SYSMODE
+    cfg:
+      target_param: APP_DRIVER_PARAM_SYSTEM_MODE
+      nvs_namespace: app
+      nvs_key: sysmode
+
+  - include: console-diagnostics
+
+  - block: behaviors/console_param_get
+    prefix: GET_HEATSP
+    cfg:
+      command_name: get-heatsp
+      target_param: APP_DRIVER_PARAM_HEAT_SETPOINT
+      value_kind: i16
+
+  - include: diagnostics-core

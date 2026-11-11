@@ -28,12 +28,25 @@ params:
       (BLE HID framework) Consumer usage this button sends, decimal.
       205 = 0xCD play/pause; 226 = 0xE2 mute; 181 = 0xB5 next track;
       182 = 0xB6 previous track. Ignored by every other framework.
+  ble_hid_key:
+    type: int
+    default: 0
+    description: >-
+      (BLE HID framework) A KEYBOARD key this button sends instead of the
+      consumer usage, decimal USB HID keycode — 79 = 0x4F right arrow,
+      80 = 0x50 left arrow, 75 = 0x4B page up, 78 = 0x4E page down,
+      44 = 0x2C space. 0 = send the consumer usage.
 
 driver_params:
   position_param:
     type: u8
     required: true
     description: Driver param ID for switch presses (uint8_t; each notification is one press at that position, 1..NumberOfPositions-1; 0 = no press)
+
+reacts:
+  ble_hid: "Each nonzero notification of {{cfg.position_param}} sends one key press — keyboard key {{cfg.ble_hid_key}} when it is set, else consumer usage {{cfg.ble_hid_usage}}; product code only fires the param and never sends the key itself."
+  espnow: "A change of {{cfg.position_param}} (except a boot-time restore) broadcasts the value to the ESP-NOW peers under that param's name; product code only writes the param and never sends it to the peers itself."
+  ble_mesh: "Each nonzero press EVENT on {{cfg.position_param}} publishes one Generic OnOff Toggle to the ZeroCode mesh group (state writes and restores send nothing); product code only fires the param and never publishes to the mesh itself."
 
 # Voice-absent: a controller is an INPUT — it commands other devices rather than holding state you can command. Voice is itself an input, so binding one to the other is meaningless.
 

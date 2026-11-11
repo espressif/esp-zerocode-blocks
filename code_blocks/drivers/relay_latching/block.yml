@@ -21,3 +21,6 @@ driver_params:
   param_id:
     type: bool
     default: APP_DRIVER_PARAM_POWER
+
+reacts:
+  driver: "A change of {{cfg.param_id}} pulses the SET coil (true) or the RESET coil (false) for pulse_ms and then releases it; product code writes the param and never drives either coil pin itself."

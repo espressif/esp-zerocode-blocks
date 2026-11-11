@@ -7,7 +7,8 @@ description: Phase-cut AC dimmer (zero-cross detect + triac gate pulse). Real AC
 # This driver:
 #  - Hooks a GPIO ISR on the ZCD edge
 #  - Schedules a one-shot timer to fire the gate after delay_us
-#  - delay_us = (half_cycle_us * (255 - brightness)) / 255
+#  - delay_us = ((half_cycle_us - 200) * (255 - brightness)) / 255 — the 200 us
+#    margin keeps the latest firing clear of the next zero-cross
 # Installs the shared GPIO ISR service itself if no earlier block did
 # (peripherals/gpio_isr_service is optional).
 
@@ -42,3 +43,6 @@ params:
 driver_params:
   power_param:      { type: bool, default: APP_DRIVER_PARAM_POWER }
   brightness_param: { type: u8, default: APP_DRIVER_PARAM_BRIGHTNESS }
+
+reacts:
+  driver: "A change of {{cfg.power_param}} or {{cfg.brightness_param}} sets whether and how late after each zero-cross the block fires the triac gate (off or brightness 0 = no gate pulse); product code writes the params and never drives the gate pin itself."

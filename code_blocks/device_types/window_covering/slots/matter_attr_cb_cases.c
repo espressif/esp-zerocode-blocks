@@ -5,5 +5,5 @@ if (endpoint_id == s_{{prefix_lc}}_endpoint_id &&
     /* Matter Target is percent CLOSED (0 = open); the driver param is percent
      * OPEN. A null Target (0xFFFF) is "no target" and is ignored. */
     app_driver_param_val_t pv = { .u16 = (uint16_t)(10000 - val->val.u16) };
-    app_driver_set_param({{cfg.position_param}}, pv, s_handle);
+    {{prefix}}_WC_COMMAND({{cfg.position_param}}, pv, s_handle);
 }

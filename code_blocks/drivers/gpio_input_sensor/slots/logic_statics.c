@@ -1,7 +1,11 @@
-/* Debounce = N consecutive polls agreeing, N = ceil(debounce_ms / poll_ms), at least 1. */
+/* Debounce = N consecutive polls agreeing. N polls agreeing have SEEN the level
+ * hold for (N - 1) poll periods, so holding for debounce_ms takes
+ * N = ceil(debounce_ms / poll_ms) + 1; with N = ceil(...) alone, a debounce no
+ * longer than the poll was a single sample (no debounce at all). 0 = publish on
+ * the first differing sample. */
 #define {{prefix}}_INPUT_DEBOUNCE_POLLS \
     (({{prefix}}_INPUT_DEBOUNCE_MS <= 0) ? 1 : \
-     (({{prefix}}_INPUT_DEBOUNCE_MS + {{prefix}}_INPUT_POLL_MS - 1) / {{prefix}}_INPUT_POLL_MS))
+     (({{prefix}}_INPUT_DEBOUNCE_MS + {{prefix}}_INPUT_POLL_MS - 1) / {{prefix}}_INPUT_POLL_MS + 1))
 
 static bool s_{{prefix_lc}}_state = false;      /* the debounced, published level */
 static bool s_{{prefix_lc}}_candidate = false;  /* the level being confirmed */
