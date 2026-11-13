@@ -662,7 +662,7 @@ export const PRODUCT_KEYS = ['id', 'name', 'description', 'keywords', 'internal'
 export function nearestProductKey(key: string): string | undefined {
   const k = key.toLowerCase().replace(/[-\s]/g, '_')
   if ((PRODUCT_KEYS as readonly string[]).includes(k)) return k
-  if (k.length < 4) return undefined
+  if (k.length < 6) return undefined   // `chip` is in `ci_chips`; a short word proves nothing
   // The closest in length among the keys that contain it or that it contains:
   // `sdkconfig` is in both `extra_sdkconfig` and `sdkconfig_fragments`.
   return [...PRODUCT_KEYS].filter((p) => p.includes(k) || k.includes(p)).sort((a, b) => Math.abs(a.length - k.length) - Math.abs(b.length - k.length))[0]
