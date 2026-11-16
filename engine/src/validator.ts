@@ -651,6 +651,28 @@ export function redundantNetwork(
     .map((id) => `${id} is redundant beside ${fws.join(', ')}, which already brings up Wi-Fi; it stands aside at run time — drop it`)
 }
 
+/** The keys a product.yml may carry (the Product interface). Anything else
+ *  is ignored by the generator — silently, until now: a product asked for
+ *  PSRAM under `sdkconfig:` and built without it. */
+export const PRODUCT_KEYS = ['id', 'name', 'description', 'keywords', 'internal', 'frameworks', 'instances', 'exclude', 'ci_chips', 'partition_table', 'sdkconfig_fragments', 'extra_sdkconfig', 'product_metadata', 'params'] as const
+
+/** The known key an unknown one most likely meant: a known key that contains
+ *  it or that it contains (`sdkconfig` → `extra_sdkconfig`, `sdkconfig_fragment`
+ *  → `sdkconfig_fragments`), else nothing. */
+export function nearestProductKey(key: string): string | undefined {
+  const k = key.toLowerCase().replace(/[-\s]/g, '_')
+  if ((PRODUCT_KEYS as readonly string[]).includes(k)) return k
+  if (k.length < 6) return undefined   // `chip` is in `ci_chips`; a short word proves nothing
+  // The closest in length among the keys that contain it or that it contains:
+  // `sdkconfig` is in both `extra_sdkconfig` and `sdkconfig_fragments`.
+  return [...PRODUCT_KEYS].filter((p) => p.includes(k) || k.includes(p)).sort((a, b) => Math.abs(a.length - k.length) - Math.abs(b.length - k.length))[0]
+}
+
+/** Top-level keys of a product the engine does not know. */
+export function unknownProductKeys(given: Product): string[] {
+  return Object.keys(given).filter((k) => !(PRODUCT_KEYS as readonly string[]).includes(k))
+}
+
 export function validateProduct(
   given: Product,
   blocks: Map<string, Block>,
@@ -659,6 +681,11 @@ export function validateProduct(
   const errors: ValidationIssue[] = []
   const warnings: ValidationIssue[] = []
   const ctx = { product: given.id }
+
+  for (const key of unknownProductKeys(given)) {
+    const near = nearestProductKey(key)
+    warnings.push({ level: 'warning', ...ctx, message: `'${key}:' is not a product key and is ignored${near ? ` — did you mean '${near}:'?` : ''} (known: ${PRODUCT_KEYS.join(', ')})` })
+  }
 
   const frameworkBlocks = new Map<string, Block>()
   for (const name of given.frameworks ?? []) {
