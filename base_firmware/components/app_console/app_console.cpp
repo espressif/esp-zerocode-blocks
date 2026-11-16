@@ -23,6 +23,7 @@
 #include "app_config.h"
 #include "app_utils.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
+#include <linenoise/linenoise.h>
 #include <nvs_flash.h>
 
 static const char *TAG = "app_console";
@@ -149,6 +151,25 @@ static esp_err_t start_stdio_repl(const esp_console_repl_config_t *repl_config)
 }
 #endif
 
+#if defined(CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT) && !defined(CONFIG_ESP_CONSOLE_NONE)
+static void console_poll_delay(void);
+
+/* With a primary console selected, the REPL still reads stdin, which the
+ * board's usb_hs_console has moved to vfs_tinyusb. Its reads never block, so
+ * linenoise's own read would return EAGAIN and the REPL would redraw the
+ * prompt in a tight loop. */
+static ssize_t usb_console_read(int fd, void *buf, size_t len)
+{
+    for (;;) {
+        ssize_t got = read(fd, buf, len);
+        if (got >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
+            return got;
+        }
+        console_poll_delay();
+    }
+}
+#endif
+
 esp_err_t app_console_init(void)
 {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
@@ -194,6 +215,10 @@ esp_err_t app_console_init(void)
         ESP_LOGE(TAG, "Failed to create console REPL: %s", esp_err_to_name(err));
         return err;
     }
+#if defined(CONFIG_USB_HS_CONSOLE_USB_CDC_AUTO_INIT) && !defined(CONFIG_ESP_CONSOLE_NONE)
+    /* After creating the REPL: creating it installs linenoise's default read. */
+    linenoiseSetReadFunction(usb_console_read);
+#endif
 
     err = esp_console_start_repl(repl);
     if (err != ESP_OK) {
