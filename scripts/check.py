@@ -514,8 +514,12 @@ for bd in sorted((ROOT / 'code_blocks' / 'frameworks').iterdir()):
 # consumers of the catalog as fact (a spec names it). A command listed there that nothing registers
 # is a spec the firmware cannot meet — so each listed command name must appear
 # as a registered string literal in the block's own sources or in the engine
-# (frameworks like mqtt and agents are generated there).
-_ENGINE_SRC = (ROOT / 'engine' / 'src' / 'generator.ts').read_text()
+# (frameworks like mqtt and agents are generated there, in engine/src/frameworks/).
+_ENGINE_SRC = '\n'.join(f.read_text() for f in [
+    ROOT / 'engine' / 'src' / 'generator.ts',
+    ROOT / 'engine' / 'src' / 'generator-common.ts',
+    *sorted((ROOT / 'engine' / 'src' / 'frameworks').glob('*.ts')),
+])
 for by in sorted(ROOT.glob('code_blocks/*/*/block.yml')):
     bd = by.parent
     fw = yaml.safe_load(by.read_text()) or {}

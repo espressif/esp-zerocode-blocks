@@ -26,8 +26,9 @@ stacks are added the same way.
      product configures via params) → **zero engine change needed**.
    - If device types must contribute per-device code into it (like the
      `matter_*` slot family) → the engine needs a small codegen addition in
-     `engine/src/generator.ts`; the existing matter/rainmaker/zigbee
-     handling is the pattern. Loop in the ZeroCode AI team for this part.
+     `engine/src/frameworks/<id>.ts`, registered in
+     `engine/src/frameworks/index.ts`; the existing matter/rainmaker/zigbee
+     modules are the pattern. Loop in the ZeroCode AI team for this part.
 
 3. **Platform side (ZeroCode AI repo — esp-zerocode-ai)**, an PR anyone can
    raise: add a profile in `shared/src/frameworks/profiles.ts` + the
