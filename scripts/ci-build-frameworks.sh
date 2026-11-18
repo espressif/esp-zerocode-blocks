@@ -100,10 +100,12 @@ npm run --silent build
 mkdir -p _logs
 declare -a ROWS
 OVERALL=0
+BUILT=0
 
 build_row() {                       # label, product
   # Not this lane's build → skip silently; another lane's table carries it.
   mine || return 0
+  BUILT=$((BUILT + 1))
   local label="$1" product="$2" start
   local log="_logs/$product-$CHIP.ci.log"
   start=$(date +%s)
@@ -182,7 +184,15 @@ if [ "$LANES" -gt 1 ]; then
 else
   echo "========== $CHIP — one product per framework, plus this chip's boards =========="
 fi
-# A lane whose share was all NOTE/SKIP has no rows; printf would emit one
-# empty line under set -u with an empty array on old bash — guard it.
-[ ${#ROWS[@]} -gt 0 ] && printf '%s\n' "${ROWS[@]}"
+# A lane whose share was all NOTE/SKIP has no rows. `${#ROWS[@]}` on an empty
+# declared array is itself "unbound" under set -u on bash < 4.4 (the worker's),
+# which is how the sweep died at this line and the job still read as green.
+if [ -n "${ROWS+set}" ]; then printf '%s\n' "${ROWS[@]}"; fi
+# A single-lane sweep that built nothing is not a pass: the chip is either
+# claimed by no framework and has no board product (then say so and look), or
+# the sweep is broken, as it was for the esp32p4 from 2026-11-11 to 11-18.
+if [ "$LANES" -eq 1 ] && [ "$BUILT" -eq 0 ]; then
+  echo "FAIL   $CHIP: the sweep built nothing — no framework claims this chip and no board product names it, or the sweep is broken"
+  exit 1
+fi
 exit $OVERALL
