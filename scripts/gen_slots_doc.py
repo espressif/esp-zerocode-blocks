@@ -39,7 +39,7 @@ DEST = [
 # one of these, so scanning code_blocks/*/slots cannot discover them — they
 # must be declared here or a block author reading SLOTS.md never learns the
 # slot exists. Keep in sync with the `collectSlot(...) ||` sites in
-# engine/src/generator.ts (grep for "Defaulted slot").
+# engine/src/frameworks/ (grep for "Defaulted slot").
 DEFAULTED = {
     'matter_last_fabric_cases':
         'a contribution REPLACES the built-in handler (factory reset when the '

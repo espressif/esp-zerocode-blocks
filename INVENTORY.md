@@ -443,7 +443,7 @@ dependencies. Export `ZC_AWS_IOT_SRC` (the environment variable, not `-D`) to
 build against a pre-cloned tree. The block carries **no third-party source**.
 
 Like `ml` and `lm` it is a **pure copy-in framework**: not one line in
-`engine/src/generator.ts`. The AWS identity (endpoint, port, thing name,
+`engine/src/frameworks/`. The AWS identity (endpoint, port, thing name,
 certificate, key, optional root CA) is `device_data:`, written with the
 firmware to `fctry`, and the device has no command or setter for it.
 Wi-Fi is the serial console: a guided `aws-setup`, or `aws-wifi`, both thin

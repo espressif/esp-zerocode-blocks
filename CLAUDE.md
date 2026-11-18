@@ -742,6 +742,13 @@ blocks → renders slots → copies the base `firmware/` tree + selected
 framework components → emits a buildable firmware tree at
 `_generated/<id>/`.
 
+Engine layout: `engine/src/generator.ts` runs `generate()` and owns the shared
+files (app_driver, app_config, app_logic, sdkconfig, CMake, the board). Each
+framework that generates its own `app_<fw>.cpp` has a module in
+`engine/src/frameworks/` with that code and the files it writes, listed in
+`frameworks/index.ts` in write order. Helpers they share are in
+`engine/src/generator-common.ts`.
+
 ```bash
 # Build the generated tree
 cd firmware/templates/_generated/<product-id>
