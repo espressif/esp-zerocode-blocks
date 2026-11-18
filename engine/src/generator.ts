@@ -5858,10 +5858,11 @@ interface IdfComponentYml {
  *  component and the board packs. `"*"` would let a future major swap the
  *  generated code out from under board definitions written against 0.7 — and
  *  the failure would land at link time in generated sources nobody wrote.
- *  0.7.1 is the version published to the component registry and the version
- *  of the pinned esp-board-manager checkout that supplies the `bmgr` action
- *  (the platform's pinned esp-board-manager checkout); `~` keeps the two on one minor. */
-const BOARD_MANAGER_VERSION = '~0.7.1'
+ *  The floor follows the platform's pinned esp-board-manager checkout, which
+ *  supplies the `bmgr` action: its generated C must compile against the
+ *  component it links. 0.7.6's emits `init_level` on every gpio_ctrl device,
+ *  a field 0.7.5 lacks. `~` keeps the two on one minor. */
+const BOARD_MANAGER_VERSION = '~0.7.6'
 
 /** The synthetic contributor a `board:` product gets: the dependency, main's
  *  include + init call, and main's PRIV_REQUIRES entry.
