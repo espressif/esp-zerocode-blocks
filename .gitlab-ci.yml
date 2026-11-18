@@ -196,7 +196,12 @@ build:firmware:
   needs: [validate:blocks]
   <<: *build-common
   script:
-    - scripts/ci-build-frameworks.sh "$BUILD_CHIP"
+    # A matrix job also gets CI_NODE_INDEX/CI_NODE_TOTAL (6/8 for the sixth chip),
+    # which the sweep reads as its lane share: each chip job then built one
+    # eighth of its own grid and the esp32p4 job built nothing in 30 s, green,
+    # from 2026-11-11 to 2026-11-18. The matrix is the chip split; the sweep
+    # itself is one lane here.
+    - CI_NODE_INDEX=1 CI_NODE_TOTAL=1 scripts/ci-build-frameworks.sh "$BUILD_CHIP"
   parallel:
     matrix:
       # Mirrors chips.txt (a GitLab matrix must be literal).
