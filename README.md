@@ -111,7 +111,8 @@ Library with attribution.
 ## Release (maintainers)
 
 ```bash
-CATALOG_BUCKET=<bucket> scripts/publish-catalog.sh   # AWS credentials for the deployment
+scripts/publish-catalog.sh --stage-only <dir>        # build only, no AWS (what a ZeroCode AI release runs)
+CATALOG_BUCKET=<bucket> scripts/publish-catalog.sh   # build + upload; AWS credentials for the deployment
 ```
 
 Bundles the assembled blocks + products + base_firmware into a
